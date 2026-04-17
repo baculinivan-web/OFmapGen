@@ -165,7 +165,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.fill();
   }
 
-  // ── Texture brush — chosen terrain with noisy ridge/dune edges ────────────
+  // ── Texture brush — sparse noise-shaped dunes of the chosen terrain ─────────
   function paintTextureAt(cx, cy) {
     const pc = paintCanvas.getContext('2d');
     const r  = brushSize;
@@ -178,29 +178,33 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
     const imgData = pc.getImageData(x0, y0, w, h);
     const d = imgData.data;
-    const base = TERRAIN_COLORS[currentTerrain];
-    const adjacent = {
-      water:    TERRAIN_COLORS.plain,
-      plain:    TERRAIN_COLORS.highland,
-      highland: TERRAIN_COLORS.mountain,
-      mountain: TERRAIN_COLORS.highland,
-    }[currentTerrain];
+    const [cr, cg, cb] = TERRAIN_COLORS[currentTerrain];
 
     for (let py = y0; py <= y1; py++) {
       for (let px = x0; px <= x1; px++) {
         const dx = px - cx, dy = py - cy;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (dist > r) continue;
+
         const falloff = 1 - dist / r;
         const n = fbm(px, py);
-        // Center → always base color; edges → noise decides base vs adjacent
-        const col = n > (0.3 + falloff * 0.45) ? base : adjacent;
-        const alpha = Math.min(1, falloff * 1.6);
+
+        // Only paint where noise is above threshold — creates dune shapes
+        // threshold varies with falloff so center is denser than edges
+        if (n < 0.45 + falloff * 0.1) continue;
+
+        // Opacity driven by how far above threshold (sharper dune ridges)
+        const alpha = Math.min(1, (n - 0.45) * 4 * falloff);
         const idx = ((py - y0) * w + (px - x0)) * 4;
-        d[idx]   = Math.round(d[idx]   * (1 - alpha) + col[0] * alpha);
-        d[idx+1] = Math.round(d[idx+1] * (1 - alpha) + col[1] * alpha);
-        d[idx+2] = Math.round(d[idx+2] * (1 - alpha) + col[2] * alpha);
-        d[idx+3] = 255;
+
+        // Blend onto existing paint layer (transparent where not painted)
+        const ea = d[idx+3] / 255;
+        const oa = alpha + ea * (1 - alpha);
+        if (oa < 0.001) continue;
+        d[idx]   = Math.round((cr * alpha + d[idx]   * ea * (1 - alpha)) / oa);
+        d[idx+1] = Math.round((cg * alpha + d[idx+1] * ea * (1 - alpha)) / oa);
+        d[idx+2] = Math.round((cb * alpha + d[idx+2] * ea * (1 - alpha)) / oa);
+        d[idx+3] = Math.round(oa * 255);
       }
     }
     pc.putImageData(imgData, x0, y0);
