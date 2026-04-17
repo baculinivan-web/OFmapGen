@@ -348,14 +348,29 @@ const nationListEl      = document.getElementById('nationList');
 const nationCountEl     = document.getElementById('nationCount');
 const clearNationsBtn   = document.getElementById('clearNationsBtn');
 const downloadArchiveBtn = document.getElementById('downloadArchiveBtn');
-const namePopup         = document.getElementById('namePopup');
+const editPopup         = document.getElementById('nationEditPopup');
+const editPopupTitle    = document.getElementById('editPopupTitle');
 const nameInput         = document.getElementById('nameInput');
 const nameConfirmBtn    = document.getElementById('nameConfirmBtn');
 const nameCancelBtn     = document.getElementById('nameCancelBtn');
+const flagSearch        = document.getElementById('flagSearch');
+const flagResults       = document.getElementById('flagResults');
+const flagPreview       = document.getElementById('flagPreview');
+const flagPreviewNone   = document.getElementById('flagPreviewNone');
+const clearFlagBtn      = document.getElementById('clearFlagBtn');
 
-let nations = []; // [{x, y, name}] — x,y in map pixel coords (0..mapWidth, 0..mapHeight)
+// ── Countries list ────────────────────────────────────────────────────────────
+const FLAG_BASE = 'https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/flags/';
+let countriesList = [];
+fetch('https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/countries.json')
+  .then(r => r.json()).then(d => { countriesList = d; }).catch(() => {});
+function flagUrl(code) { return code ? `${FLAG_BASE}${encodeURIComponent(code)}.svg` : ''; }
+
+// ── State ─────────────────────────────────────────────────────────────────────
+let nations = []; // [{x, y, name, flag}]
 let pendingCoords = null;
-let draggingIdx = null;
+let editingIdx = null;
+let selectedFlag = '';
 
 function openNationModal() {
   nationMapImg.src = outCanvas.toDataURL('image/png');
@@ -364,99 +379,143 @@ function openNationModal() {
 }
 
 nationSpawnsBtn.addEventListener('click', openNationModal);
-nationModalClose.addEventListener('click', () => nationModal.classList.remove('open'));
-nationModalClose2.addEventListener('click', () => nationModal.classList.remove('open'));
-clearNationsBtn.addEventListener('click', () => {
-  nations = [];
-  renderNationList();
-  renderMarkers();
-});
+nationModalClose.addEventListener('click', () => { hideEditPopup(); nationModal.classList.remove('open'); });
+nationModalClose2.addEventListener('click', () => { hideEditPopup(); nationModal.classList.remove('open'); });
+clearNationsBtn.addEventListener('click', () => { nations = []; renderNationList(); renderMarkers(); });
 
-// Click on map area → place nation (only if not dragging)
+// Click on map → place new nation
 nationMapArea.addEventListener('click', (e) => {
-  if (namePopup.style.display !== 'none') return;
-  if (e.target.closest('.nation-marker')) return; // clicked a marker
+  if (editPopup.style.display !== 'none') { hideEditPopup(); return; }
+  if (e.target.closest('.nation-marker')) return;
   const rect = nationMapImg.getBoundingClientRect();
-  const px = e.clientX - rect.left;
-  const py = e.clientY - rect.top;
+  const px = e.clientX - rect.left, py = e.clientY - rect.top;
   if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-  const scaleX = outCanvas.width  / rect.width;
-  const scaleY = outCanvas.height / rect.height;
-  pendingCoords = { x: Math.round(px * scaleX), y: Math.round(py * scaleY) };
-  showNamePopup(e.clientX, e.clientY);
+  pendingCoords = { x: Math.round(px * outCanvas.width / rect.width), y: Math.round(py * outCanvas.height / rect.height) };
+  editingIdx = null;
+  showEditPopup(e.clientX, e.clientY, '', '', 'Add nation');
 });
 
-function showNamePopup(cx, cy) {
-  nameInput.value = '';
-  namePopup.style.display = 'block';
-  const pw = 220, ph = 120;
-  let left = cx + 12, top = cy - 20;
-  if (left + pw > window.innerWidth  - 8) left = cx - pw - 12;
+// ── Edit popup ────────────────────────────────────────────────────────────────
+function showEditPopup(cx, cy, name, flag, title) {
+  editPopupTitle.textContent = title;
+  nameInput.value = name;
+  selectedFlag = flag;
+  updateFlagPreview();
+  flagSearch.value = flag ? (countriesList.find(c => c.code === flag) || {}).name || flag : '';
+  flagResults.style.display = 'none';
+  flagResults.innerHTML = '';
+  editPopup.style.display = 'block';
+  const pw = 268, ph = 340;
+  let left = cx + 14, top = cy - 20;
+  if (left + pw > window.innerWidth  - 8) left = cx - pw - 14;
   if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
-  namePopup.style.left = left + 'px';
-  namePopup.style.top  = top  + 'px';
+  if (top < 8) top = 8;
+  editPopup.style.left = left + 'px';
+  editPopup.style.top  = top  + 'px';
   setTimeout(() => nameInput.focus(), 50);
 }
 
-function hideNamePopup() {
-  namePopup.style.display = 'none';
+function hideEditPopup() {
+  editPopup.style.display = 'none';
   pendingCoords = null;
+  editingIdx = null;
+  flagResults.style.display = 'none';
 }
 
-function confirmName() {
+function updateFlagPreview() {
+  if (selectedFlag) {
+    flagPreview.src = flagUrl(selectedFlag);
+    flagPreview.style.display = '';
+    flagPreviewNone.style.display = 'none';
+    clearFlagBtn.style.display = '';
+  } else {
+    flagPreview.style.display = 'none';
+    flagPreviewNone.style.display = '';
+    clearFlagBtn.style.display = 'none';
+  }
+}
+
+clearFlagBtn.addEventListener('click', () => { selectedFlag = ''; updateFlagPreview(); flagSearch.value = ''; flagResults.style.display = 'none'; });
+
+flagSearch.addEventListener('input', () => {
+  const q = flagSearch.value.trim().toLowerCase();
+  if (!q) { flagResults.style.display = 'none'; return; }
+  const matches = countriesList.filter(c => c.name.toLowerCase().includes(q) || c.code.toLowerCase().includes(q)).slice(0, 30);
+  if (!matches.length) { flagResults.style.display = 'none'; return; }
+  flagResults.innerHTML = matches.map(c => `
+    <div class="flag-option" data-code="${escHtml(c.code)}" style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:0.8rem;color:var(--text);">
+      <img src="${flagUrl(c.code)}" style="width:24px;height:16px;object-fit:contain;flex-shrink:0;border:1px solid var(--border);border-radius:2px;" onerror="this.style.display='none'" />
+      <span>${escHtml(c.name)}</span>
+    </div>`).join('');
+  flagResults.style.display = 'block';
+});
+
+flagResults.addEventListener('click', (e) => {
+  const opt = e.target.closest('.flag-option');
+  if (!opt) return;
+  selectedFlag = opt.dataset.code;
+  flagSearch.value = opt.querySelector('span').textContent;
+  flagResults.style.display = 'none';
+  updateFlagPreview();
+});
+
+flagResults.addEventListener('mouseover', e => {
+  const opt = e.target.closest('.flag-option');
+  flagResults.querySelectorAll('.flag-option').forEach(el => el.style.background = '');
+  if (opt) opt.style.background = 'var(--accent-dim)';
+});
+
+function confirmEdit() {
   const name = nameInput.value.trim();
-  if (!name || !pendingCoords) { hideNamePopup(); return; }
-  nations.push({ x: pendingCoords.x, y: pendingCoords.y, name });
-  hideNamePopup();
+  if (!name) return;
+  if (editingIdx !== null) {
+    nations[editingIdx].name = name;
+    nations[editingIdx].flag = selectedFlag;
+  } else if (pendingCoords) {
+    nations.push({ x: pendingCoords.x, y: pendingCoords.y, name, flag: selectedFlag });
+  }
+  hideEditPopup();
   renderNationList();
   renderMarkers();
 }
 
-nameConfirmBtn.addEventListener('click', confirmName);
-nameCancelBtn.addEventListener('click', hideNamePopup);
-nameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') confirmName();
-  if (e.key === 'Escape') hideNamePopup();
-});
+nameConfirmBtn.addEventListener('click', confirmEdit);
+nameCancelBtn.addEventListener('click', hideEditPopup);
+nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') hideEditPopup(); });
+flagSearch.addEventListener('keydown', (e) => { if (e.key === 'Escape') flagResults.style.display = 'none'; });
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
+// ── Nation list ───────────────────────────────────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function renderNationList() {
   nationCountEl.textContent = nations.length;
   nationListEl.innerHTML = nations.map((n, i) => `
     <div style="display:flex;align-items:center;gap:6px;padding:5px 4px;border-radius:5px;font-size:0.78rem;color:var(--text);">
-      <span style="width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#0d1117;flex-shrink:0;">${i+1}</span>
+      ${n.flag ? `<img src="${flagUrl(n.flag)}" style="width:22px;height:15px;object-fit:contain;border:1px solid var(--border);border-radius:2px;flex-shrink:0;" onerror="this.style.display='none'" />` : `<span style="width:22px;height:15px;background:var(--surface2);border:1px solid var(--border);border-radius:2px;flex-shrink:0;display:inline-block;"></span>`}
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(n.name)}</span>
+      <button onclick="editNation(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.75rem;padding:0 3px;flex-shrink:0;" title="Edit">✎</button>
       <button onclick="removeNation(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1;padding:0 2px;flex-shrink:0;" title="Remove">×</button>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-window.removeNation = function(i) {
-  nations.splice(i, 1);
-  renderNationList();
-  renderMarkers();
+window.removeNation = function(i) { nations.splice(i, 1); renderNationList(); renderMarkers(); };
+window.editNation = function(i) {
+  editingIdx = i; pendingCoords = null;
+  const n = nations[i];
+  const sidebar = nationListEl.getBoundingClientRect();
+  showEditPopup(sidebar.left - 10, sidebar.top + i * 32, n.name, n.flag || '', 'Edit nation');
 };
 
 // ── DOM markers (draggable) ───────────────────────────────────────────────────
-function getImgRect() { return nationMapImg.getBoundingClientRect(); }
+function getImgRect()  { return nationMapImg.getBoundingClientRect(); }
 function getAreaRect() { return nationMapArea.getBoundingClientRect(); }
 
 function markerScreenPos(n) {
-  const imgRect = getImgRect();
-  const areaRect = getAreaRect();
-  const scaleX = imgRect.width  / outCanvas.width;
-  const scaleY = imgRect.height / outCanvas.height;
-  return {
-    left: imgRect.left - areaRect.left + n.x * scaleX,
-    top:  imgRect.top  - areaRect.top  + n.y * scaleY,
-  };
+  const ir = getImgRect(), ar = getAreaRect();
+  return { left: ir.left - ar.left + n.x * ir.width / outCanvas.width, top: ir.top - ar.top + n.y * ir.height / outCanvas.height };
 }
 
 function renderMarkers() {
-  // Remove old markers
   nationMapArea.querySelectorAll('.nation-marker').forEach(el => el.remove());
   nations.forEach((n, i) => createMarkerEl(n, i));
 }
@@ -465,77 +524,50 @@ function createMarkerEl(n, i) {
   const el = document.createElement('div');
   el.className = 'nation-marker';
   el.dataset.idx = i;
+  const flagImg = n.flag ? `<img src="${flagUrl(n.flag)}" class="nm-flag" onerror="this.style.display='none'" />` : '';
   el.innerHTML = `
-    <div class="nm-dot">${i + 1}</div>
+    <div class="nm-dot">${flagImg}<span class="nm-num">${i + 1}</span></div>
     <div class="nm-label">${escHtml(n.name)}</div>
-    <button class="nm-remove" title="Remove">×</button>
-  `;
+    <button class="nm-edit" title="Edit">✎</button>
+    <button class="nm-remove" title="Remove">×</button>`;
   positionMarker(el, n);
   nationMapArea.appendChild(el);
 
-  // Remove button
-  el.querySelector('.nm-remove').addEventListener('click', (e) => {
+  el.querySelector('.nm-edit').addEventListener('click', (e) => {
     e.stopPropagation();
-    removeNation(i);
+    editingIdx = i; pendingCoords = null;
+    const r = el.getBoundingClientRect();
+    showEditPopup(r.right + 8, r.top, n.name, n.flag || '', 'Edit nation');
   });
+  el.querySelector('.nm-remove').addEventListener('click', (e) => { e.stopPropagation(); removeNation(i); });
 
-  // Drag
-  let startMx, startMy, startNx, startNy, moved;
+  // Mouse drag
+  let startMx, startMy, startNx, startNy;
   el.querySelector('.nm-dot').addEventListener('mousedown', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    moved = false;
-    startMx = e.clientX; startMy = e.clientY;
-    startNx = n.x; startNy = n.y;
-    draggingIdx = i;
-
+    e.preventDefault(); e.stopPropagation();
+    startMx = e.clientX; startMy = e.clientY; startNx = n.x; startNy = n.y;
     const onMove = (ev) => {
-      const dx = ev.clientX - startMx;
-      const dy = ev.clientY - startMy;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-      const imgRect = getImgRect();
-      const areaRect = getAreaRect();
-      const scaleX = outCanvas.width  / imgRect.width;
-      const scaleY = outCanvas.height / imgRect.height;
-      n.x = Math.max(0, Math.min(outCanvas.width  - 1, Math.round(startNx + dx * scaleX)));
-      n.y = Math.max(0, Math.min(outCanvas.height - 1, Math.round(startNy + dy * scaleY)));
+      const ir = getImgRect();
+      n.x = Math.max(0, Math.min(outCanvas.width  - 1, Math.round(startNx + (ev.clientX - startMx) * outCanvas.width  / ir.width)));
+      n.y = Math.max(0, Math.min(outCanvas.height - 1, Math.round(startNy + (ev.clientY - startMy) * outCanvas.height / ir.height)));
       positionMarker(el, n);
     };
-
-    const onUp = () => {
-      draggingIdx = null;
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-
+    const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   });
 
   // Touch drag
   el.querySelector('.nm-dot').addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const t0 = e.touches[0];
-    startMx = t0.clientX; startMy = t0.clientY;
-    startNx = n.x; startNy = n.y;
-
+    e.preventDefault(); e.stopPropagation();
+    const t0 = e.touches[0]; startMx = t0.clientX; startMy = t0.clientY; startNx = n.x; startNy = n.y;
     const onMove = (ev) => {
-      const t = ev.touches[0];
-      const dx = t.clientX - startMx, dy = t.clientY - startMy;
-      const imgRect = getImgRect();
-      const scaleX = outCanvas.width  / imgRect.width;
-      const scaleY = outCanvas.height / imgRect.height;
-      n.x = Math.max(0, Math.min(outCanvas.width  - 1, Math.round(startNx + dx * scaleX)));
-      n.y = Math.max(0, Math.min(outCanvas.height - 1, Math.round(startNy + dy * scaleY)));
+      const t = ev.touches[0], ir = getImgRect();
+      n.x = Math.max(0, Math.min(outCanvas.width  - 1, Math.round(startNx + (t.clientX - startMx) * outCanvas.width  / ir.width)));
+      n.y = Math.max(0, Math.min(outCanvas.height - 1, Math.round(startNy + (t.clientY - startMy) * outCanvas.height / ir.height)));
       positionMarker(el, n);
     };
-
-    const onEnd = () => {
-      el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', onEnd);
-    };
-
+    const onEnd = () => { el.removeEventListener('touchmove', onMove); el.removeEventListener('touchend', onEnd); };
     el.addEventListener('touchmove', onMove, { passive: false });
     el.addEventListener('touchend', onEnd);
   }, { passive: false });
@@ -547,7 +579,6 @@ function positionMarker(el, n) {
   el.style.top  = pos.top  + 'px';
 }
 
-// Reposition all markers on resize
 new ResizeObserver(() => {
   if (!nationModal.classList.contains('open')) return;
   nationMapArea.querySelectorAll('.nation-marker').forEach(el => {
@@ -561,20 +592,14 @@ downloadArchiveBtn.addEventListener('click', async () => {
   if (!outCanvas.width) return;
   const zip = new JSZip();
 
-  // Add source PNG (OpenFront palette)
   const ofCanvas = buildSourceCanvas();
   const pngBlob = await new Promise(res => ofCanvas.toBlob(res, 'image/png'));
   zip.file('map.png', pngBlob);
 
-  // Build manifest.json
   const manifest = {
     name: 'custom_map',
     map: { width: outCanvas.width, height: outCanvas.height, num_land_tiles: countLandTiles() },
-    nations: nations.map(n => ({
-      coordinates: [n.x, n.y],
-      name: n.name,
-      flag: '',
-    })),
+    nations: nations.map(n => ({ coordinates: [n.x, n.y], name: n.name, flag: n.flag || '' })),
   };
   zip.file('manifest.json', JSON.stringify(manifest, null, 2));
 

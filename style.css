@@ -238,6 +238,13 @@ footer a:hover { color: var(--text); }
   user-select: none;
 }
 .nm-dot:active { cursor: grabbing; }
+.nm-flag {
+  width: 18px; height: 12px;
+  object-fit: contain;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.nm-num { font-size: 0.6rem; font-weight: 700; color: #0d1117; }
 .nm-label {
   background: rgba(13,17,23,0.85);
   color: var(--text);
@@ -262,5 +269,19 @@ footer a:hover { color: var(--text); }
   opacity: 0;
   transition: opacity 0.15s;
 }
-.nation-marker:hover .nm-remove { opacity: 1; }
+.nm-edit {
+  background: rgba(13,17,23,0.8);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 50%;
+  width: 16px; height: 16px;
+  font-size: 0.65rem; line-height: 1;
+  cursor: pointer; pointer-events: all;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.nation-marker:hover .nm-remove,
+.nation-marker:hover .nm-edit { opacity: 1; }
 
