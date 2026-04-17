@@ -686,7 +686,7 @@ downloadArchiveBtn.addEventListener('click', () => {
         </button>
 
         <button id="osWin" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.25L11 3.75V12h9zM3 13h6v6.43l-6-1.33V13zm17 0h-9v6.75l9-1.5V13z"/></svg>
+          <svg width="22" height="22" viewBox="0 0 88 88" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M0 0h40v40H0zm48 0h40v40H48zM0 48h40v40H0zm48 0h40v40H48z"/></svg>
           <div>
             <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Windows</div>
             <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.bat</code></div>
@@ -694,7 +694,7 @@ downloadArchiveBtn.addEventListener('click', () => {
         </button>
 
         <button id="osLinux" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M12.504 0c-.155 0-.315.008-.48.021C7.576.336 3.59 2.541 2.655 5.97c-.24.876-.25 1.78-.1 2.656.15.875.5 1.71.95 2.47.45.76 1.01 1.44 1.65 2.01.64.57 1.36 1.03 2.12 1.36.76.33 1.56.52 2.37.56.81.04 1.63-.07 2.41-.32.78-.25 1.51-.65 2.15-1.17.64-.52 1.18-1.16 1.59-1.88.41-.72.68-1.51.79-2.33.11-.82.07-1.66-.12-2.47-.19-.81-.54-1.58-1.02-2.26-.48-.68-1.09-1.27-1.79-1.73-.7-.46-1.48-.78-2.29-.94-.41-.08-.83-.12-1.25-.12zm-.04 1.5c.36 0 .72.04 1.07.1.69.14 1.35.43 1.93.84.58.41 1.07.94 1.44 1.54.37.6.61 1.27.72 1.96.11.69.08 1.4-.08 2.08-.16.68-.47 1.33-.9 1.89-.43.56-.97 1.03-1.59 1.37-.62.34-1.3.55-2 .61-.7.06-1.41-.02-2.08-.24-.67-.22-1.29-.58-1.82-1.05-.53-.47-.96-1.04-1.25-1.67-.29-.63-.44-1.31-.44-2 0-.69.15-1.37.44-2 .29-.63.72-1.2 1.25-1.67.53-.47 1.15-.83 1.82-1.05.67-.22 1.38-.3 2.08-.24.7.06 1.38.27 2 .61.62.34 1.16.81 1.59 1.37.43.56.74 1.21.9 1.89.16.68.19 1.39.08 2.08-.11.69-.35 1.36-.72 1.96-.37.6-.86 1.13-1.44 1.54-.58.41-1.24.7-1.93.84-.35.06-.71.1-1.07.1z"/></svg>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M12 2a5.1 5.1 0 0 0-2.17 9.73c.07 1.2-.35 1.52-.93 1.84C7.85 14.28 5 14.89 5 18v1h14v-1c0-3.11-2.85-3.72-3.9-4.43-.58-.32-1-0.64-.93-1.84A5.1 5.1 0 0 0 12 2zM9 20a1 1 0 0 0 1 1h4a1 1 0 0 0 0-2h-4a1 1 0 0 0-1 1z"/></svg>
           <div>
             <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Linux</div>
             <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.sh</code></div>
