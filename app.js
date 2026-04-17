@@ -660,19 +660,54 @@ downloadArchiveBtn.addEventListener('click', () => {
 
   // Show OS picker modal
   const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
   overlay.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px 32px;max-width:380px;width:90%;text-align:center;">
-      <div style="font-size:1rem;font-weight:600;margin-bottom:8px;">What's your operating system?</div>
-      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px;line-height:1.5;">
-        The archive will include a launcher file so you can start the map tester with a single double-click.
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px 24px;max-width:420px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+      <div style="font-size:1.05rem;font-weight:600;margin-bottom:6px;color:var(--text);">Download map archive</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px;line-height:1.6;">
+        The archive includes your <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">image.png</code> and <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">info.json</code> map files.
       </div>
-      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <button id="osMac" class="btn btn-primary" style="flex:1;min-width:100px;">🍎 macOS</button>
-        <button id="osWin" class="btn btn-primary" style="flex:1;min-width:100px;">🪟 Windows</button>
-        <button id="osLinux" class="btn btn-secondary" style="flex:1;min-width:100px;">🐧 Linux</button>
+
+      <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px;">Include map tester script</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:0.8rem;color:var(--muted);line-height:1.6;">
+        The script automatically downloads the game source, registers your map, generates it, and opens it in your browser — <strong style="color:var(--text);">no manual setup needed.</strong><br><br>
+        After extracting the archive, just double-click the launcher file to start.
       </div>
-      <button id="osCancel" class="btn btn-ghost" style="margin-top:14px;font-size:0.8rem;">Cancel</button>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:2px;">Choose your OS</div>
+
+        <button id="osMac" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          <div>
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">macOS</div>
+            <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.command</code></div>
+          </div>
+        </button>
+
+        <button id="osWin" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V5.25L11 3.75V12h9zM3 13h6v6.43l-6-1.33V13zm17 0h-9v6.75l9-1.5V13z"/></svg>
+          <div>
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Windows</div>
+            <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.bat</code></div>
+          </div>
+        </button>
+
+        <button id="osLinux" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="color:#a0a0b0;flex-shrink:0;"><path d="M12.504 0c-.155 0-.315.008-.48.021C7.576.336 3.59 2.541 2.655 5.97c-.24.876-.25 1.78-.1 2.656.15.875.5 1.71.95 2.47.45.76 1.01 1.44 1.65 2.01.64.57 1.36 1.03 2.12 1.36.76.33 1.56.52 2.37.56.81.04 1.63-.07 2.41-.32.78-.25 1.51-.65 2.15-1.17.64-.52 1.18-1.16 1.59-1.88.41-.72.68-1.51.79-2.33.11-.82.07-1.66-.12-2.47-.19-.81-.54-1.58-1.02-2.26-.48-.68-1.09-1.27-1.79-1.73-.7-.46-1.48-.78-2.29-.94-.41-.08-.83-.12-1.25-.12zm-.04 1.5c.36 0 .72.04 1.07.1.69.14 1.35.43 1.93.84.58.41 1.07.94 1.44 1.54.37.6.61 1.27.72 1.96.11.69.08 1.4-.08 2.08-.16.68-.47 1.33-.9 1.89-.43.56-.97 1.03-1.59 1.37-.62.34-1.3.55-2 .61-.7.06-1.41-.02-2.08-.24-.67-.22-1.29-.58-1.82-1.05-.53-.47-.96-1.04-1.25-1.67-.29-.63-.44-1.31-.44-2 0-.69.15-1.37.44-2 .29-.63.72-1.2 1.25-1.67.53-.47 1.15-.83 1.82-1.05.67-.22 1.38-.3 2.08-.24.7.06 1.38.27 2 .61.62.34 1.16.81 1.59 1.37.43.56.74 1.21.9 1.89.16.68.19 1.39.08 2.08-.11.69-.35 1.36-.72 1.96-.37.6-.86 1.13-1.44 1.54-.58.41-1.24.7-1.93.84-.35.06-.71.1-1.07.1z"/></svg>
+          <div>
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Linux</div>
+            <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.sh</code></div>
+          </div>
+        </button>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <button id="osArchiveOnly" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">
+          Download map files only (no script)
+        </button>
+        <button id="osCancel" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Cancel</button>
+      </div>
     </div>`;
   document.body.appendChild(overlay);
 
@@ -682,9 +717,17 @@ downloadArchiveBtn.addEventListener('click', () => {
     overlay.remove();
     buildAndDownloadArchive(os);
   };
-  overlay.querySelector('#osMac').onclick   = () => pick('mac');
-  overlay.querySelector('#osWin').onclick   = () => pick('win');
-  overlay.querySelector('#osLinux').onclick = () => pick('linux');
+  overlay.querySelector('#osMac').onclick       = () => pick('mac');
+  overlay.querySelector('#osWin').onclick       = () => pick('win');
+  overlay.querySelector('#osLinux').onclick     = () => pick('linux');
+  overlay.querySelector('#osArchiveOnly').onclick = () => { overlay.remove(); buildAndDownloadArchive(null); };
+
+  // Hover highlight
+  ['osMac','osWin','osLinux'].forEach(id => {
+    const btn = overlay.querySelector(`#${id}`);
+    btn.addEventListener('mouseenter', () => btn.style.borderColor = 'var(--accent, #5b8dee)');
+    btn.addEventListener('mouseleave', () => btn.style.borderColor = 'var(--border)');
+  });
 });
 
 async function buildAndDownloadArchive(os) {
@@ -701,18 +744,19 @@ async function buildAndDownloadArchive(os) {
   };
   zip.file('info.json', JSON.stringify(manifest, null, 2));
 
-  // Fetch setup.py from same origin
-  const setupRes = await fetch('map-test-kit/setup.py');
-  const setupText = await setupRes.text();
-  zip.file('setup.py', setupText);
+  if (os) {
+    // Fetch setup.py from same origin
+    const setupRes = await fetch('map-test-kit/setup.py');
+    const setupText = await setupRes.text();
+    zip.file('setup.py', setupText);
 
-  if (os === 'win') {
-    zip.file('Click me to install.bat', '@echo off\ncd /d "%~dp0"\npython --version >nul 2>&1\nif errorlevel 1 (\n  echo Python is not installed.\n  echo Download it from: https://www.python.org/downloads/\n  echo Make sure to check "Add Python to PATH" during installation.\n  pause\n  exit /b 1\n)\npython setup.py\npause\n');
-  } else {
-    // mac and linux — .command opens in Terminal on macOS, works on Linux too
-    const launcher = '#!/bin/bash\ncd "$(dirname "$0")"\nif ! command -v python3 &> /dev/null; then\n  echo "Python 3 is not installed."\n  echo "Download it from: https://www.python.org/downloads/"\n  read -p "Press Enter to exit..."\n  exit 1\nfi\npython3 setup.py\n';
-    const fname = os === 'mac' ? 'Click me to install.command' : 'Click me to install.sh';
-    zip.file(fname, launcher, { unixPermissions: '755' });
+    if (os === 'win') {
+      zip.file('Click me to install.bat', '@echo off\ncd /d "%~dp0"\npython --version >nul 2>&1\nif errorlevel 1 (\n  echo Python is not installed.\n  echo Download it from: https://www.python.org/downloads/\n  echo Make sure to check "Add Python to PATH" during installation.\n  pause\n  exit /b 1\n)\npython setup.py\npause\n');
+    } else {
+      const launcher = '#!/bin/bash\ncd "$(dirname "$0")"\nif ! command -v python3 &> /dev/null; then\n  echo "Python 3 is not installed."\n  echo "Download it from: https://www.python.org/downloads/"\n  read -p "Press Enter to exit..."\n  exit 1\nfi\npython3 setup.py\n';
+      const fname = os === 'mac' ? 'Click me to install.command' : 'Click me to install.sh';
+      zip.file(fname, launcher, { unixPermissions: '755' });
+    }
   }
 
   const blob = await zip.generateAsync({ type: 'blob', platform: 'UNIX' });
