@@ -1,7 +1,6 @@
 // paint.js — Fullscreen terrain paint modal
 export function initPaint({ outCanvas, onPaintApplied }) {
 
-  // Off-screen canvas storing committed paint strokes
   let paintCanvas = null;
 
   const TERRAIN_COLORS = {
@@ -22,13 +21,53 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const doneBtn     = document.getElementById('paintDoneBtn');
   const cancelBtn   = document.getElementById('paintCancelBtn');
   const closeBtn    = document.getElementById('paintModalClose');
+  const undoBtn     = document.getElementById('paintUndoBtn');
+  const redoBtn     = document.getElementById('paintRedoBtn');
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
 
   let currentTerrain = 'water';
   let brushSize = 16;
   let painting = false;
   let lastX = null, lastY = null;
-  let snapshot = null;
+  let cancelSnapshot = null;
+
+  // ── Undo / Redo stacks (each entry = ImageData of paintCanvas) ─────────────
+  const MAX_HISTORY = 30;
+  let undoStack = [];
+  let redoStack = [];
+
+  function saveHistory() {
+    const pc = paintCanvas.getContext('2d');
+    undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
+    if (undoStack.length > MAX_HISTORY) undoStack.shift();
+    redoStack = [];
+    updateUndoRedoBtns();
+  }
+
+  function undo() {
+    if (!undoStack.length) return;
+    const pc = paintCanvas.getContext('2d');
+    redoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
+    pc.putImageData(undoStack.pop(), 0, 0);
+    redraw();
+    updateUndoRedoBtns();
+  }
+
+  function redo() {
+    if (!redoStack.length) return;
+    const pc = paintCanvas.getContext('2d');
+    undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
+    pc.putImageData(redoStack.pop(), 0, 0);
+    redraw();
+    updateUndoRedoBtns();
+  }
+
+  function updateUndoRedoBtns() {
+    undoBtn.disabled = undoStack.length === 0;
+    redoBtn.disabled = redoStack.length === 0;
+    undoBtn.style.opacity = undoStack.length ? '1' : '0.35';
+    redoBtn.style.opacity = redoStack.length ? '1' : '0.35';
+  }
 
   // ── Ensure paint canvas matches outCanvas ──────────────────────────────────
   function ensurePaintCanvas() {
@@ -38,33 +77,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     paintCanvas = document.createElement('canvas');
     paintCanvas.width  = outCanvas.width;
     paintCanvas.height = outCanvas.height;
+    undoStack = [];
+    redoStack = [];
   }
 
-  // ── Fit display canvas to mapArea, keeping aspect ratio ───────────────────
+  // ── Fit display canvas to mapArea ─────────────────────────────────────────
   function fitCanvas() {
     const ar = mapArea.getBoundingClientRect();
     if (!ar.width || !ar.height || !outCanvas.width) return;
-
-    const scaleX = ar.width  / outCanvas.width;
-    const scaleY = ar.height / outCanvas.height;
-    const scale  = Math.min(scaleX, scaleY);
-    const dispW  = Math.floor(outCanvas.width  * scale);
-    const dispH  = Math.floor(outCanvas.height * scale);
-
-    // Set logical resolution
+    const scale = Math.min(ar.width / outCanvas.width, ar.height / outCanvas.height);
     canvas.width  = outCanvas.width;
     canvas.height = outCanvas.height;
-
-    // Set display size and center via margin (no transform)
-    canvas.style.position = 'relative';
-    canvas.style.display  = 'block';
-    canvas.style.width    = dispW + 'px';
-    canvas.style.height   = dispH + 'px';
-    canvas.style.margin   = 'auto';
-    canvas.style.top      = '';
-    canvas.style.left     = '';
-    canvas.style.transform = '';
-
+    canvas.style.width  = Math.floor(outCanvas.width  * scale) + 'px';
+    canvas.style.height = Math.floor(outCanvas.height * scale) + 'px';
+    canvas.style.margin = 'auto';
+    canvas.style.display = 'block';
     redraw();
   }
 
@@ -74,29 +101,25 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
   }
 
-  // Keep canvas fitted when area resizes
   new ResizeObserver(() => {
     if (modal.classList.contains('open')) fitCanvas();
   }).observe(mapArea);
 
-  // ── Open modal ─────────────────────────────────────────────────────────────
+  // ── Open ───────────────────────────────────────────────────────────────────
   function open() {
     if (!outCanvas.width) return;
     ensurePaintCanvas();
-
-    // snapshot for cancel
-    snapshot = document.createElement('canvas');
-    snapshot.width  = paintCanvas.width;
-    snapshot.height = paintCanvas.height;
-    snapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
-
+    cancelSnapshot = document.createElement('canvas');
+    cancelSnapshot.width  = paintCanvas.width;
+    cancelSnapshot.height = paintCanvas.height;
+    cancelSnapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
+    undoStack = []; redoStack = [];
+    updateUndoRedoBtns();
     modal.classList.add('open');
-
-    // Wait two frames so the modal is fully laid out before measuring
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
   }
 
-  // ── Convert pointer event → outCanvas pixel coords ────────────────────────
+  // ── Coords ─────────────────────────────────────────────────────────────────
   function toCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -107,7 +130,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     ];
   }
 
-  // ── Paint helpers ──────────────────────────────────────────────────────────
+  // ── Paint ──────────────────────────────────────────────────────────────────
   function paintAt(px, py) {
     const pc = paintCanvas.getContext('2d');
     const [r, g, b] = TERRAIN_COLORS[currentTerrain];
@@ -129,6 +152,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // ── Pointer events ─────────────────────────────────────────────────────────
   canvas.addEventListener('mousedown', e => {
     e.preventDefault();
+    saveHistory();
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
@@ -150,6 +174,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    saveHistory();
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
@@ -168,6 +193,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   canvas.addEventListener('touchend', () => { painting = false; });
 
+  // ── Keyboard shortcuts (only when modal is open) ───────────────────────────
+  document.addEventListener('keydown', e => {
+    if (!modal.classList.contains('open')) return;
+    const ctrl = e.ctrlKey || e.metaKey;
+    if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+    if (ctrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    if (e.key === 'Escape') cancelAndClose();
+  });
+
   // ── Terrain buttons ────────────────────────────────────────────────────────
   terrainBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -177,35 +211,32 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     });
   });
 
-  // ── Brush slider ───────────────────────────────────────────────────────────
   brushSlider.addEventListener('input', () => {
     brushSize = parseInt(brushSlider.value);
     brushVal.textContent = brushSize;
   });
 
-  // ── Clear ──────────────────────────────────────────────────────────────────
+  undoBtn.addEventListener('click', undo);
+  redoBtn.addEventListener('click', redo);
+
   clearBtn.addEventListener('click', () => {
-    if (paintCanvas) {
-      paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-      redraw();
-    }
+    saveHistory();
+    paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+    redraw();
   });
 
-  // ── Done — bake paint into outCanvas ──────────────────────────────────────
+  // ── Done / Cancel ──────────────────────────────────────────────────────────
   function applyAndClose() {
-    if (paintCanvas) {
-      outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
-    }
+    if (paintCanvas) outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
     modal.classList.remove('open');
     onPaintApplied();
   }
 
-  // ── Cancel — restore snapshot ──────────────────────────────────────────────
   function cancelAndClose() {
-    if (snapshot && paintCanvas) {
+    if (cancelSnapshot && paintCanvas) {
       const pc = paintCanvas.getContext('2d');
       pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-      pc.drawImage(snapshot, 0, 0);
+      pc.drawImage(cancelSnapshot, 0, 0);
     }
     modal.classList.remove('open');
   }
