@@ -343,7 +343,6 @@ const nationModal       = document.getElementById('nationModal');
 const nationModalClose  = document.getElementById('nationModalClose');
 const nationModalClose2 = document.getElementById('nationModalClose2');
 const nationMapImg      = document.getElementById('nationMapImg');
-const nationOverlay     = document.getElementById('nationOverlay');
 const nationMapArea     = document.getElementById('nationMapArea');
 const nationListEl      = document.getElementById('nationList');
 const nationCountEl     = document.getElementById('nationCount');
@@ -354,42 +353,44 @@ const nameInput         = document.getElementById('nameInput');
 const nameConfirmBtn    = document.getElementById('nameConfirmBtn');
 const nameCancelBtn     = document.getElementById('nameCancelBtn');
 
-let nations = []; // [{x, y, name}] — x,y in map pixel coords
-let pendingCoords = null; // {x, y, px, py} waiting for name input
+let nations = []; // [{x, y, name}] — x,y in map pixel coords (0..mapWidth, 0..mapHeight)
+let pendingCoords = null;
+let draggingIdx = null;
 
 function openNationModal() {
   nationMapImg.src = outCanvas.toDataURL('image/png');
   nationModal.classList.add('open');
-  requestAnimationFrame(drawOverlay);
+  requestAnimationFrame(renderMarkers);
 }
 
 nationSpawnsBtn.addEventListener('click', openNationModal);
 nationModalClose.addEventListener('click', () => nationModal.classList.remove('open'));
 nationModalClose2.addEventListener('click', () => nationModal.classList.remove('open'));
-clearNationsBtn.addEventListener('click', () => { nations = []; renderNationList(); drawOverlay(); });
+clearNationsBtn.addEventListener('click', () => {
+  nations = [];
+  renderNationList();
+  renderMarkers();
+});
 
-// Map click → place nation
+// Click on map area → place nation (only if not dragging)
 nationMapArea.addEventListener('click', (e) => {
   if (namePopup.style.display !== 'none') return;
+  if (e.target.closest('.nation-marker')) return; // clicked a marker
   const rect = nationMapImg.getBoundingClientRect();
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
-  // Convert to map pixel coords
+  if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
   const scaleX = outCanvas.width  / rect.width;
   const scaleY = outCanvas.height / rect.height;
-  const mx = Math.round(px * scaleX);
-  const my = Math.round(py * scaleY);
-  pendingCoords = { x: mx, y: my, px: e.clientX, py: e.clientY };
+  pendingCoords = { x: Math.round(px * scaleX), y: Math.round(py * scaleY) };
   showNamePopup(e.clientX, e.clientY);
 });
 
 function showNamePopup(cx, cy) {
   nameInput.value = '';
   namePopup.style.display = 'block';
-  // Position popup near click, keep in viewport
   const pw = 220, ph = 120;
-  let left = cx + 12;
-  let top  = cy - 20;
+  let left = cx + 12, top = cy - 20;
   if (left + pw > window.innerWidth  - 8) left = cx - pw - 12;
   if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
   namePopup.style.left = left + 'px';
@@ -408,7 +409,7 @@ function confirmName() {
   nations.push({ x: pendingCoords.x, y: pendingCoords.y, name });
   hideNamePopup();
   renderNationList();
-  drawOverlay();
+  renderMarkers();
 }
 
 nameConfirmBtn.addEventListener('click', confirmName);
@@ -418,13 +419,17 @@ nameInput.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') hideNamePopup();
 });
 
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
 function renderNationList() {
   nationCountEl.textContent = nations.length;
   nationListEl.innerHTML = nations.map((n, i) => `
-    <div style="display:flex; align-items:center; gap:6px; padding:5px 4px; border-radius:5px; font-size:0.78rem; color:var(--text);">
-      <span style="width:18px; height:18px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:#0d1117; flex-shrink:0;">${i+1}</span>
-      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(n.name)}</span>
-      <button onclick="removeNation(${i})" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; line-height:1; padding:0 2px; flex-shrink:0;" title="Remove">×</button>
+    <div style="display:flex;align-items:center;gap:6px;padding:5px 4px;border-radius:5px;font-size:0.78rem;color:var(--text);">
+      <span style="width:18px;height:18px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:0.65rem;font-weight:700;color:#0d1117;flex-shrink:0;">${i+1}</span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(n.name)}</span>
+      <button onclick="removeNation(${i})" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1;padding:0 2px;flex-shrink:0;" title="Remove">×</button>
     </div>
   `).join('');
 }
@@ -432,59 +437,124 @@ function renderNationList() {
 window.removeNation = function(i) {
   nations.splice(i, 1);
   renderNationList();
-  drawOverlay();
+  renderMarkers();
 };
 
-function escHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+// ── DOM markers (draggable) ───────────────────────────────────────────────────
+function getImgRect() { return nationMapImg.getBoundingClientRect(); }
+function getAreaRect() { return nationMapArea.getBoundingClientRect(); }
+
+function markerScreenPos(n) {
+  const imgRect = getImgRect();
+  const areaRect = getAreaRect();
+  const scaleX = imgRect.width  / outCanvas.width;
+  const scaleY = imgRect.height / outCanvas.height;
+  return {
+    left: imgRect.left - areaRect.left + n.x * scaleX,
+    top:  imgRect.top  - areaRect.top  + n.y * scaleY,
+  };
 }
 
-function drawOverlay() {
-  const img = nationMapImg;
-  const rect = img.getBoundingClientRect();
-  const canvas = nationOverlay;
-  canvas.width  = rect.width;
-  canvas.height = rect.height;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  if (!outCanvas.width) return;
-  const scaleX = rect.width  / outCanvas.width;
-  const scaleY = rect.height / outCanvas.height;
-  nations.forEach((n, i) => {
-    const px = n.x * scaleX;
-    const py = n.y * scaleY;
-    // Shadow
-    ctx.shadowColor = 'rgba(0,0,0,0.7)';
-    ctx.shadowBlur = 6;
-    // Circle
-    ctx.beginPath();
-    ctx.arc(px, py, 10, 0, Math.PI * 2);
-    ctx.fillStyle = '#58a6ff';
-    ctx.fill();
-    ctx.strokeStyle = '#0d1117';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    // Number
-    ctx.fillStyle = '#0d1117';
-    ctx.font = 'bold 9px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(i + 1, px, py);
-    // Label
-    ctx.fillStyle = '#e6edf3';
-    ctx.font = '11px Inter, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)';
-    ctx.shadowBlur = 4;
-    ctx.fillText(n.name, px + 13, py);
-    ctx.shadowBlur = 0;
+function renderMarkers() {
+  // Remove old markers
+  nationMapArea.querySelectorAll('.nation-marker').forEach(el => el.remove());
+  nations.forEach((n, i) => createMarkerEl(n, i));
+}
+
+function createMarkerEl(n, i) {
+  const el = document.createElement('div');
+  el.className = 'nation-marker';
+  el.dataset.idx = i;
+  el.innerHTML = `
+    <div class="nm-dot">${i + 1}</div>
+    <div class="nm-label">${escHtml(n.name)}</div>
+    <button class="nm-remove" title="Remove">×</button>
+  `;
+  positionMarker(el, n);
+  nationMapArea.appendChild(el);
+
+  // Remove button
+  el.querySelector('.nm-remove').addEventListener('click', (e) => {
+    e.stopPropagation();
+    removeNation(i);
   });
+
+  // Drag
+  let startMx, startMy, startNx, startNy, moved;
+  el.querySelector('.nm-dot').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    moved = false;
+    startMx = e.clientX; startMy = e.clientY;
+    startNx = n.x; startNy = n.y;
+    draggingIdx = i;
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startMx;
+      const dy = ev.clientY - startMy;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+      const imgRect = getImgRect();
+      const areaRect = getAreaRect();
+      const scaleX = outCanvas.width  / imgRect.width;
+      const scaleY = outCanvas.height / imgRect.height;
+      n.x = Math.max(0, Math.min(outCanvas.width  - 1, Math.round(startNx + dx * scaleX)));
+      n.y = Math.max(0, Math.min(outCanvas.height - 1, Math.round(startNy + dy * scaleY)));
+      positionMarker(el, n);
+    };
+
+    const onUp = () => {
+      draggingIdx = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+
+  // Touch drag
+  el.querySelector('.nm-dot').addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const t0 = e.touches[0];
+    startMx = t0.clientX; startMy = t0.clientY;
+    startNx = n.x; startNy = n.y;
+
+    const onMove = (ev) => {
+      const t = ev.touches[0];
+      const dx = t.clientX - startMx, dy = t.clientY - startMy;
+      const imgRect = getImgRect();
+      const scaleX = outCanvas.width  / imgRect.width;
+      const scaleY = outCanvas.height / imgRect.height;
+      n.x = Math.max(0, Math.min(outCanvas.width  - 1, Math.round(startNx + dx * scaleX)));
+      n.y = Math.max(0, Math.min(outCanvas.height - 1, Math.round(startNy + dy * scaleY)));
+      positionMarker(el, n);
+    };
+
+    const onEnd = () => {
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+    };
+
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+  }, { passive: false });
 }
 
-// Redraw overlay on resize
-new ResizeObserver(() => { if (nationModal.classList.contains('open')) drawOverlay(); })
-  .observe(nationMapArea);
+function positionMarker(el, n) {
+  const pos = markerScreenPos(n);
+  el.style.left = pos.left + 'px';
+  el.style.top  = pos.top  + 'px';
+}
+
+// Reposition all markers on resize
+new ResizeObserver(() => {
+  if (!nationModal.classList.contains('open')) return;
+  nationMapArea.querySelectorAll('.nation-marker').forEach(el => {
+    const i = parseInt(el.dataset.idx);
+    if (nations[i]) positionMarker(el, nations[i]);
+  });
+}).observe(nationMapArea);
 
 // Download archive
 downloadArchiveBtn.addEventListener('click', async () => {
