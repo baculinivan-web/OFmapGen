@@ -209,9 +209,9 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       const waterFailDismiss= document.getElementById('waterFailDismiss');
 
       const OVERPASS_SERVERS = [
+        'https://overpass.private.coffee/api/interpreter',
         'https://overpass-api.de/api/interpreter',
         'https://overpass.kumi.systems/api/interpreter',
-        'https://overpass.private.coffee/api/interpreter',
         'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
       ];
 
@@ -245,9 +245,10 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           gisLoadBtn.textContent = 'Load elevation';
           closeGisModal();
           waterFailModal.classList.add('open');
-          waterFailRetry.onclick = async () => {
+          waterFailRetry.onclick = () => {
             waterFailModal.classList.remove('open');
-            await loadWaterFeatures();
+            openGisModal();
+            setTimeout(() => gisLoadBtn.click(), 150);
           };
           waterFailDismiss.onclick = () => waterFailModal.classList.remove('open');
           return;
