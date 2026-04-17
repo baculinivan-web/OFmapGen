@@ -1,8 +1,6 @@
 # OpenFront Map Generator
 
 **Live at [maps.mivps.ru](https://maps.mivps.ru)**
-<img width="2988" height="1908" alt="CleanShot 2026-04-17 at 17 51 13@2x" src="https://github.com/user-attachments/assets/e7b51fd2-91d9-4e43-8934-2dda07328493" />
-
 Convert any image — or real-world elevation data — into a playable map for [openfront.io](https://openfront.io).
 
 ## Features
