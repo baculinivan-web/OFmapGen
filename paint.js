@@ -12,62 +12,23 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   };
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
-  const modal        = document.getElementById('paintModal');
-  const mapArea      = document.getElementById('paintMapArea');
-  const canvas       = document.getElementById('paintCanvas');
-  const ctx          = canvas.getContext('2d');
-  const brushSlider  = document.getElementById('paintBrushSlider');
-  const brushVal     = document.getElementById('paintBrushVal');
-  const clearBtn     = document.getElementById('paintClearBtn');
-  const doneBtn      = document.getElementById('paintDoneBtn');
-  const cancelBtn    = document.getElementById('paintCancelBtn');
-  const closeBtn     = document.getElementById('paintModalClose');
-  const terrainBtns  = document.querySelectorAll('#paintTerrainBtns .paint-btn');
+  const modal       = document.getElementById('paintModal');
+  const mapArea     = document.getElementById('paintMapArea');
+  const canvas      = document.getElementById('paintCanvas');
+  const ctx         = canvas.getContext('2d');
+  const brushSlider = document.getElementById('paintBrushSlider');
+  const brushVal    = document.getElementById('paintBrushVal');
+  const clearBtn    = document.getElementById('paintClearBtn');
+  const doneBtn     = document.getElementById('paintDoneBtn');
+  const cancelBtn   = document.getElementById('paintCancelBtn');
+  const closeBtn    = document.getElementById('paintModalClose');
+  const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
 
   let currentTerrain = 'water';
   let brushSize = 16;
   let painting = false;
   let lastX = null, lastY = null;
-  // snapshot before opening (for cancel)
   let snapshot = null;
-
-  // ── Open modal ─────────────────────────────────────────────────────────────
-  function open() {
-    if (!outCanvas.width) return;
-    ensurePaintCanvas();
-    // snapshot current paint for cancel
-    snapshot = document.createElement('canvas');
-    snapshot.width  = paintCanvas.width;
-    snapshot.height = paintCanvas.height;
-    snapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
-
-    modal.classList.add('open');
-    requestAnimationFrame(fitCanvas);
-  }
-
-  // ── Fit canvas to area, draw outCanvas + paint layer ──────────────────────
-  function fitCanvas() {
-    const ar = mapArea.getBoundingClientRect();
-    const scaleX = ar.width  / outCanvas.width;
-    const scaleY = ar.height / outCanvas.height;
-    const scale  = Math.min(scaleX, scaleY, 1); // never upscale beyond 1:1 for perf
-    const dispW  = Math.floor(outCanvas.width  * scale);
-    const dispH  = Math.floor(outCanvas.height * scale);
-    canvas.width  = outCanvas.width;
-    canvas.height = outCanvas.height;
-    canvas.style.width  = dispW + 'px';
-    canvas.style.height = dispH + 'px';
-    redraw();
-  }
-
-  function redraw() {
-    ctx.drawImage(outCanvas, 0, 0);
-    if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
-  }
-
-  new ResizeObserver(() => {
-    if (modal.classList.contains('open')) fitCanvas();
-  }).observe(mapArea);
 
   // ── Ensure paint canvas matches outCanvas ──────────────────────────────────
   function ensurePaintCanvas() {
@@ -79,7 +40,63 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     paintCanvas.height = outCanvas.height;
   }
 
-  // ── Convert pointer → canvas pixel coords ─────────────────────────────────
+  // ── Fit display canvas to mapArea, keeping aspect ratio ───────────────────
+  function fitCanvas() {
+    const ar = mapArea.getBoundingClientRect();
+    if (!ar.width || !ar.height || !outCanvas.width) return;
+
+    const scaleX = ar.width  / outCanvas.width;
+    const scaleY = ar.height / outCanvas.height;
+    const scale  = Math.min(scaleX, scaleY);
+    const dispW  = Math.floor(outCanvas.width  * scale);
+    const dispH  = Math.floor(outCanvas.height * scale);
+
+    // Set logical resolution
+    canvas.width  = outCanvas.width;
+    canvas.height = outCanvas.height;
+
+    // Set display size and center via margin (no transform)
+    canvas.style.position = 'relative';
+    canvas.style.display  = 'block';
+    canvas.style.width    = dispW + 'px';
+    canvas.style.height   = dispH + 'px';
+    canvas.style.margin   = 'auto';
+    canvas.style.top      = '';
+    canvas.style.left     = '';
+    canvas.style.transform = '';
+
+    redraw();
+  }
+
+  function redraw() {
+    if (!outCanvas.width) return;
+    ctx.drawImage(outCanvas, 0, 0);
+    if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
+  }
+
+  // Keep canvas fitted when area resizes
+  new ResizeObserver(() => {
+    if (modal.classList.contains('open')) fitCanvas();
+  }).observe(mapArea);
+
+  // ── Open modal ─────────────────────────────────────────────────────────────
+  function open() {
+    if (!outCanvas.width) return;
+    ensurePaintCanvas();
+
+    // snapshot for cancel
+    snapshot = document.createElement('canvas');
+    snapshot.width  = paintCanvas.width;
+    snapshot.height = paintCanvas.height;
+    snapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
+
+    modal.classList.add('open');
+
+    // Wait two frames so the modal is fully laid out before measuring
+    requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
+  }
+
+  // ── Convert pointer event → outCanvas pixel coords ────────────────────────
   function toCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -109,7 +126,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
   }
 
-  // ── Pointer events on canvas ───────────────────────────────────────────────
+  // ── Pointer events ─────────────────────────────────────────────────────────
   canvas.addEventListener('mousedown', e => {
     e.preventDefault();
     painting = true;
@@ -168,11 +185,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   // ── Clear ──────────────────────────────────────────────────────────────────
   clearBtn.addEventListener('click', () => {
-    if (paintCanvas) paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-    redraw();
+    if (paintCanvas) {
+      paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+      redraw();
+    }
   });
 
-  // ── Done — apply paint to outCanvas and close ──────────────────────────────
+  // ── Done — bake paint into outCanvas ──────────────────────────────────────
   function applyAndClose() {
     if (paintCanvas) {
       outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
@@ -184,8 +203,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // ── Cancel — restore snapshot ──────────────────────────────────────────────
   function cancelAndClose() {
     if (snapshot && paintCanvas) {
-      paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-      paintCanvas.getContext('2d').drawImage(snapshot, 0, 0);
+      const pc = paintCanvas.getContext('2d');
+      pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+      pc.drawImage(snapshot, 0, 0);
     }
     modal.classList.remove('open');
   }
@@ -194,6 +214,5 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   cancelBtn.addEventListener('click', cancelAndClose);
   closeBtn.addEventListener('click',  cancelAndClose);
 
-  // ── Public API ─────────────────────────────────────────────────────────────
   return { open };
 }
