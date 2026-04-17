@@ -661,14 +661,14 @@ downloadArchiveBtn.addEventListener('click', async () => {
 
   const ofCanvas = buildSourceCanvas();
   const pngBlob = await new Promise(res => ofCanvas.toBlob(res, 'image/png'));
-  zip.file('map.png', pngBlob);
+  zip.file('image.png', pngBlob);
 
   const manifest = {
     name: 'custom_map',
     map: { width: outCanvas.width, height: outCanvas.height, num_land_tiles: countLandTiles() },
     nations: nations.map(n => ({ coordinates: [n.x, n.y], name: n.name, flag: n.flag || '' })),
   };
-  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+  zip.file('info.json', JSON.stringify(manifest, null, 2));
 
   const blob = await zip.generateAsync({ type: 'blob' });
   const a = document.createElement('a');
