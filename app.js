@@ -391,10 +391,31 @@ nationMapArea.addEventListener('click', (e) => {
   const rect = nationMapImg.getBoundingClientRect();
   const px = e.clientX - rect.left, py = e.clientY - rect.top;
   if (px < 0 || py < 0 || px > rect.width || py > rect.height) return;
-  pendingCoords = { x: Math.round(px * outCanvas.width / rect.width), y: Math.round(py * outCanvas.height / rect.height) };
+  const mx = Math.round(px * outCanvas.width / rect.width);
+  const my = Math.round(py * outCanvas.height / rect.height);
+  // Check water
+  if (isWaterPixel(mx, my)) { showWaterToast(); return; }
+  pendingCoords = { x: mx, y: my };
   editingIdx = null;
   showEditPopup(e.clientX, e.clientY, '', '', 'Add nation');
 });
+
+function isWaterPixel(x, y) {
+  if (!outCanvas.width) return false;
+  const ctx = outCanvas.getContext('2d');
+  const d = ctx.getImageData(Math.max(0, Math.min(outCanvas.width - 1, x)),
+                              Math.max(0, Math.min(outCanvas.height - 1, y)), 1, 1).data;
+  // Water color in outCanvas is ~(18,15,34)
+  return (d[0] < 40 && d[1] < 30 && d[2] < 60);
+}
+
+let waterToastTimer = null;
+function showWaterToast() {
+  const toast = document.getElementById('waterToast');
+  toast.style.display = 'block';
+  clearTimeout(waterToastTimer);
+  waterToastTimer = setTimeout(() => { toast.style.display = 'none'; }, 1800);
+}
 
 // ── Edit popup ────────────────────────────────────────────────────────────────
 function showEditPopup(cx, cy, name, flag, title) {

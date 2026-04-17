@@ -207,7 +207,7 @@ footer a { color: var(--muted); transition: color 0.15s; display: flex; }
 footer a:hover { color: var(--text); }
 
 /* Nation modal */
-#nationModal .modal { height: min(90vh, 700px); }
+#nationModal .modal { height: 100vh; border-radius: 0; }
 #nationMapArea { min-height: 300px; }
 #nationMapImg { max-height: 100%; }
 #nationList::-webkit-scrollbar { width: 4px; }
@@ -215,15 +215,34 @@ footer a:hover { color: var(--text); }
 #nationList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 #nameInput:focus { border-color: var(--accent); }
 
-/* Nation markers */
+/* Nation markers — anchor point is the tip of the arrow (bottom of nm-pin-tip) */
 .nation-marker {
   position: absolute;
-  transform: translate(-50%, -100%);
+  /* translate so tip bottom = spawn coords: shift left 50%, up by (pin+tip height) */
+  transform: translate(-50%, calc(-100% + 18px));
   display: flex;
   flex-direction: column;
   align-items: center;
   pointer-events: none;
   z-index: 10;
+}
+/* label sits above the flag */
+.nm-label {
+  order: -1;
+  background: rgba(13,17,23,0.85);
+  color: var(--text);
+  font-size: 0.68rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  pointer-events: none;
+  margin-bottom: 3px;
+  border: 1px solid rgba(255,255,255,0.1);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 18px;
+  line-height: 14px;
 }
 .nm-pin {
   width: 36px; height: 24px;
@@ -256,20 +275,6 @@ footer a:hover { color: var(--text); }
   border-top: 7px solid rgba(255,255,255,0.9);
   filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
   flex-shrink: 0;
-}
-.nm-label {
-  background: rgba(13,17,23,0.85);
-  color: var(--text);
-  font-size: 0.68rem;
-  padding: 2px 5px;
-  border-radius: 3px;
-  white-space: nowrap;
-  pointer-events: none;
-  margin-top: 3px;
-  border: 1px solid rgba(255,255,255,0.1);
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .nm-remove, .nm-edit {
   background: rgba(13,17,23,0.9);
