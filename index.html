@@ -172,7 +172,13 @@
         <img id="preview" alt="Map preview" />
       </div>
       <div class="preview-footer">
-        <button class="btn btn-primary" id="downloadBtn" disabled>
+        <button class="btn btn-primary" id="nationSpawnsBtn" style="opacity:0.35; pointer-events:none;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/>
+          </svg>
+          Proceed to adding nation spawns
+        </button>
+        <button class="btn btn-secondary" id="downloadBtn" disabled style="margin-top:8px;">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
             <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
@@ -185,12 +191,6 @@
             <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           Download source PNG (OpenFront import)
-        </button>
-        <button class="btn btn-ghost" id="nationSpawnsBtn" style="margin-top:8px; opacity:0.35; pointer-events:none;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/>
-          </svg>
-          Proceed to adding nation spawns
         </button>
       </div>
     </div>
