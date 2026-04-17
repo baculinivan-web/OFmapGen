@@ -216,7 +216,10 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       ];
 
       async function overpassFetch(query) {
-        for (const server of OVERPASS_SERVERS) {
+        for (let i = 0; i < OVERPASS_SERVERS.length; i++) {
+          const server = OVERPASS_SERVERS[i];
+          const host = new URL(server).hostname;
+          gisStatus.textContent = `Loading: OSM water — ${host} (${i + 1}/${OVERPASS_SERVERS.length})…`;
           try {
             const resp = await fetch(server, { method: 'POST', body: query, signal: AbortSignal.timeout(20000) });
             if (resp.ok) return resp;
