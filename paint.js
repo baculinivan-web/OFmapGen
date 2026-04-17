@@ -165,14 +165,30 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.fill();
   }
 
-  // ── Texture brush — sparse noise-shaped dunes of the chosen terrain ─────────
+  // ── Texture brush — stamp a single dune shape on click ───────────────────
+  // Dune = elongated ellipse (3:1 ratio) rotated by noise-based angle,
+  // with noisy edges so it looks organic. Transparent outside the shape.
   function paintTextureAt(cx, cy) {
     const pc = paintCanvas.getContext('2d');
     const r  = brushSize;
-    const x0 = Math.max(0, Math.floor(cx - r));
-    const y0 = Math.max(0, Math.floor(cy - r));
-    const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(cx + r));
-    const y1 = Math.min(paintCanvas.height - 1, Math.ceil(cy + r));
+
+    // Dune proportions: long axis = r, short axis = r/3
+    const ra = r;          // semi-major
+    const rb = r / 3;      // semi-minor
+
+    // Deterministic rotation based on position (so same spot = same angle)
+    const angle = fbm(cx * 0.3, cy * 0.3) * Math.PI; // 0..π
+
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+
+    // Bounding box of rotated ellipse
+    const bw = Math.ceil(Math.sqrt(ra*ra*cosA*cosA + rb*rb*sinA*sinA));
+    const bh = Math.ceil(Math.sqrt(ra*ra*sinA*sinA + rb*rb*cosA*cosA));
+
+    const x0 = Math.max(0, Math.floor(cx - bw - 2));
+    const y0 = Math.max(0, Math.floor(cy - bh - 2));
+    const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(cx + bw + 2));
+    const y1 = Math.min(paintCanvas.height - 1, Math.ceil(cy + bh + 2));
     const w  = x1 - x0 + 1, h = y1 - y0 + 1;
     if (w <= 0 || h <= 0) return;
 
@@ -182,22 +198,33 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
     for (let py = y0; py <= y1; py++) {
       for (let px = x0; px <= x1; px++) {
+        // Rotate point into ellipse local space
         const dx = px - cx, dy = py - cy;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > r) continue;
+        const lx =  dx * cosA + dy * sinA;  // along major axis
+        const ly = -dx * sinA + dy * cosA;  // along minor axis
 
-        const falloff = 1 - dist / r;
-        const n = fbm(px, py);
+        // Ellipse distance (0 = center, 1 = edge)
+        const ed = Math.sqrt((lx/ra)*(lx/ra) + (ly/rb)*(ly/rb));
+        if (ed > 1.0) continue;
 
-        // Only paint where noise is above threshold — creates dune shapes
-        // threshold varies with falloff so center is denser than edges
-        if (n < 0.45 + falloff * 0.1) continue;
+        // Noise-warped edge: adds organic jaggedness
+        const n = fbm(px * 1.2, py * 1.2);
+        const edgeNoise = n * 0.35; // how much noise warps the edge
+        const effDist = ed + edgeNoise;
+        if (effDist > 1.05) continue;
 
-        // Opacity driven by how far above threshold (sharper dune ridges)
-        const alpha = Math.min(1, (n - 0.45) * 4 * falloff);
+        // Falloff: sharp ridge at center, fades to edges
+        const falloff = Math.max(0, 1 - effDist);
+        // Asymmetric: steeper on one side (windward vs leeward)
+        const ridgeFalloff = Math.pow(falloff, 0.6);
+
+        // Only paint the "ridge" part — sparse near edges
+        const threshold = 0.15 + (1 - ridgeFalloff) * 0.3;
+        if (n < threshold) continue;
+
+        const alpha = Math.min(1, ridgeFalloff * 1.4);
         const idx = ((py - y0) * w + (px - x0)) * 4;
 
-        // Blend onto existing paint layer (transparent where not painted)
         const ea = d[idx+3] / 255;
         const oa = alpha + ea * (1 - alpha);
         if (oa < 0.001) continue;
@@ -218,7 +245,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function paintLine(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const stepFactor = brushMode === 'texture' ? 0.25 : 0.4;
+    // Texture mode: stamp every ~brushSize*1.5 px so dunes don't overlap too much
+    const stepFactor = brushMode === 'texture' ? 1.5 : 0.4;
     const steps = Math.max(1, Math.ceil(dist / (brushSize * stepFactor)));
     for (let i = 0; i <= steps; i++) {
       paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps));
