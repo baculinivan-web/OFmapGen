@@ -1,0 +1,6 @@
+services:
+  map-generator:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:80"   # change 3000 to any port you want

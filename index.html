@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OpenFront Map Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2330;
+      --border:    #30363d;
+      --accent:    #58a6ff;
+      --accent-dim:#1f3a5f;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --water:     #120f22;
+      --plain:     #8caa58;
+      --highland:  #b09f72;
+      --mountain:  #bebebe;
+      --radius:    10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: grid;
+      place-items: start center;
+      padding: 48px 16px 64px;
+    }
+
+    .page { width: 100%; max-width: 960px; }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 32px;
+    }
+
+    .logo {
+      width: 44px; height: 44px;
+      background: linear-gradient(135deg, var(--accent-dim), #0d2a4a);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      font-size: 1.4rem;
+      flex-shrink: 0;
+    }
+
+    .header-text h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    .header-text p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .header-text a { color: var(--accent); text-decoration: none; }
+    .header-text a:hover { text-decoration: underline; }
+
+    /* Layout */
+    .layout {
+      display: grid;
+      grid-template-columns: 300px 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    /* Panel */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .panel-section {
+      padding: 18px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-section:last-child { border-bottom: none; }
+
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* Drop zone */
+    .drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 8px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .drop-zone:hover, .drop-zone.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-dim);
+    }
+
+    .drop-zone input { display: none; }
+
+    .drop-icon {
+      width: 40px; height: 40px;
+      margin: 0 auto 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      font-size: 1.2rem;
+    }
+
+    .drop-zone .hint { font-size: 0.8rem; color: var(--muted); line-height: 1.5; }
+    .drop-zone .hint span { color: var(--accent); }
+
+    .file-name {
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: var(--accent);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: none;
+    }
+
+    /* Sliders */
+    .slider-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px 10px;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+
+    .slider-row:last-child { margin-bottom: 0; }
+
+    .slider-label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--text);
+    }
+
+    .swatch {
+      width: 12px; height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .slider-val {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      min-width: 32px;
+      text-align: right;
+    }
+
+    input[type="range"] {
+      grid-column: 1 / -1;
+      width: 100%;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: var(--border);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+      box-shadow: 0 0 0 1px var(--accent);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+      cursor: pointer;
+    }
+
+    /* Toggle */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+    }
+
+    .toggle {
+      position: relative;
+      width: 36px; height: 20px;
+      flex-shrink: 0;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      background: var(--border);
+      border-radius: 20px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-track::after {
+      content: '';
+      position: absolute;
+      left: 3px; top: 3px;
+      width: 14px; height: 14px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+
+    .toggle input:checked + .toggle-track { background: var(--accent); }
+    .toggle input:checked + .toggle-track::after { transform: translateX(16px); }
+
+    /* Legend */
+    .legend {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .legend-swatch {
+      width: 28px; height: 16px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    /* Preview panel */
+    .preview-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .preview-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    .img-info {
+      font-size: 0.72rem;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .preview-body {
+      background: #080b10;
+      min-height: 320px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      flex: 1;
+    }
+
+    .preview-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      color: var(--border);
+    }
+
+    .preview-placeholder svg { opacity: 0.4; }
+    .preview-placeholder p { font-size: 0.82rem; }
+
+    #preview {
+      max-width: 100%;
+      max-height: 520px;
+      display: none;
+      image-rendering: pixelated;
+    }
+
+    .preview-footer {
+      padding: 14px 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Button */
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 0.88rem;
+      font-weight: 500;
+      font-family: inherit;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:disabled { opacity: 0.3; cursor: default; }
+    .btn:not(:disabled):hover { opacity: 0.88; }
+    .btn:not(:disabled):active { transform: scale(0.98); }
+
+    .btn-primary { background: var(--accent); color: #0d1117; }
+
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="header">
+    <div class="logo">🗺️</div>
+    <div class="header-text">
+      <h1>OpenFront Map Generator</h1>
+      <p>Convert any image into a playable map for <a href="https://openfront.io" target="_blank" rel="noopener">openfront.io</a></p>
+    </div>
+  </div>
+
+  <div class="layout">
+
+    <!-- Left panel: controls -->
+    <div class="panel">
+
+      <div class="panel-section">
+        <div class="section-title">Image</div>
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-icon">📂</div>
+          <p class="hint"><span>Click to upload</span> or drag & drop</p>
+          <p class="hint">PNG · JPG · WebP</p>
+          <div class="file-name" id="fileName"></div>
+          <input type="file" id="fileInput" accept="image/*" />
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Thresholds</div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="swatch" style="background:var(--water)"></span>
+            Water
+          </div>
+          <span class="slider-val" id="valWater">0.40</span>
+          <input type="range" id="sliderWater" min="0" max="1" step="0.01" value="0.4" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="swatch" style="background:var(--plain)"></span>
+            Plain
+          </div>
+          <span class="slider-val" id="valPlain">0.72</span>
+          <input type="range" id="sliderPlain" min="0" max="1" step="0.01" value="0.72" />
+        </div>
+
+        <div class="slider-row">
+          <div class="slider-label">
+            <span class="swatch" style="background:var(--highland)"></span>
+            Highland
+          </div>
+          <span class="slider-val" id="valHighland">0.85</span>
+          <input type="range" id="sliderHighland" min="0" max="1" step="0.01" value="0.85" />
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="toggle-row">
+          <span>Invert brightness</span>
+          <label class="toggle">
+            <input type="checkbox" id="invertCheck" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Legend</div>
+        <div class="legend">
+          <div class="legend-item">
+            <span class="legend-swatch" style="background:var(--water)"></span>
+            Water
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch" style="background:var(--plain)"></span>
+            Plain
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch" style="background:var(--highland)"></span>
+            Highland
+          </div>
+          <div class="legend-item">
+            <span class="legend-swatch" style="background:var(--mountain)"></span>
+            Mountain
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right panel: preview -->
+    <div class="preview-panel">
+      <div class="preview-header">
+        <span class="preview-title">Preview</span>
+        <span class="img-info" id="imgInfo"></span>
+      </div>
+
+      <div class="preview-body">
+        <div class="preview-placeholder" id="placeholder">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <p>Upload an image to preview</p>
+        </div>
+        <img id="preview" alt="Map preview" />
+      </div>
+
+      <div class="preview-footer">
+        <button class="btn btn-primary" id="downloadBtn" disabled>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download map PNG
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<canvas id="srcCanvas"></canvas>
+<canvas id="outCanvas"></canvas>
+
+<script>
+  const COLORS = {
+    water:    [18,  15,  34],
+    plain:    [140, 170, 88],
+    highland: [176, 159, 114],
+    mountain: [190, 190, 190],
+  };
+
+  const dropZone    = document.getElementById('dropZone');
+  const fileInput   = document.getElementById('fileInput');
+  const fileNameEl  = document.getElementById('fileName');
+  const srcCanvas   = document.getElementById('srcCanvas');
+  const outCanvas   = document.getElementById('outCanvas');
+  const preview     = document.getElementById('preview');
+  const placeholder = document.getElementById('placeholder');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const invertCheck = document.getElementById('invertCheck');
+  const imgInfo     = document.getElementById('imgInfo');
+
+  const sliders = {
+    water:    document.getElementById('sliderWater'),
+    plain:    document.getElementById('sliderPlain'),
+    highland: document.getElementById('sliderHighland'),
+  };
+  const vals = {
+    water:    document.getElementById('valWater'),
+    plain:    document.getElementById('valPlain'),
+    highland: document.getElementById('valHighland'),
+  };
+
+  let srcImageData = null;
+  let rafId = null;
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) loadFile(file);
+  });
+
+  function loadFile(file) {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      srcCanvas.width  = img.width;
+      srcCanvas.height = img.height;
+      const ctx = srcCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      srcImageData = ctx.getImageData(0, 0, img.width, img.height);
+      imgInfo.textContent = `${img.width} × ${img.height}`;
+      fileNameEl.textContent = file.name;
+      fileNameEl.style.display = 'block';
+      URL.revokeObjectURL(url);
+      scheduleRender();
+    };
+    img.src = url;
+  }
+
+  Object.values(sliders).forEach(s => s.addEventListener('input', scheduleRender));
+  invertCheck.addEventListener('change', scheduleRender);
+
+  function scheduleRender() {
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(render);
+  }
+
+  function render() {
+    if (!srcImageData) return;
+
+    let w = parseFloat(sliders.water.value);
+    let p = parseFloat(sliders.plain.value);
+    let h = parseFloat(sliders.highland.value);
+
+    p = Math.max(p, w);
+    h = Math.max(h, p);
+
+    sliders.plain.value    = p;
+    sliders.highland.value = h;
+
+    vals.water.textContent    = w.toFixed(2);
+    vals.plain.textContent    = p.toFixed(2);
+    vals.highland.textContent = h.toFixed(2);
+
+    // Update slider track fill
+    updateTrack(sliders.water,    w);
+    updateTrack(sliders.plain,    p);
+    updateTrack(sliders.highland, h);
+
+    const invert = invertCheck.checked;
+    const src    = srcImageData.data;
+    const width  = srcImageData.width;
+    const height = srcImageData.height;
+
+    outCanvas.width  = width;
+    outCanvas.height = height;
+    const ctx = outCanvas.getContext('2d');
+    const out = ctx.createImageData(width, height);
+    const d   = out.data;
+
+    for (let i = 0; i < width * height; i++) {
+      const si = i * 4;
+      let br = (src[si] + src[si+1] + src[si+2]) / (3 * 255);
+      if (invert) br = 1 - br;
+
+      let color;
+      if      (br <= w) color = COLORS.water;
+      else if (br <= p) color = COLORS.plain;
+      else if (br <= h) color = COLORS.highland;
+      else              color = COLORS.mountain;
+
+      d[si]   = color[0];
+      d[si+1] = color[1];
+      d[si+2] = color[2];
+      d[si+3] = 255;
+    }
+
+    ctx.putImageData(out, 0, 0);
+
+    preview.src = outCanvas.toDataURL('image/png');
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+    downloadBtn.disabled = false;
+  }
+
+  function updateTrack(input, val) {
+    const pct = val * 100;
+    input.style.background =
+      `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
+  }
+
+  downloadBtn.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = outCanvas.toDataURL('image/png');
+    a.download = 'openfront_map.png';
+    a.click();
+  });
+</script>
+</body>
+</html>
