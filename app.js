@@ -241,7 +241,8 @@ worker.onmessage = ({ data }) => {
   placeholder.style.display = 'none';
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
-  nationSpawnsBtn.disabled = false;
+  nationSpawnsBtn.style.opacity = '';
+  nationSpawnsBtn.style.pointerEvents = '';
   if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
 };
 
