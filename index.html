@@ -28,14 +28,19 @@
       <div class="panel-section">
         <div class="section-title">Image</div>
         <div class="drop-zone" id="dropZone">
-          <div class="drop-icon">📂</div>
+          <div class="drop-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
           <p class="hint"><span>Click to upload</span> or drag & drop</p>
           <p class="hint">PNG · JPG · WebP</p>
           <div class="file-name" id="fileName"></div>
           <input type="file" id="fileInput" accept="image/*" />
         </div>
         <button class="btn btn-ghost" id="fromMapBtn" style="margin-top:10px; font-size:0.82rem; padding:8px 14px;">
-          🌍 From real map (elevation)
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          From real map (elevation)
         </button>
       </div>
 
@@ -44,10 +49,19 @@
 
         <div id="terrainPresets" style="display:none; margin-bottom:12px;">
           <div style="display:flex; gap:6px;">
-            <button class="algo-btn" id="presetPlains">🌾 Plains</button>
-            <button class="algo-btn" id="presetMixed">⛰ Mixed</button>
+            <button class="algo-btn" id="presetPlains">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l4-8 4 4 4-6 4 10"/></svg>
+              Plains
+            </button>
+            <button class="algo-btn" id="presetMixed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3l4 8 5-5 5 15H2L8 3z"/></svg>
+              Mixed
+            </button>
             <button class="algo-btn active" id="presetDefault">Default</button>
-            <button class="algo-btn" id="presetMountains">🏔 Mountains</button>
+            <button class="algo-btn" id="presetMountains">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l6-12 4 6 3-4 5 10H3z"/></svg>
+              Mountains
+            </button>
           </div>
         </div>
 
@@ -106,7 +120,8 @@
         </div>
         <div id="advancedOptions" style="display:none; margin-top:10px;">
           <button class="btn btn-primary" id="runSegBtn" style="font-size:0.82rem; padding:8px 14px;">
-            ✂️ Run AI segmentation
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="18" r="3"/><path d="M20 4L8.12 15.88M14.47 14.48L20 20M8.12 8.12L12 12"/></svg>
+            Run AI segmentation
           </button>
           <p id="segStatus" style="margin-top:8px; font-size:0.75rem; color:var(--muted); line-height:1.5;"></p>
         </div>
@@ -169,7 +184,9 @@
   <div class="modal">
     <div class="modal-header">
       <span class="modal-title">Select region — draw a rectangle on the map</span>
-      <button class="modal-close" id="gisModalClose">✕</button>
+      <button class="modal-close" id="gisModalClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
     <div id="gisMap"></div>
     <div class="modal-footer">

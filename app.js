@@ -125,7 +125,7 @@ let ortSession = null;
 runSegBtn.addEventListener('click', async () => {
   if (!srcImageData) { segStatus.textContent = 'Upload an image first.'; return; }
   runSegBtn.disabled = true;
-  segStatus.textContent = '⏳ Loading u2netp model (~4.7MB)…';
+  segStatus.textContent = 'Loading: Loading u2netp model (~4.7MB)…';
   try {
     if (!ortSession) {
       let modelBuffer;
@@ -134,14 +134,14 @@ runSegBtn.addEventListener('click', async () => {
       if (cached) {
         modelBuffer = await cached.arrayBuffer();
       } else {
-        segStatus.textContent = '⏳ Downloading model (~4.7MB)…';
+        segStatus.textContent = 'Loading: Downloading model (~4.7MB)…';
         const resp = await fetch(U2NETP_URL);
         await cache.put(U2NETP_URL, resp.clone());
         modelBuffer = await resp.arrayBuffer();
       }
       ortSession = await ort.InferenceSession.create(modelBuffer, { executionProviders: ['wasm'] });
     }
-    segStatus.textContent = '🧠 Running segmentation…';
+    segStatus.textContent = 'AI: Running segmentation…';
     const W = srcImageData.width, H = srcImageData.height;
     const tmp = document.createElement('canvas');
     tmp.width = IMG_SIZE; tmp.height = IMG_SIZE;
@@ -174,11 +174,11 @@ runSegBtn.addEventListener('click', async () => {
     const sData = sCanvas.getContext('2d').getImageData(0, 0, W, H).data;
     aiMask = new Uint8Array(W * H);
     for (let i = 0; i < W * H; i++) aiMask[i] = sData[i * 4] > 128 ? 1 : 0;
-    segStatus.textContent = '✅ Done — adjust thresholds to tune terrain';
+    segStatus.textContent = 'Done: Done — adjust thresholds to tune terrain';
     runSegBtn.disabled = false;
     scheduleRender();
   } catch (err) {
-    segStatus.textContent = '❌ ' + err.message;
+    segStatus.textContent = 'Error: ' + err.message;
     console.error(err);
     runSegBtn.disabled = false;
   }

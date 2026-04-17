@@ -113,7 +113,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     const west  = b.getWest(),  east  = b.getEast();
 
     gisLoadBtn.disabled = true;
-    gisStatus.textContent = `⏳ Loading elevation tiles…`;
+    gisStatus.textContent = `Loading: Loading elevation tiles…`;
 
     function lngToTileX(lng, z) { return Math.floor((lng + 180) / 360 * Math.pow(2, z)); }
     function latToTileY(lat, z) {
@@ -133,7 +133,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     const tileW = tx1 - tx0 + 1, tileH = ty1 - ty0 + 1;
     const TILE = 256;
 
-    gisStatus.textContent = `⏳ Loading ${tileW * tileH} tile(s) at zoom ${zoom}…`;
+    gisStatus.textContent = `Loading: Loading ${tileW * tileH} tile(s) at zoom ${zoom}…`;
 
     try {
       const tileImgs = [];
@@ -204,7 +204,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       tmpCtx.putImageData(imgData, 0, 0);
 
       // Rivers from Overpass
-      gisStatus.textContent = `⏳ Loading rivers from OpenStreetMap…`;
+      gisStatus.textContent = `Loading: Loading rivers from OpenStreetMap…`;
       try {
         const overpassQuery = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain)$"](${south},${west},${north},${east}););out geom;`;
         const overpassResp = await fetch('https://overpass-api.de/api/interpreter', {
@@ -233,11 +233,11 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
               });
               tmpCtx.stroke();
             }
-            gisStatus.textContent = `⏳ Drew ${ways.length} waterways, finalizing…`;
+            gisStatus.textContent = `Loading: Drew ${ways.length} waterways, finalizing…`;
           }
         }
       } catch (riverErr) {
-        gisStatus.textContent = `⚠️ Rivers failed (${riverErr.message}) — elevation loaded without rivers.`;
+        gisStatus.textContent = `Warning: Rivers failed (${riverErr.message}) — elevation loaded without rivers.`;
         gisLoadBtn.disabled = false;
         gisLoadBtn.textContent = 'Retry with rivers';
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
@@ -246,13 +246,13 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       }
 
       _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
-      gisStatus.textContent = `✅ Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
+      gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
       gisLoadBtn.disabled = false;
       gisLoadBtn.textContent = 'Load elevation';
       closeGisModal();
 
     } catch (err) {
-      gisStatus.textContent = '❌ ' + err.message;
+      gisStatus.textContent = 'Error: ' + err.message;
       gisLoadBtn.disabled = false;
     }
   });
