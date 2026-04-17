@@ -492,10 +492,9 @@ suggestedList.addEventListener('click', (e) => {
   flagSearch.value = suggestedName || '';
   flagResults.style.display = 'none';
   updateFlagPreview();
-  // Apply name if field is empty or user hasn't typed a custom name
-  if (suggestedName && (!nameInput.value.trim() || nameInput.value.trim().toLowerCase() === nameInput.dataset.lastSuggested)) {
+  // Always apply the suggested name
+  if (suggestedName) {
     nameInput.value = suggestedName;
-    nameInput.dataset.lastSuggested = suggestedName.toLowerCase();
   }
 });
 
