@@ -29,12 +29,16 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   let currentZone = 'water';
   let brushSize   = 12;
   let isDrawing   = false;
-  let undoStack   = [];   // array of ImageData snapshots
+  let undoStack   = [];
   const MAX_UNDO  = 20;
 
   // Viewport transform (zoom/pan)
   let scale  = 1;
   let offsetX = 0, offsetY = 0;
+
+  // Pan state
+  let isPanning = false, panStartX = 0, panStartY = 0, panOX = 0, panOY = 0;
+  let spaceDown = false;
 
   // ── Terrain selection ──────────────────────────────────────────────────────
   terrainBtns.forEach(btn => {
@@ -106,7 +110,12 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   });
 
   // ── Close ──────────────────────────────────────────────────────────────────
-  [closeBtn, closeBtn2].forEach(b => b.addEventListener('click', () => modal.classList.remove('open')));
+  function closeModal() {
+    isPanning = false;
+    isDrawing = false;
+    modal.classList.remove('open');
+  }
+  [closeBtn, closeBtn2].forEach(b => b.addEventListener('click', closeModal));
 
   // ── Resize ─────────────────────────────────────────────────────────────────
   resizeBtn.addEventListener('click', () => {
@@ -202,7 +211,8 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   }
 
   drawCanvas.addEventListener('pointerdown', (e) => {
-    if (e.button === 1 || e.button === 2) return; // middle/right — reserved for pan
+    if (!modal.classList.contains('open')) return;
+    if (e.button === 1 || e.button === 2) return;
     e.preventDefault();
     pushUndo();
     isDrawing = true;
@@ -223,6 +233,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
 
   // ── Zoom (wheel) ───────────────────────────────────────────────────────────
   drawArea.addEventListener('wheel', (e) => {
+    if (!modal.classList.contains('open')) return;
     e.preventDefault();
     const ar    = drawArea.getBoundingClientRect();
     const mx    = e.clientX - ar.left;
@@ -236,13 +247,17 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   }, { passive: false });
 
   // ── Pan (middle-drag or space+drag) ───────────────────────────────────────
-  let isPanning = false, panStartX = 0, panStartY = 0, panOX = 0, panOY = 0;
-  let spaceDown = false;
 
-  window.addEventListener('keydown', (e) => { if (e.code === 'Space' && modal.classList.contains('open')) { spaceDown = true; drawCanvas.style.cursor = 'grab'; e.preventDefault(); } });
-  window.addEventListener('keyup',   (e) => { if (e.code === 'Space') { spaceDown = false; drawCanvas.style.cursor = 'crosshair'; } });
+  window.addEventListener('keydown', (e) => {
+    if (!modal.classList.contains('open')) return;
+    if (e.code === 'Space') { spaceDown = true; drawCanvas.style.cursor = 'grab'; e.preventDefault(); }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') { spaceDown = false; if (modal.classList.contains('open')) drawCanvas.style.cursor = 'crosshair'; }
+  });
 
   drawArea.addEventListener('pointerdown', (e) => {
+    if (!modal.classList.contains('open')) return;
     if (e.button === 1 || spaceDown) {
       e.preventDefault();
       isPanning  = true;
@@ -258,12 +273,13 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
     offsetY = panOY + (e.clientY - panStartY);
     applyTransform();
   });
-  drawArea.addEventListener('pointerup',     () => { isPanning = false; drawCanvas.style.cursor = spaceDown ? 'grab' : 'crosshair'; });
+  drawArea.addEventListener('pointerup',     () => { isPanning = false; if (modal.classList.contains('open')) drawCanvas.style.cursor = spaceDown ? 'grab' : 'crosshair'; });
   drawArea.addEventListener('pointercancel', () => { isPanning = false; });
 
   // Keyboard shortcut: Ctrl+Z undo
   window.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && modal.classList.contains('open')) {
+    if (!modal.classList.contains('open')) return;
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
       e.preventDefault();
       if (undoStack.length) ctx.putImageData(undoStack.pop(), 0, 0);
     }
