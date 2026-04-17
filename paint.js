@@ -124,37 +124,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     ];
   }
 
-  // ── Noise helpers (value noise, no deps) ──────────────────────────────────
-  // Simple hash-based value noise — deterministic, no imports needed
-  function hash(x, y) {
-    let h = (x * 1619 + y * 31337) ^ ((x * 31337 + y * 1619) >> 4);
-    h = (h ^ (h >> 16)) * 0x45d9f3b;
-    h = (h ^ (h >> 16)) * 0x45d9f3b;
-    return ((h ^ (h >> 16)) & 0xffff) / 0xffff; // 0..1
-  }
-
-  function smoothNoise(x, y, freq) {
-    const fx = x * freq, fy = y * freq;
-    const ix = Math.floor(fx), iy = Math.floor(fy);
-    const tx = fx - ix, ty = fy - iy;
-    // smoothstep
-    const ux = tx * tx * (3 - 2 * tx);
-    const uy = ty * ty * (3 - 2 * ty);
-    const a = hash(ix,   iy);
-    const b = hash(ix+1, iy);
-    const c = hash(ix,   iy+1);
-    const d = hash(ix+1, iy+1);
-    return a + (b-a)*ux + (c-a)*uy + (d-a+a-b-c+b+c-d)*ux*uy;
-    // simplified: lerp(lerp(a,b,ux), lerp(c,d,ux), uy)
-  }
-
-  function fbm(x, y) {
-    // 3 octaves of value noise
-    return smoothNoise(x, y, 0.08) * 0.5
-         + smoothNoise(x, y, 0.18) * 0.3
-         + smoothNoise(x, y, 0.40) * 0.2;
-  }
-
   // ── Solid brush ────────────────────────────────────────────────────────────
   function paintSolidAt(px, py) {
     const pc = paintCanvas.getContext('2d');
@@ -165,63 +134,67 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.fill();
   }
 
-  // ── Texture brush — stamp a single dune shape on click ───────────────────
-  // Dune = elongated ellipse perpendicular to stroke direction,
-  // with noisy edges. Fixed orientation — no rotation per position.
+  // ── Texture brush — parallel dune ridges perpendicular to stroke ──────────
   function paintTextureAt(cx, cy, strokeAngle) {
     const pc = paintCanvas.getContext('2d');
-    const r  = brushSize;
 
-    const ra = r;        // semi-major (across stroke = wide)
-    const rb = r / 3;    // semi-minor (along stroke = thin)
+    // Dune ridge = thin ellipse perpendicular to stroke
+    // We stamp 3 parallel ridges offset along the stroke direction
+    const ridgeAngle = strokeAngle + Math.PI / 2; // perpendicular
+    const cosR = Math.cos(ridgeAngle), sinR = Math.sin(ridgeAngle);
+    const cosS = Math.cos(strokeAngle), sinS = Math.sin(strokeAngle);
 
-    // Dune is perpendicular to stroke direction
-    const angle = strokeAngle + Math.PI / 2;
-    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+    const ra = brushSize;        // half-length of ridge (wide)
+    const rb = Math.max(2, brushSize * 0.12); // half-width (thin)
+    const spacing = brushSize * 0.55; // gap between ridges
 
-    const bw = Math.ceil(Math.sqrt(ra*ra*cosA*cosA + rb*rb*sinA*sinA));
-    const bh = Math.ceil(Math.sqrt(ra*ra*sinA*sinA + rb*rb*cosA*cosA));
-
-    const x0 = Math.max(0, Math.floor(cx - bw - 2));
-    const y0 = Math.max(0, Math.floor(cy - bh - 2));
-    const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(cx + bw + 2));
-    const y1 = Math.min(paintCanvas.height - 1, Math.ceil(cy + bh + 2));
-    const w  = x1 - x0 + 1, h = y1 - y0 + 1;
-    if (w <= 0 || h <= 0) return;
-
-    const imgData = pc.getImageData(x0, y0, w, h);
-    const d = imgData.data;
     const [cr, cg, cb] = TERRAIN_COLORS[currentTerrain];
 
-    for (let py = y0; py <= y1; py++) {
-      for (let px = x0; px <= x1; px++) {
-        const dx = px - cx, dy = py - cy;
-        const lx =  dx * cosA + dy * sinA;
-        const ly = -dx * sinA + dy * cosA;
+    // 3 ridges: center, +offset, -offset along stroke direction
+    const offsets = [0, spacing, -spacing];
 
-        const ed = Math.sqrt((lx/ra)*(lx/ra) + (ly/rb)*(ly/rb));
-        if (ed > 1.0) continue;
+    for (const off of offsets) {
+      // Center of this ridge
+      const rx = cx + cosS * off;
+      const ry = cy + sinS * off;
 
-        const n = fbm(px * 1.2, py * 1.2);
-        const effDist = ed + n * 0.3;
-        if (effDist > 1.05) continue;
+      const bw = Math.ceil(Math.sqrt(ra*ra*cosR*cosR + rb*rb*sinR*sinR)) + 2;
+      const bh = Math.ceil(Math.sqrt(ra*ra*sinR*sinR + rb*rb*cosR*cosR)) + 2;
 
-        const falloff = Math.max(0, 1 - effDist);
-        const ridgeFalloff = Math.pow(falloff, 0.6);
-        if (n < 0.15 + (1 - ridgeFalloff) * 0.3) continue;
+      const x0 = Math.max(0, Math.floor(rx - bw));
+      const y0 = Math.max(0, Math.floor(ry - bh));
+      const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(rx + bw));
+      const y1 = Math.min(paintCanvas.height - 1, Math.ceil(ry + bh));
+      const w  = x1 - x0 + 1, h = y1 - y0 + 1;
+      if (w <= 0 || h <= 0) continue;
 
-        const alpha = Math.min(1, ridgeFalloff * 1.4);
-        const idx = ((py - y0) * w + (px - x0)) * 4;
-        const ea = d[idx+3] / 255;
-        const oa = alpha + ea * (1 - alpha);
-        if (oa < 0.001) continue;
-        d[idx]   = Math.round((cr * alpha + d[idx]   * ea * (1 - alpha)) / oa);
-        d[idx+1] = Math.round((cg * alpha + d[idx+1] * ea * (1 - alpha)) / oa);
-        d[idx+2] = Math.round((cb * alpha + d[idx+2] * ea * (1 - alpha)) / oa);
-        d[idx+3] = Math.round(oa * 255);
+      const imgData = pc.getImageData(x0, y0, w, h);
+      const d = imgData.data;
+
+      for (let py = y0; py <= y1; py++) {
+        for (let px = x0; px <= x1; px++) {
+          const dx = px - rx, dy = py - ry;
+          // Local coords in ridge space
+          const lx =  dx * cosR + dy * sinR;
+          const ly = -dx * sinR + dy * cosR;
+          const ed = Math.sqrt((lx/ra)*(lx/ra) + (ly/rb)*(ly/rb));
+          if (ed > 1.0) continue;
+
+          const falloff = 1 - ed;
+          const alpha = Math.min(1, falloff * 2.2);
+
+          const idx = ((py - y0) * w + (px - x0)) * 4;
+          const ea = d[idx+3] / 255;
+          const oa = alpha + ea * (1 - alpha);
+          if (oa < 0.001) continue;
+          d[idx]   = Math.round((cr * alpha + d[idx]   * ea * (1 - alpha)) / oa);
+          d[idx+1] = Math.round((cg * alpha + d[idx+1] * ea * (1 - alpha)) / oa);
+          d[idx+2] = Math.round((cb * alpha + d[idx+2] * ea * (1 - alpha)) / oa);
+          d[idx+3] = Math.round(oa * 255);
+        }
       }
+      pc.putImageData(imgData, x0, y0);
     }
-    pc.putImageData(imgData, x0, y0);
   }
 
   function paintAt(px, py, angle = 0) {
