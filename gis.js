@@ -212,6 +212,13 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
         });
         if (overpassResp.ok) {
           const elements = (await overpassResp.json()).elements || [];
+          const relCount = elements.filter(e => e.type === 'relation').length;
+          const wayWaterCount = elements.filter(e => e.type === 'way' && (e.tags?.natural === 'water' || e.tags?.water)).length;
+          console.log(`[GIS] Overpass: ${elements.length} elements, ${relCount} relations, ${wayWaterCount} water ways`);
+          elements.filter(e => e.type === 'relation').forEach(r => {
+            const membersWithGeom = (r.members || []).filter(m => m.geometry?.length > 0).length;
+            console.log(`[GIS] relation ${r.id} "${r.tags?.name || ''}" members: ${(r.members||[]).length}, with geom: ${membersWithGeom}`);
+          });
           if (elements.length > 0) {
             tmpCtx.putImageData(imgData, 0, 0);
             function latToMercY(lat) {
@@ -245,13 +252,13 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
                   tmpCtx.fill();
                 }
               } else if (el.type === 'relation' && el.members) {
-                // draw each outer member
+                // draw each outer (or untagged role) member ring
                 for (const member of el.members) {
-                  if (member.role === 'outer' && member.geometry) {
-                    if (drawGeomPath(member.geometry)) {
-                      tmpCtx.closePath();
-                      tmpCtx.fill();
-                    }
+                  if ((member.role || '') === 'inner') continue;
+                  if (!member.geometry || member.geometry.length < 3) continue;
+                  if (drawGeomPath(member.geometry)) {
+                    tmpCtx.closePath();
+                    tmpCtx.fill();
                   }
                 }
               }
@@ -268,7 +275,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
               if (drawGeomPath(el.geometry)) tmpCtx.stroke();
             }
 
-            gisStatus.textContent = `Loading: Drew ${elements.length} water features, finalizing…`;
+            gisStatus.textContent = `Loading: Drew ${elements.length} water features (${relCount} relations), finalizing…`;
           }
         }
       } catch (riverErr) {
