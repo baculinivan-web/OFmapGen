@@ -70,6 +70,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
 
   function fitToArea() {
     const ar = drawArea.getBoundingClientRect();
+    if (!ar.width || !ar.height) return;
     const scaleX = (ar.width  - 32) / drawCanvas.width;
     const scaleY = (ar.height - 32) / drawCanvas.height;
     scale   = Math.min(scaleX, scaleY, 4);
@@ -81,7 +82,6 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   function applyTransform() {
     drawCanvas.style.transform       = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
     drawCanvas.style.transformOrigin = '0 0';
-    drawCanvas.style.position        = 'absolute';
     drawCanvas.style.left            = '0';
     drawCanvas.style.top             = '0';
   }

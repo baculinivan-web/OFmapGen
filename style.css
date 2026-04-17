@@ -297,6 +297,11 @@ footer a:hover { color: var(--text); }
 
 
 /* Draw manually modal */
+#drawModal #drawCanvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
 .draw-terrain-btn {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 10px; border-radius: 6px;
