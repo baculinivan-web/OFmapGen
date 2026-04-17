@@ -29,7 +29,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let brushMode = 'solid'; // 'solid' | 'texture'
   let brushSize = 16;
   let painting = false;
-  let lastX = null, lastY = null, lastAngle = 0;
+  let lastX = null, lastY = null;
   let cancelSnapshot = null;
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
@@ -134,83 +134,65 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.fill();
   }
 
-  // ── Texture brush — parallel dune ridges perpendicular to stroke ──────────
-  function paintTextureAt(cx, cy, strokeAngle) {
+  // ── Texture brush — striped dune pattern (alternating terrain bands) ───────
+  // Stripes run perpendicular to stroke direction, spacing = brushSize/4
+  function paintTextureAt(cx, cy) {
     const pc = paintCanvas.getContext('2d');
+    const r  = brushSize;
+    const x0 = Math.max(0, Math.floor(cx - r));
+    const y0 = Math.max(0, Math.floor(cy - r));
+    const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(cx + r));
+    const y1 = Math.min(paintCanvas.height - 1, Math.ceil(cy + r));
+    const w  = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w <= 0 || h <= 0) return;
 
-    // Dune ridge = thin ellipse perpendicular to stroke
-    // We stamp 3 parallel ridges offset along the stroke direction
-    const ridgeAngle = strokeAngle + Math.PI / 2; // perpendicular
-    const cosR = Math.cos(ridgeAngle), sinR = Math.sin(ridgeAngle);
-    const cosS = Math.cos(strokeAngle), sinS = Math.sin(strokeAngle);
+    const imgData = pc.getImageData(x0, y0, w, h);
+    const d = imgData.data;
 
-    const ra = brushSize;        // half-length of ridge (wide)
-    const rb = Math.max(2, brushSize * 0.12); // half-width (thin)
-    const spacing = brushSize * 0.55; // gap between ridges
+    const base = TERRAIN_COLORS[currentTerrain];
+    const alt  = { water: TERRAIN_COLORS.plain, plain: TERRAIN_COLORS.highland, highland: TERRAIN_COLORS.mountain, mountain: TERRAIN_COLORS.highland }[currentTerrain];
 
-    const [cr, cg, cb] = TERRAIN_COLORS[currentTerrain];
+    // Stripe width in pixels — scales with brush
+    const stripeW = Math.max(2, Math.round(brushSize * 0.18));
 
-    // 3 ridges: center, +offset, -offset along stroke direction
-    const offsets = [0, spacing, -spacing];
+    for (let py = y0; py <= y1; py++) {
+      for (let px = x0; px <= x1; px++) {
+        const dx = px - cx, dy = py - cy;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist > r) continue;
 
-    for (const off of offsets) {
-      // Center of this ridge
-      const rx = cx + cosS * off;
-      const ry = cy + sinS * off;
+        const t = dist / r;
+        const alpha = (1 - t * t) * 0.85;
 
-      const bw = Math.ceil(Math.sqrt(ra*ra*cosR*cosR + rb*rb*sinR*sinR)) + 2;
-      const bh = Math.ceil(Math.sqrt(ra*ra*sinR*sinR + rb*rb*cosR*cosR)) + 2;
+        // Stripe along stroke-perpendicular axis using y (horizontal stripes)
+        const stripe = Math.floor(py / stripeW) % 2;
+        const col = stripe === 0 ? base : alt;
 
-      const x0 = Math.max(0, Math.floor(rx - bw));
-      const y0 = Math.max(0, Math.floor(ry - bh));
-      const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(rx + bw));
-      const y1 = Math.min(paintCanvas.height - 1, Math.ceil(ry + bh));
-      const w  = x1 - x0 + 1, h = y1 - y0 + 1;
-      if (w <= 0 || h <= 0) continue;
-
-      const imgData = pc.getImageData(x0, y0, w, h);
-      const d = imgData.data;
-
-      for (let py = y0; py <= y1; py++) {
-        for (let px = x0; px <= x1; px++) {
-          const dx = px - rx, dy = py - ry;
-          // Local coords in ridge space
-          const lx =  dx * cosR + dy * sinR;
-          const ly = -dx * sinR + dy * cosR;
-          const ed = Math.sqrt((lx/ra)*(lx/ra) + (ly/rb)*(ly/rb));
-          if (ed > 1.0) continue;
-
-          const falloff = 1 - ed;
-          const alpha = Math.min(1, falloff * 2.2);
-
-          const idx = ((py - y0) * w + (px - x0)) * 4;
-          const ea = d[idx+3] / 255;
-          const oa = alpha + ea * (1 - alpha);
-          if (oa < 0.001) continue;
-          d[idx]   = Math.round((cr * alpha + d[idx]   * ea * (1 - alpha)) / oa);
-          d[idx+1] = Math.round((cg * alpha + d[idx+1] * ea * (1 - alpha)) / oa);
-          d[idx+2] = Math.round((cb * alpha + d[idx+2] * ea * (1 - alpha)) / oa);
-          d[idx+3] = Math.round(oa * 255);
-        }
+        const idx = ((py - y0) * w + (px - x0)) * 4;
+        const ea = d[idx+3] / 255;
+        const oa = alpha + ea * (1 - alpha);
+        if (oa < 0.001) continue;
+        d[idx]   = Math.round((col[0] * alpha + d[idx]   * ea * (1 - alpha)) / oa);
+        d[idx+1] = Math.round((col[1] * alpha + d[idx+1] * ea * (1 - alpha)) / oa);
+        d[idx+2] = Math.round((col[2] * alpha + d[idx+2] * ea * (1 - alpha)) / oa);
+        d[idx+3] = Math.round(oa * 255);
       }
-      pc.putImageData(imgData, x0, y0);
     }
+    pc.putImageData(imgData, x0, y0);
   }
 
-  function paintAt(px, py, angle = 0) {
-    if (brushMode === 'texture') paintTextureAt(px, py, angle);
+  function paintAt(px, py) {
+    if (brushMode === 'texture') paintTextureAt(px, py);
     else paintSolidAt(px, py);
   }
 
   function paintLine(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const angle = Math.atan2(dy, dx);
-    // Stamp every brushSize*1.2 px along path — speed-independent
-    const spacing = brushSize * (brushMode === 'texture' ? 1.2 : 0.4);
+    const spacing = brushSize * (brushMode === 'texture' ? 0.2 : 0.4);
     const steps = Math.max(1, Math.ceil(dist / spacing));
     for (let i = 1; i <= steps; i++) {
-      paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps), angle);
+      paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps));
     }
   }
 
