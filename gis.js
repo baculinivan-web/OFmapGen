@@ -254,6 +254,8 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
             return true;
           }
 
+          let drawnWater = 0, drawnRivers = 0;
+
           // Fill water body polygons
           tmpCtx.fillStyle = 'rgb(20,20,30)';
           for (const el of elements) {
@@ -262,12 +264,12 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
             if (!isWaterBody) continue;
 
             if (el.type === 'way' && el.geometry) {
-              if (drawGeomPath(el.geometry)) { tmpCtx.closePath(); tmpCtx.fill(); }
+              if (drawGeomPath(el.geometry)) { tmpCtx.closePath(); tmpCtx.fill(); drawnWater++; }
             } else if (el.type === 'relation' && el.members) {
               for (const member of el.members) {
                 if ((member.role || '') === 'inner') continue;
                 if (!member.geometry || member.geometry.length < 3) continue;
-                if (drawGeomPath(member.geometry)) { tmpCtx.closePath(); tmpCtx.fill(); }
+                if (drawGeomPath(member.geometry)) { tmpCtx.closePath(); tmpCtx.fill(); drawnWater++; }
               }
             }
           }
@@ -280,11 +282,12 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
             const wtype = el.tags?.waterway;
             if (!wtype) continue;
             tmpCtx.lineWidth = wtype === 'river' ? 3 : wtype === 'canal' ? 2 : 1;
-            if (drawGeomPath(el.geometry)) tmpCtx.stroke();
+            if (drawGeomPath(el.geometry)) { tmpCtx.stroke(); drawnRivers++; }
           }
 
           const relCount = elements.filter(e => e.type === 'relation').length;
-          gisStatus.textContent = `Loading: Drew ${elements.length} water features (${relCount} relations), finalizing…`;
+          console.log(`[GIS] drawn: ${drawnWater} water polygons, ${drawnRivers} rivers, ${relCount} relations`);
+          gisStatus.textContent = `Loading: Drew ${drawnWater} water bodies, ${drawnRivers} rivers, finalizing…`;
         }
       } catch (riverErr) {
         console.warn('[GIS] water features error:', riverErr);
