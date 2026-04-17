@@ -203,41 +203,57 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       }
       tmpCtx.putImageData(imgData, 0, 0);
 
-      // Rivers + water bodies from Overpass (two queries: ways first, then relations)
-      gisStatus.textContent = `Loading: Loading water features from OpenStreetMap…`;
-      try {
-        const bbox = `${south},${west},${north},${east}`;
-        const OVERPASS_SERVERS = [
-          'https://overpass-api.de/api/interpreter',
-          'https://overpass.kumi.systems/api/interpreter',
-          'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-        ];
+      // Rivers + water bodies from Overpass
+      const waterFailModal  = document.getElementById('waterFailModal');
+      const waterFailRetry  = document.getElementById('waterFailRetry');
+      const waterFailDismiss= document.getElementById('waterFailDismiss');
 
-        async function overpassFetch(query) {
-          for (const server of OVERPASS_SERVERS) {
-            try {
-              const resp = await fetch(server, { method: 'POST', body: query, signal: AbortSignal.timeout(20000) });
-              if (resp.ok) return resp;
-              console.warn(`[GIS] ${server} returned ${resp.status}, trying next…`);
-            } catch (e) {
-              console.warn(`[GIS] ${server} failed: ${e.message}, trying next…`);
-            }
+      const OVERPASS_SERVERS = [
+        'https://overpass-api.de/api/interpreter',
+        'https://overpass.kumi.systems/api/interpreter',
+        'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+      ];
+
+      async function overpassFetch(query) {
+        for (const server of OVERPASS_SERVERS) {
+          try {
+            const resp = await fetch(server, { method: 'POST', body: query, signal: AbortSignal.timeout(20000) });
+            if (resp.ok) return resp;
+            console.warn(`[GIS] ${server} returned ${resp.status}, trying next…`);
+          } catch (e) {
+            console.warn(`[GIS] ${server} failed: ${e.message}, trying next…`);
           }
-          return null;
         }
+        return null;
+      }
 
-        // Query 1: ways (waterways + water polygons)
+      async function loadWaterFeatures() {
+        gisStatus.textContent = `Loading: Loading water features from OpenStreetMap…`;
+        const bbox = `${south},${west},${north},${east}`;
+
         const waysQuery = `[out:json][timeout:20];(way["waterway"~"^(river|stream|canal|drain)$"](${bbox});way["natural"~"^(water|wetland|bay)$"](${bbox});way["water"](${bbox}););out geom;`;
         const waysResp = await overpassFetch(waysQuery);
 
-        let elements = [];
-        if (waysResp) {
-          const data = await waysResp.json().catch(() => ({ elements: [] }));
-          elements = data.elements || [];
+        // All servers failed
+        if (!waysResp) {
+          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+          gisLoadBtn.disabled = false;
+          gisLoadBtn.textContent = 'Load elevation';
+          closeGisModal();
+          waterFailModal.classList.add('open');
+          waterFailRetry.onclick = async () => {
+            waterFailModal.classList.remove('open');
+            await loadWaterFeatures();
+          };
+          waterFailDismiss.onclick = () => waterFailModal.classList.remove('open');
+          return;
         }
+
+        let elements = [];
+        const data = await waysResp.json().catch(() => ({ elements: [] }));
+        elements = data.elements || [];
         console.log(`[GIS] ways: ${elements.length}`);
 
-        // Query 2: relations
         const relQuery = `[out:json][timeout:20];relation["natural"~"^(water|wetland)$"](${bbox});out geom;`;
         try {
           const relResp = await overpassFetch(relQuery);
@@ -271,14 +287,11 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           }
 
           let drawnWater = 0, drawnRivers = 0;
-
-          // Fill water body polygons
           tmpCtx.fillStyle = 'rgb(20,20,30)';
           for (const el of elements) {
             const isWaterBody = el.tags?.natural === 'water' || el.tags?.natural === 'wetland' ||
                                 el.tags?.natural === 'bay' || el.tags?.water;
             if (!isWaterBody) continue;
-
             if (el.type === 'way' && el.geometry) {
               if (drawGeomPath(el.geometry)) { tmpCtx.closePath(); tmpCtx.fill(); drawnWater++; }
             } else if (el.type === 'relation' && el.members) {
@@ -289,8 +302,6 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
               }
             }
           }
-
-          // Stroke waterways
           tmpCtx.strokeStyle = 'rgb(20,20,30)';
           tmpCtx.lineCap = 'round'; tmpCtx.lineJoin = 'round';
           for (const el of elements) {
@@ -300,26 +311,28 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
             tmpCtx.lineWidth = wtype === 'river' ? 3 : wtype === 'canal' ? 2 : 1;
             if (drawGeomPath(el.geometry)) { tmpCtx.stroke(); drawnRivers++; }
           }
-
           const relCount = elements.filter(e => e.type === 'relation').length;
           console.log(`[GIS] drawn: ${drawnWater} water polygons, ${drawnRivers} rivers, ${relCount} relations`);
           gisStatus.textContent = `Loading: Drew ${drawnWater} water bodies, ${drawnRivers} rivers, finalizing…`;
         }
-      } catch (riverErr) {
-        console.warn('[GIS] water features error:', riverErr);
-        gisStatus.textContent = `Warning: Water features failed (${riverErr.message}) — elevation loaded without water overlay.`;
-        gisLoadBtn.disabled = false;
-        gisLoadBtn.textContent = 'Retry with water';
+
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
-        fileNameEl.textContent = `elevation z${zoom} ${cropW}×${cropH} (no rivers)`;
-        return;
+        gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
+        gisLoadBtn.disabled = false;
+        gisLoadBtn.textContent = 'Load elevation';
+        closeGisModal();
       }
 
-      _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
-      gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
-      gisLoadBtn.disabled = false;
-      gisLoadBtn.textContent = 'Load elevation';
-      closeGisModal();
+      try {
+        await loadWaterFeatures();
+      } catch (riverErr) {
+        console.warn('[GIS] water features error:', riverErr);
+        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+        gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
+        gisLoadBtn.disabled = false;
+        gisLoadBtn.textContent = 'Load elevation';
+        closeGisModal();
+      }
 
     } catch (err) {
       gisStatus.textContent = 'Error: ' + err.message;
