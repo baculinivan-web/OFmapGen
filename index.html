@@ -135,40 +135,6 @@
         </div>
       </div>
 
-      <div class="panel-section" id="paintSection">
-        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
-          <span>Paint terrain</span>
-          <label class="toggle" title="Enable paint mode">
-            <input type="checkbox" id="paintToggle" />
-            <span class="toggle-track"></span>
-          </label>
-        </div>
-        <div id="paintControls" style="display:none; margin-top:4px;">
-          <div class="paint-terrain-grid">
-            <button class="paint-btn active" id="paintWater" data-terrain="water">
-              <span class="legend-swatch" style="background:var(--water)"></span>Water
-            </button>
-            <button class="paint-btn" id="paintPlain" data-terrain="plain">
-              <span class="legend-swatch" style="background:var(--plain)"></span>Plain
-            </button>
-            <button class="paint-btn" id="paintHighland" data-terrain="highland">
-              <span class="legend-swatch" style="background:var(--highland)"></span>Highland
-            </button>
-            <button class="paint-btn" id="paintMountain" data-terrain="mountain">
-              <span class="legend-swatch" style="background:var(--mountain)"></span>Mountain
-            </button>
-          </div>
-          <div class="slider-row" style="margin-top:12px;">
-            <div class="slider-label">Brush size</div>
-            <span class="slider-val" id="valBrush">12</span>
-            <input type="range" id="sliderBrush" min="1" max="80" step="1" value="12" />
-          </div>
-          <button class="btn btn-ghost" id="clearPaintBtn" style="margin-top:10px; font-size:0.78rem; padding:7px 10px;">
-            Clear all paint
-          </button>
-        </div>
-      </div>
-
       <div class="panel-section">
         <div class="section-title">Legend</div>
         <div class="legend">
@@ -186,6 +152,10 @@
       <div class="preview-header">
         <span class="preview-title">Preview</span>
         <span class="img-info" id="imgInfo"></span>
+        <button class="btn btn-ghost" id="paintTerrainBtn" style="opacity:0.35;pointer-events:none;font-size:0.78rem;padding:5px 10px;width:auto;">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          Paint terrain
+        </button>
       </div>
       <div class="preview-body">
         <div class="preview-placeholder" id="placeholder">
@@ -350,6 +320,45 @@
   <div style="display:flex; gap:6px; margin-top:10px;">
     <button id="nameConfirmBtn" class="btn btn-primary" style="flex:1; padding:7px; font-size:0.82rem;">Confirm</button>
     <button id="nameCancelBtn" class="btn btn-ghost" style="flex:1; padding:7px; font-size:0.82rem;">Cancel</button>
+  </div>
+</div>
+
+<!-- Paint modal -->
+<div class="modal-overlay" id="paintModal">
+  <div class="modal" style="width:100vw;height:100vh;max-height:100vh;border-radius:0;border:none;display:flex;flex-direction:column;">
+    <div class="modal-header">
+      <span class="modal-title">Paint terrain — draw directly on the map</span>
+      <button class="modal-close" id="paintModalClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+      <!-- Canvas area -->
+      <div style="flex:1;position:relative;background:#080b10;overflow:hidden;touch-action:none;" id="paintMapArea">
+        <canvas id="paintCanvas" style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);image-rendering:pixelated;cursor:crosshair;"></canvas>
+      </div>
+      <!-- Sidebar -->
+      <div style="width:200px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;padding:16px 14px;gap:12px;overflow-y:auto;">
+        <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Terrain</div>
+        <div style="display:flex;flex-direction:column;gap:6px;" id="paintTerrainBtns">
+          <button class="paint-btn active" data-terrain="water"><span class="legend-swatch" style="background:var(--water)"></span>Water</button>
+          <button class="paint-btn" data-terrain="plain"><span class="legend-swatch" style="background:var(--plain)"></span>Plain</button>
+          <button class="paint-btn" data-terrain="highland"><span class="legend-swatch" style="background:var(--highland)"></span>Highland</button>
+          <button class="paint-btn" data-terrain="mountain"><span class="legend-swatch" style="background:var(--mountain)"></span>Mountain</button>
+        </div>
+        <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush size</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <input type="range" id="paintBrushSlider" min="1" max="120" step="1" value="16" style="flex:1;" />
+          <span id="paintBrushVal" style="font-size:0.78rem;color:var(--muted);min-width:24px;text-align:right;">16</span>
+        </div>
+        <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear all</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <span style="font-size:0.75rem;color:var(--muted);flex:2;line-height:1.4;">Click or drag to paint · Choose terrain and brush size</span>
+      <button class="btn btn-primary" id="paintDoneBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;flex:1;">Apply & close</button>
+      <button class="btn btn-ghost" id="paintCancelBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;">Cancel</button>
+    </div>
   </div>
 </div>
 
