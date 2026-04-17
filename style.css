@@ -139,7 +139,9 @@ input[type="range"]::-moz-range-thumb {
 .preview-placeholder svg { opacity: 0.4; }
 .preview-placeholder p { font-size: 0.82rem; }
 
-#preview { max-width: 100%; max-height: 520px; display: none; image-rendering: pixelated; }
+#preview { max-width: 100%; max-height: 520px; display: block; image-rendering: pixelated; }
+
+#previewWrap { max-width: 100%; max-height: 520px; }
 
 .preview-footer { padding: 14px 18px; border-top: 1px solid var(--border); }
 

@@ -11,6 +11,8 @@ const fileNameEl  = document.getElementById('fileName');
 const srcCanvas   = document.getElementById('srcCanvas');
 const outCanvas   = document.getElementById('outCanvas');
 const preview     = document.getElementById('preview');
+const previewWrap = document.getElementById('previewWrap');
+const paintOverlay = document.getElementById('paintOverlay');
 const placeholder = document.getElementById('placeholder');
 const downloadBtn    = document.getElementById('downloadBtn');
 const downloadSrcBtn = document.getElementById('downloadSrcBtn');
@@ -238,10 +240,11 @@ worker.onmessage = ({ data }) => {
   outCanvas.width = width; outCanvas.height = height;
   outCanvas.getContext('2d').putImageData(new ImageData(pixels, width, height), 0, 0);
   painter.onRenderComplete();
-  painter.reapply();
   preview.src = outCanvas.toDataURL('image/png');
   preview.style.display = 'block';
+  previewWrap.style.display = 'block';
   placeholder.style.display = 'none';
+  painter.reapply();
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
   enableNationBtn();
@@ -290,7 +293,7 @@ invertCheck.addEventListener('change', () => scheduleRender());
 // ── Download map PNG ──────────────────────────────────────────────────────────
 downloadBtn.addEventListener('click', () => {
   const a = document.createElement('a');
-  a.href = outCanvas.toDataURL('image/png');
+  a.href = painter.hasPaint() ? painter.getPaintedCanvas().toDataURL('image/png') : outCanvas.toDataURL('image/png');
   a.download = 'openfront_map.png';
   a.click();
 });
@@ -310,8 +313,9 @@ const ZONE_TO_MAG = [-1, 4, 14, 25];
 
 downloadSrcBtn.addEventListener('click', () => {
   if (!outCanvas.width) return;
-  const w = outCanvas.width, h = outCanvas.height;
-  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
+  const w = src.width, h = src.height;
+  const d = src.getContext('2d').getImageData(0, 0, w, h).data;
   const ofCanvas = document.createElement('canvas');
   ofCanvas.width = w; ofCanvas.height = h;
   const ofCtx = ofCanvas.getContext('2d');
@@ -377,7 +381,8 @@ let editingIdx = null;
 let selectedFlag = '';
 
 function openNationModal() {
-  nationMapImg.src = outCanvas.toDataURL('image/png');
+  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
+  nationMapImg.src = src.toDataURL('image/png');
   nationModal.classList.add('open');
   requestAnimationFrame(renderMarkers);
 }
@@ -405,10 +410,10 @@ nationMapArea.addEventListener('click', (e) => {
 
 function isWaterPixel(x, y) {
   if (!outCanvas.width) return false;
-  const ctx = outCanvas.getContext('2d');
-  const d = ctx.getImageData(Math.max(0, Math.min(outCanvas.width - 1, x)),
-                              Math.max(0, Math.min(outCanvas.height - 1, y)), 1, 1).data;
-  // Water color in outCanvas is ~(18,15,34)
+  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
+  const ctx = src.getContext('2d');
+  const d = ctx.getImageData(Math.max(0, Math.min(src.width - 1, x)),
+                              Math.max(0, Math.min(src.height - 1, y)), 1, 1).data;
   return (d[0] < 40 && d[1] < 30 && d[2] < 60);
 }
 
@@ -775,8 +780,9 @@ async function buildAndDownloadArchive(os) {
 }
 
 function buildSourceCanvas() {
-  const w = outCanvas.width, h = outCanvas.height;
-  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
+  const w = src.width, h = src.height;
+  const d = src.getContext('2d').getImageData(0, 0, w, h).data;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
@@ -798,8 +804,9 @@ function buildSourceCanvas() {
 }
 
 function countLandTiles() {
-  const w = outCanvas.width, h = outCanvas.height;
-  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
+  const w = src.width, h = src.height;
+  const d = src.getContext('2d').getImageData(0, 0, w, h).data;
   let count = 0;
   for (let i = 0; i < w * h; i++) {
     const si = i * 4;
@@ -815,6 +822,8 @@ function countLandTiles() {
 const painter = initPaint({
   outCanvas,
   preview,
+  previewWrap,
+  paintOverlay,
   onPaintChange: () => {
     downloadBtn.disabled = false;
     downloadSrcBtn.disabled = false;
