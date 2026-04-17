@@ -773,17 +773,29 @@
     if (file && file.type.startsWith('image/')) loadFile(file);
   });
 
+  const MIN_SIZE = 512;
+  const MAX_SIZE = 1024;
+
+  function clampedSize(w, h) {
+    const long = Math.max(w, h);
+    let scale = 1;
+    if (long > MAX_SIZE) scale = MAX_SIZE / long;
+    else if (long < MIN_SIZE) scale = MIN_SIZE / long;
+    return [Math.round(w * scale), Math.round(h * scale)];
+  }
+
   function loadFile(file) {
     if (!file) return;
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
-      srcCanvas.width  = img.width;
-      srcCanvas.height = img.height;
+      const [tw, th] = clampedSize(img.width, img.height);
+      srcCanvas.width  = tw;
+      srcCanvas.height = th;
       const ctx = srcCanvas.getContext('2d');
-      ctx.drawImage(img, 0, 0);
-      srcImageData = ctx.getImageData(0, 0, img.width, img.height);
-      imgInfo.textContent = `${img.width} × ${img.height}`;
+      ctx.drawImage(img, 0, 0, tw, th);
+      srcImageData = ctx.getImageData(0, 0, tw, th);
+      imgInfo.textContent = `${tw} × ${th}`;
       fileNameEl.textContent = file.name;
       fileNameEl.style.display = 'block';
       aiMask = null;
@@ -958,8 +970,10 @@ self.onmessage = function({ data }) {
     updateTrack(sliders.plain,    p);
     updateTrack(sliders.highland, h);
 
+    // Copy src pixels so we don't transfer away srcImageData.data
+    const srcCopy = new Uint8ClampedArray(srcImageData.data);
     const msg = {
-      src:     srcImageData.data,
+      src:     srcCopy,
       width:   srcImageData.width,
       height:  srcImageData.height,
       w, p, h,
@@ -967,10 +981,10 @@ self.onmessage = function({ data }) {
       algo:    currentAlgo,
       minSize: parseInt(sliderMinIsland.value),
       passes:  parseInt(sliderPasses.value),
-      aiMask:  aiMask ? aiMask.buffer : null,
+      aiMask:  aiMask ? new Uint8Array(aiMask) : null,
     };
-    const transfers = [msg.src.buffer.slice(0)];
-    if (msg.aiMask) transfers.push(msg.aiMask.slice(0));
+    const transfers = [msg.src.buffer];
+    if (msg.aiMask) transfers.push(msg.aiMask.buffer);
     worker.postMessage(msg, transfers);
   }
 
