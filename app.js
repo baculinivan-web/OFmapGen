@@ -655,8 +655,39 @@ new ResizeObserver(() => {
 }).observe(nationMapArea);
 
 // Download archive
-downloadArchiveBtn.addEventListener('click', async () => {
+downloadArchiveBtn.addEventListener('click', () => {
   if (!outCanvas.width) return;
+
+  // Show OS picker modal
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px 32px;max-width:380px;width:90%;text-align:center;">
+      <div style="font-size:1rem;font-weight:600;margin-bottom:8px;">What's your operating system?</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px;line-height:1.5;">
+        The archive will include a launcher file so you can start the map tester with a single double-click.
+      </div>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button id="osMac" class="btn btn-primary" style="flex:1;min-width:100px;">🍎 macOS</button>
+        <button id="osWin" class="btn btn-primary" style="flex:1;min-width:100px;">🪟 Windows</button>
+        <button id="osLinux" class="btn btn-secondary" style="flex:1;min-width:100px;">🐧 Linux</button>
+      </div>
+      <button id="osCancel" class="btn btn-ghost" style="margin-top:14px;font-size:0.8rem;">Cancel</button>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#osCancel').onclick = () => overlay.remove();
+
+  const pick = (os) => {
+    overlay.remove();
+    buildAndDownloadArchive(os);
+  };
+  overlay.querySelector('#osMac').onclick   = () => pick('mac');
+  overlay.querySelector('#osWin').onclick   = () => pick('win');
+  overlay.querySelector('#osLinux').onclick = () => pick('linux');
+});
+
+async function buildAndDownloadArchive(os) {
   const zip = new JSZip();
 
   const ofCanvas = buildSourceCanvas();
@@ -670,13 +701,27 @@ downloadArchiveBtn.addEventListener('click', async () => {
   };
   zip.file('info.json', JSON.stringify(manifest, null, 2));
 
-  const blob = await zip.generateAsync({ type: 'blob' });
+  // Fetch setup.py from same origin
+  const setupRes = await fetch('map-test-kit/setup.py');
+  const setupText = await setupRes.text();
+  zip.file('setup.py', setupText);
+
+  if (os === 'win') {
+    zip.file('Click me to install.bat', '@echo off\ncd /d "%~dp0"\npython --version >nul 2>&1\nif errorlevel 1 (\n  echo Python is not installed.\n  echo Download it from: https://www.python.org/downloads/\n  echo Make sure to check "Add Python to PATH" during installation.\n  pause\n  exit /b 1\n)\npython setup.py\npause\n');
+  } else {
+    // mac and linux — .command opens in Terminal on macOS, works on Linux too
+    const launcher = '#!/bin/bash\ncd "$(dirname "$0")"\nif ! command -v python3 &> /dev/null; then\n  echo "Python 3 is not installed."\n  echo "Download it from: https://www.python.org/downloads/"\n  read -p "Press Enter to exit..."\n  exit 1\nfi\npython3 setup.py\n';
+    const fname = os === 'mac' ? 'Click me to install.command' : 'Click me to install.sh';
+    zip.file(fname, launcher, { unixPermissions: '755' });
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob', platform: 'UNIX' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'openfront_map.zip';
   a.click();
   URL.revokeObjectURL(a.href);
-});
+}
 
 function buildSourceCanvas() {
   const w = outCanvas.width, h = outCanvas.height;
