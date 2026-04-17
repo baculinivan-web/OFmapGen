@@ -92,6 +92,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
 
   // ── Open modal ─────────────────────────────────────────────────────────────
   openBtn.addEventListener('click', () => {
+    modal.style.display = 'flex';
     modal.classList.add('open');
     // If there's already a rendered map, copy it; otherwise blank canvas
     if (outCanvas.width && outCanvas.height) {
@@ -114,6 +115,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
     isPanning = false;
     isDrawing = false;
     modal.classList.remove('open');
+    modal.style.display = 'none';
   }
   [closeBtn, closeBtn2].forEach(b => b.addEventListener('click', closeModal));
 
@@ -191,6 +193,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
     setGisMode(false);
 
     modal.classList.remove('open');
+    modal.style.display = 'none';
   });
 
   // ── Drawing interaction ────────────────────────────────────────────────────
@@ -211,7 +214,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   }
 
   drawCanvas.addEventListener('pointerdown', (e) => {
-    if (!modal.classList.contains('open')) return;
+    if (modal.style.display === 'none') return;
     if (e.button === 1 || e.button === 2) return;
     e.preventDefault();
     pushUndo();
@@ -233,7 +236,7 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
 
   // ── Zoom (wheel) ───────────────────────────────────────────────────────────
   drawArea.addEventListener('wheel', (e) => {
-    if (!modal.classList.contains('open')) return;
+    if (modal.style.display === 'none') return;
     e.preventDefault();
     const ar    = drawArea.getBoundingClientRect();
     const mx    = e.clientX - ar.left;
@@ -249,15 +252,15 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
   // ── Pan (middle-drag or space+drag) ───────────────────────────────────────
 
   window.addEventListener('keydown', (e) => {
-    if (!modal.classList.contains('open')) return;
+    if (modal.style.display === 'none') return;
     if (e.code === 'Space') { spaceDown = true; drawCanvas.style.cursor = 'grab'; e.preventDefault(); }
   });
   window.addEventListener('keyup', (e) => {
-    if (e.code === 'Space') { spaceDown = false; if (modal.classList.contains('open')) drawCanvas.style.cursor = 'crosshair'; }
+    if (e.code === 'Space') { spaceDown = false; if (modal.style.display !== 'none') drawCanvas.style.cursor = 'crosshair'; }
   });
 
   drawArea.addEventListener('pointerdown', (e) => {
-    if (!modal.classList.contains('open')) return;
+    if (modal.style.display === 'none') return;
     if (e.button === 1 || spaceDown) {
       e.preventDefault();
       isPanning  = true;
@@ -273,12 +276,12 @@ export function initDraw({ outCanvas, srcCanvas, imgInfo, scheduleRender, clampe
     offsetY = panOY + (e.clientY - panStartY);
     applyTransform();
   });
-  drawArea.addEventListener('pointerup',     () => { isPanning = false; if (modal.classList.contains('open')) drawCanvas.style.cursor = spaceDown ? 'grab' : 'crosshair'; });
+  drawArea.addEventListener('pointerup',     () => { isPanning = false; if (modal.style.display !== 'none') drawCanvas.style.cursor = spaceDown ? 'grab' : 'crosshair'; });
   drawArea.addEventListener('pointercancel', () => { isPanning = false; });
 
   // Keyboard shortcut: Ctrl+Z undo
   window.addEventListener('keydown', (e) => {
-    if (!modal.classList.contains('open')) return;
+    if (modal.style.display === 'none') return;
     if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
       e.preventDefault();
       if (undoStack.length) ctx.putImageData(undoStack.pop(), 0, 0);
