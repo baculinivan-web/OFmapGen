@@ -26,6 +26,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
 
   let currentTerrain = 'water';
+  let brushMode = 'solid'; // 'solid' | 'texture'
   let brushSize = 16;
   let painting = false;
   let lastX = null, lastY = null;
@@ -154,53 +155,48 @@ export function initPaint({ outCanvas, onPaintApplied }) {
          + smoothNoise(x, y, 0.40) * 0.2;
   }
 
-  // ── Ridge brush — paints noisy highland/mountain/plain mix ────────────────
-  // Writes directly to paintCanvas pixel-by-pixel within the brush circle
-  function paintRidgeAt(cx, cy) {
+  // ── Solid brush ────────────────────────────────────────────────────────────
+  function paintSolidAt(px, py) {
+    const pc = paintCanvas.getContext('2d');
+    const [r, g, b] = TERRAIN_COLORS[currentTerrain];
+    pc.fillStyle = `rgb(${r},${g},${b})`;
+    pc.beginPath();
+    pc.arc(px, py, brushSize, 0, Math.PI * 2);
+    pc.fill();
+  }
+
+  // ── Texture brush — chosen terrain with noisy ridge/dune edges ────────────
+  function paintTextureAt(cx, cy) {
     const pc = paintCanvas.getContext('2d');
     const r  = brushSize;
     const x0 = Math.max(0, Math.floor(cx - r));
     const y0 = Math.max(0, Math.floor(cy - r));
     const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(cx + r));
     const y1 = Math.min(paintCanvas.height - 1, Math.ceil(cy + r));
-    const w  = x1 - x0 + 1;
-    const h  = y1 - y0 + 1;
+    const w  = x1 - x0 + 1, h = y1 - y0 + 1;
     if (w <= 0 || h <= 0) return;
 
     const imgData = pc.getImageData(x0, y0, w, h);
     const d = imgData.data;
+    const base = TERRAIN_COLORS[currentTerrain];
+    const adjacent = {
+      water:    TERRAIN_COLORS.plain,
+      plain:    TERRAIN_COLORS.highland,
+      highland: TERRAIN_COLORS.mountain,
+      mountain: TERRAIN_COLORS.highland,
+    }[currentTerrain];
 
     for (let py = y0; py <= y1; py++) {
       for (let px = x0; px <= x1; px++) {
         const dx = px - cx, dy = py - cy;
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (dist > r) continue;
-
-        // Falloff: full coverage in center, fades at edge
-        const falloff = 1 - (dist / r);
-
-        // Only paint if noise + falloff passes threshold (creates patchy ridges)
+        const falloff = 1 - dist / r;
         const n = fbm(px, py);
-
-        // Ridge pattern: use noise to pick terrain zone
-        // n < 0.35 → plain (valleys between ridges)
-        // n < 0.60 → highland
-        // n < 0.80 → mountain peak
-        // n >= 0.80 → highland again (ridge shoulders)
-        let col;
-        if (n < 0.35) {
-          col = TERRAIN_COLORS.plain;
-        } else if (n < 0.60) {
-          col = TERRAIN_COLORS.highland;
-        } else if (n < 0.80) {
-          col = TERRAIN_COLORS.mountain;
-        } else {
-          col = TERRAIN_COLORS.highland;
-        }
-
-        // Blend with existing pixel based on falloff
+        // Center → always base color; edges → noise decides base vs adjacent
+        const col = n > (0.3 + falloff * 0.45) ? base : adjacent;
+        const alpha = Math.min(1, falloff * 1.6);
         const idx = ((py - y0) * w + (px - x0)) * 4;
-        const alpha = Math.min(1, falloff * 1.4); // slightly aggressive blend
         d[idx]   = Math.round(d[idx]   * (1 - alpha) + col[0] * alpha);
         d[idx+1] = Math.round(d[idx+1] * (1 - alpha) + col[1] * alpha);
         d[idx+2] = Math.round(d[idx+2] * (1 - alpha) + col[2] * alpha);
@@ -210,25 +206,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.putImageData(imgData, x0, y0);
   }
 
-  // ── Solid brush ────────────────────────────────────────────────────────────
   function paintAt(px, py) {
-    if (currentTerrain === 'ridge') {
-      paintRidgeAt(px, py);
-      return;
-    }
-    const pc = paintCanvas.getContext('2d');
-    const [r, g, b] = TERRAIN_COLORS[currentTerrain];
-    pc.fillStyle = `rgb(${r},${g},${b})`;
-    pc.beginPath();
-    pc.arc(px, py, brushSize, 0, Math.PI * 2);
-    pc.fill();
+    if (brushMode === 'texture') paintTextureAt(px, py);
+    else paintSolidAt(px, py);
   }
 
   function paintLine(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    // Ridge brush needs denser steps since it's pixel-level
-    const stepFactor = currentTerrain === 'ridge' ? 0.25 : 0.4;
+    const stepFactor = brushMode === 'texture' ? 0.25 : 0.4;
     const steps = Math.max(1, Math.ceil(dist / (brushSize * stepFactor)));
     for (let i = 0; i <= steps; i++) {
       paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps));
@@ -295,6 +281,20 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       btn.classList.add('active');
       currentTerrain = btn.dataset.terrain;
     });
+  });
+
+  // ── Brush mode buttons ─────────────────────────────────────────────────────
+  const brushModeSolid   = document.getElementById('brushModeSolid');
+  const brushModeTexture = document.getElementById('brushModeTexture');
+  brushModeSolid.addEventListener('click', () => {
+    brushMode = 'solid';
+    brushModeSolid.classList.add('active');
+    brushModeTexture.classList.remove('active');
+  });
+  brushModeTexture.addEventListener('click', () => {
+    brushMode = 'texture';
+    brushModeTexture.classList.add('active');
+    brushModeSolid.classList.remove('active');
   });
 
   brushSlider.addEventListener('input', () => {
