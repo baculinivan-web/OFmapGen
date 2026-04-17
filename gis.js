@@ -152,7 +152,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       const stitchW = tileW * TILE, stitchH = tileH * TILE;
       const stitchC = document.createElement('canvas');
       stitchC.width = stitchW; stitchC.height = stitchH;
-      const sCtx = stitchC.getContext('2d');
+      const sCtx = stitchC.getContext('2d', { willReadFrequently: true });
       for (const { tx, ty, img } of tileImgs) {
         sCtx.drawImage(img, (tx - tx0) * TILE, (ty - ty0) * TILE);
       }
@@ -185,7 +185,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       const [tw, th] = clampedSize(cropW, cropH);
       const tmpC = document.createElement('canvas');
       tmpC.width = cropW; tmpC.height = cropH;
-      const tmpCtx = tmpC.getContext('2d');
+      const tmpCtx = tmpC.getContext('2d', { willReadFrequently: true });
       const imgData = tmpCtx.createImageData(cropW, cropH);
       const d = imgData.data;
 
