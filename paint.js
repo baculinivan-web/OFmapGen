@@ -1,4 +1,6 @@
 // paint.js — Fullscreen terrain paint modal
+import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
+
 export function initPaint({ outCanvas, onPaintApplied }) {
 
   let paintCanvas = null;
@@ -9,6 +11,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     highland: [176, 159, 114],
     mountain: [190, 190, 190],
   };
+
+  // Built-in brush presets (loaded from ./brushes/)
+  const BRUSH_PRESETS = [
+    { id: 'solid',      label: 'Solid',       file: null },
+    { id: 'soft-round', label: 'Soft Round',  file: './brushes/soft-round.myb' },
+    { id: 'hard-round', label: 'Hard Round',  file: './brushes/hard-round.myb' },
+    { id: 'dunes',      label: 'Dunes',       file: './brushes/dunes.myb' },
+  ];
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const modal       = document.getElementById('paintModal');
@@ -24,12 +34,36 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const undoBtn     = document.getElementById('paintUndoBtn');
   const redoBtn     = document.getElementById('paintRedoBtn');
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
+  const brushBtns   = document.querySelectorAll('#paintBrushBtns .paint-brush-btn');
 
   let currentTerrain = 'water';
   let brushSize = 16;
   let painting = false;
   let lastX = null, lastY = null;
+  let lastAngle = 0;
   let cancelSnapshot = null;
+
+  // ── Brush state ────────────────────────────────────────────────────────────
+  let currentBrushId = 'solid';
+  // Cache of loaded MYB params keyed by preset id
+  const brushCache = {};
+  // Active MybBrushState for current stroke
+  let mybState = null;
+
+  // Pre-load all MYB presets
+  async function loadBrushPresets() {
+    for (const preset of BRUSH_PRESETS) {
+      if (!preset.file) continue;
+      try {
+        const res = await fetch(preset.file);
+        const myb = await res.json();
+        brushCache[preset.id] = parseMybBrush(myb);
+      } catch (e) {
+        console.warn(`[paint] Failed to load brush ${preset.id}:`, e);
+      }
+    }
+  }
+  loadBrushPresets();
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
   const MAX_HISTORY = 30;
@@ -123,26 +157,39 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     ];
   }
 
-  // ── Solid brush ────────────────────────────────────────────────────────────
-  function paintSolidAt(px, py) {
-    const pc = paintCanvas.getContext('2d');
-    const [r, g, b] = TERRAIN_COLORS[currentTerrain];
-    pc.fillStyle = `rgb(${r},${g},${b})`;
-    pc.beginPath();
-    pc.arc(px, py, brushSize, 0, Math.PI * 2);
-    pc.fill();
+  // ── Paint dispatch ─────────────────────────────────────────────────────────
+  function getPaintCtx() { return paintCanvas.getContext('2d'); }
+
+  function paintDot(px, py) {
+    const rgb = TERRAIN_COLORS[currentTerrain];
+    if (currentBrushId === 'solid') {
+      const pc = getPaintCtx();
+      pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+      pc.beginPath();
+      pc.arc(px, py, brushSize, 0, Math.PI * 2);
+      pc.fill();
+    } else if (mybState) {
+      mybPaintDot(getPaintCtx(), mybState, px, py, brushSize, rgb);
+    }
   }
 
-  function paintAt(px, py) {
-    paintSolidAt(px, py);
-  }
-
-  function paintLine(x0, y0, x1, y1) {
-    const dx = x1 - x0, dy = y1 - y0;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const steps = Math.max(1, Math.ceil(dist / (brushSize * 0.4)));
-    for (let i = 1; i <= steps; i++) {
-      paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps));
+  function paintSegment(x0, y0, x1, y1) {
+    const rgb = TERRAIN_COLORS[currentTerrain];
+    if (currentBrushId === 'solid') {
+      const pc = getPaintCtx();
+      pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+      const dx = x1 - x0, dy = y1 - y0;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const steps = Math.max(1, Math.ceil(dist / (brushSize * 0.4)));
+      for (let i = 1; i <= steps; i++) {
+        const x = x0 + dx * (i / steps);
+        const y = y0 + dy * (i / steps);
+        pc.beginPath();
+        pc.arc(x, y, brushSize, 0, Math.PI * 2);
+        pc.fill();
+      }
+    } else if (mybState) {
+      mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, rgb);
     }
   }
 
@@ -153,7 +200,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
-    paintAt(x, y, lastAngle);
+    // Init MYB state for this stroke
+    if (currentBrushId !== 'solid' && brushCache[currentBrushId]) {
+      mybState = new MybBrushState(brushCache[currentBrushId]);
+    } else {
+      mybState = null;
+    }
+    paintDot(x, y);
     redraw();
   });
 
@@ -163,13 +216,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const [x, y] = toCanvasCoords(e);
     const dx = x - lastX, dy = y - lastY;
     if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) lastAngle = Math.atan2(dy, dx);
-    paintLine(lastX, lastY, x, y);
+    paintSegment(lastX, lastY, x, y);
     lastX = x; lastY = y;
     redraw();
   });
 
-  canvas.addEventListener('mouseup',    () => { painting = false; });
-  canvas.addEventListener('mouseleave', () => { painting = false; });
+  canvas.addEventListener('mouseup',    () => { painting = false; mybState = null; });
+  canvas.addEventListener('mouseleave', () => { painting = false; mybState = null; });
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
@@ -177,7 +230,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
-    paintAt(x, y, lastAngle);
+    if (currentBrushId !== 'solid' && brushCache[currentBrushId]) {
+      mybState = new MybBrushState(brushCache[currentBrushId]);
+    } else {
+      mybState = null;
+    }
+    paintDot(x, y);
     redraw();
   }, { passive: false });
 
@@ -187,12 +245,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const [x, y] = toCanvasCoords(e);
     const dx = x - lastX, dy = y - lastY;
     if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) lastAngle = Math.atan2(dy, dx);
-    paintLine(lastX, lastY, x, y);
+    paintSegment(lastX, lastY, x, y);
     lastX = x; lastY = y;
     redraw();
   }, { passive: false });
 
-  canvas.addEventListener('touchend', () => { painting = false; });
+  canvas.addEventListener('touchend', () => { painting = false; mybState = null; });
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   document.addEventListener('keydown', e => {
@@ -209,6 +267,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       terrainBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentTerrain = btn.dataset.terrain;
+    });
+  });
+
+  // ── Brush buttons ──────────────────────────────────────────────────────────
+  brushBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      brushBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentBrushId = btn.dataset.brush;
     });
   });
 
