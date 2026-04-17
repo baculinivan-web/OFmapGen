@@ -241,6 +241,7 @@ worker.onmessage = ({ data }) => {
   placeholder.style.display = 'none';
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
+  nationSpawnsBtn.disabled = false;
   if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
 };
 
@@ -331,7 +332,222 @@ downloadSrcBtn.addEventListener('click', () => {
   a.click();
 });
 
-// ── Init GIS ──────────────────────────────────────────────────────────────────
+// ── Nation Spawns ─────────────────────────────────────────────────────────────
+const nationSpawnsBtn   = document.getElementById('nationSpawnsBtn');
+const nationModal       = document.getElementById('nationModal');
+const nationModalClose  = document.getElementById('nationModalClose');
+const nationModalClose2 = document.getElementById('nationModalClose2');
+const nationMapImg      = document.getElementById('nationMapImg');
+const nationOverlay     = document.getElementById('nationOverlay');
+const nationMapArea     = document.getElementById('nationMapArea');
+const nationListEl      = document.getElementById('nationList');
+const nationCountEl     = document.getElementById('nationCount');
+const clearNationsBtn   = document.getElementById('clearNationsBtn');
+const downloadArchiveBtn = document.getElementById('downloadArchiveBtn');
+const namePopup         = document.getElementById('namePopup');
+const nameInput         = document.getElementById('nameInput');
+const nameConfirmBtn    = document.getElementById('nameConfirmBtn');
+const nameCancelBtn     = document.getElementById('nameCancelBtn');
+
+let nations = []; // [{x, y, name}] — x,y in map pixel coords
+let pendingCoords = null; // {x, y, px, py} waiting for name input
+
+function openNationModal() {
+  nationMapImg.src = outCanvas.toDataURL('image/png');
+  nationModal.classList.add('open');
+  requestAnimationFrame(drawOverlay);
+}
+
+nationSpawnsBtn.addEventListener('click', openNationModal);
+nationModalClose.addEventListener('click', () => nationModal.classList.remove('open'));
+nationModalClose2.addEventListener('click', () => nationModal.classList.remove('open'));
+clearNationsBtn.addEventListener('click', () => { nations = []; renderNationList(); drawOverlay(); });
+
+// Map click → place nation
+nationMapArea.addEventListener('click', (e) => {
+  if (namePopup.style.display !== 'none') return;
+  const rect = nationMapImg.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  // Convert to map pixel coords
+  const scaleX = outCanvas.width  / rect.width;
+  const scaleY = outCanvas.height / rect.height;
+  const mx = Math.round(px * scaleX);
+  const my = Math.round(py * scaleY);
+  pendingCoords = { x: mx, y: my, px: e.clientX, py: e.clientY };
+  showNamePopup(e.clientX, e.clientY);
+});
+
+function showNamePopup(cx, cy) {
+  nameInput.value = '';
+  namePopup.style.display = 'block';
+  // Position popup near click, keep in viewport
+  const pw = 220, ph = 120;
+  let left = cx + 12;
+  let top  = cy - 20;
+  if (left + pw > window.innerWidth  - 8) left = cx - pw - 12;
+  if (top  + ph > window.innerHeight - 8) top  = window.innerHeight - ph - 8;
+  namePopup.style.left = left + 'px';
+  namePopup.style.top  = top  + 'px';
+  setTimeout(() => nameInput.focus(), 50);
+}
+
+function hideNamePopup() {
+  namePopup.style.display = 'none';
+  pendingCoords = null;
+}
+
+function confirmName() {
+  const name = nameInput.value.trim();
+  if (!name || !pendingCoords) { hideNamePopup(); return; }
+  nations.push({ x: pendingCoords.x, y: pendingCoords.y, name });
+  hideNamePopup();
+  renderNationList();
+  drawOverlay();
+}
+
+nameConfirmBtn.addEventListener('click', confirmName);
+nameCancelBtn.addEventListener('click', hideNamePopup);
+nameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmName();
+  if (e.key === 'Escape') hideNamePopup();
+});
+
+function renderNationList() {
+  nationCountEl.textContent = nations.length;
+  nationListEl.innerHTML = nations.map((n, i) => `
+    <div style="display:flex; align-items:center; gap:6px; padding:5px 4px; border-radius:5px; font-size:0.78rem; color:var(--text);">
+      <span style="width:18px; height:18px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:0.65rem; font-weight:700; color:#0d1117; flex-shrink:0;">${i+1}</span>
+      <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(n.name)}</span>
+      <button onclick="removeNation(${i})" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; line-height:1; padding:0 2px; flex-shrink:0;" title="Remove">×</button>
+    </div>
+  `).join('');
+}
+
+window.removeNation = function(i) {
+  nations.splice(i, 1);
+  renderNationList();
+  drawOverlay();
+};
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function drawOverlay() {
+  const img = nationMapImg;
+  const rect = img.getBoundingClientRect();
+  const canvas = nationOverlay;
+  canvas.width  = rect.width;
+  canvas.height = rect.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!outCanvas.width) return;
+  const scaleX = rect.width  / outCanvas.width;
+  const scaleY = rect.height / outCanvas.height;
+  nations.forEach((n, i) => {
+    const px = n.x * scaleX;
+    const py = n.y * scaleY;
+    // Shadow
+    ctx.shadowColor = 'rgba(0,0,0,0.7)';
+    ctx.shadowBlur = 6;
+    // Circle
+    ctx.beginPath();
+    ctx.arc(px, py, 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#58a6ff';
+    ctx.fill();
+    ctx.strokeStyle = '#0d1117';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    // Number
+    ctx.fillStyle = '#0d1117';
+    ctx.font = 'bold 9px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(i + 1, px, py);
+    // Label
+    ctx.fillStyle = '#e6edf3';
+    ctx.font = '11px Inter, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 4;
+    ctx.fillText(n.name, px + 13, py);
+    ctx.shadowBlur = 0;
+  });
+}
+
+// Redraw overlay on resize
+new ResizeObserver(() => { if (nationModal.classList.contains('open')) drawOverlay(); })
+  .observe(nationMapArea);
+
+// Download archive
+downloadArchiveBtn.addEventListener('click', async () => {
+  if (!outCanvas.width) return;
+  const zip = new JSZip();
+
+  // Add source PNG (OpenFront palette)
+  const ofCanvas = buildSourceCanvas();
+  const pngBlob = await new Promise(res => ofCanvas.toBlob(res, 'image/png'));
+  zip.file('map.png', pngBlob);
+
+  // Build manifest.json
+  const manifest = {
+    name: 'custom_map',
+    map: { width: outCanvas.width, height: outCanvas.height, num_land_tiles: countLandTiles() },
+    nations: nations.map(n => ({
+      coordinates: [n.x, n.y],
+      name: n.name,
+      flag: '',
+    })),
+  };
+  zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'openfront_map.zip';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+function buildSourceCanvas() {
+  const w = outCanvas.width, h = outCanvas.height;
+  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  const img = ctx.createImageData(w, h);
+  const od = img.data;
+  for (let i = 0; i < w * h; i++) {
+    const si = i * 4;
+    let zone = 0, minDist = Infinity;
+    for (let z = 0; z < 4; z++) {
+      const col = ZONE_COLORS_SRC[z];
+      const dist = (d[si]-col[0])**2 + (d[si+1]-col[1])**2 + (d[si+2]-col[2])**2;
+      if (dist < minDist) { minDist = dist; zone = z; }
+    }
+    const col = zone === 0 ? OF_WATER : OF_PALETTE[ZONE_TO_MAG[zone]];
+    od[si] = col[0]; od[si+1] = col[1]; od[si+2] = col[2]; od[si+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+function countLandTiles() {
+  const w = outCanvas.width, h = outCanvas.height;
+  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
+  let count = 0;
+  for (let i = 0; i < w * h; i++) {
+    const si = i * 4;
+    // Not water (dark purple ~18,15,34)
+    const dist = (d[si]-18)**2 + (d[si+1]-15)**2 + (d[si+2]-34)**2;
+    if (dist > 500) count++;
+  }
+  return count;
+}
+
+
 initGis({
   srcCanvas, outCanvas, imgInfo, fileNameEl,
   getAiMask: () => aiMask,

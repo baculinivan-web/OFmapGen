@@ -205,3 +205,13 @@ canvas { display: none; }
 footer { margin-top: 24px; display: flex; justify-content: center; }
 footer a { color: var(--muted); transition: color 0.15s; display: flex; }
 footer a:hover { color: var(--text); }
+
+/* Nation modal */
+#nationModal .modal { height: min(90vh, 700px); }
+#nationMapArea { min-height: 300px; }
+#nationMapImg { max-height: 100%; }
+#nationList::-webkit-scrollbar { width: 4px; }
+#nationList::-webkit-scrollbar-track { background: transparent; }
+#nationList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#nameInput:focus { border-color: var(--accent); }
+
