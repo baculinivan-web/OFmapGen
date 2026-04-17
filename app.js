@@ -673,6 +673,10 @@ downloadArchiveBtn.addEventListener('click', () => {
         The script automatically downloads the game source, registers your map, generates it, and opens it in your browser — <strong style="color:var(--text);">no manual setup needed.</strong><br><br>
         After extracting the archive, just double-click the launcher file to start.
       </div>
+      <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(80,180,100,0.08);border:1px solid rgba(80,180,100,0.2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:0.78rem;color:var(--muted);line-height:1.5;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5ab46e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>The script is <strong style="color:var(--text);">fully open source</strong> — it's included in the archive as a plain <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">setup.py</code> text file. You can open and read it in any text editor before running.</span>
+      </div>
 
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
         <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:2px;">Choose your OS</div>
