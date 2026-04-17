@@ -295,28 +295,3 @@ footer a:hover { color: var(--text); }
 .nation-marker:hover .nm-remove,
 .nation-marker:hover .nm-edit { opacity: 1; }
 
-
-/* Draw manually modal */
-#drawModal #drawCanvas {
-  position: absolute;
-  left: 0;
-  top: 0;
-}
-.draw-terrain-btn {
-  display: flex; align-items: center; gap: 8px;
-  padding: 7px 10px; border-radius: 6px;
-  border: 1px solid var(--border); background: var(--surface2);
-  color: var(--muted); font-size: 0.82rem; font-family: inherit;
-  cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s;
-  text-align: left;
-}
-.draw-terrain-btn.active {
-  border-color: var(--zone-color, var(--accent));
-  background: color-mix(in srgb, var(--zone-color, var(--accent)) 18%, var(--surface2));
-  color: var(--text);
-}
-.draw-terrain-swatch {
-  width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
-  border: 1px solid rgba(255,255,255,0.1);
-}
-#drawCanvas { touch-action: none; }
