@@ -491,6 +491,7 @@
         <div class="algo-switch">
           <button class="algo-btn" id="algoLegacy">Legacy</button>
           <button class="algo-btn active" id="algoSmooth">Smooth</button>
+          <button class="algo-btn" id="algoAdvanced">Advanced</button>
         </div>
         <p class="algo-hint" id="algoHint">Removes tiny noise islands for more realistic coastlines</p>
         <div id="smoothOptions" style="display:block; margin-top:14px;">
@@ -504,6 +505,12 @@
             <span class="slider-val" id="valPasses">2</span>
             <input type="range" id="sliderPasses" min="1" max="6" step="1" value="2" />
           </div>
+        </div>
+        <div id="advancedOptions" style="display:none; margin-top:10px;">
+          <button class="btn btn-primary" id="runSegBtn" style="font-size:0.82rem; padding:8px 14px;">
+            ✂️ Run AI segmentation
+          </button>
+          <p id="segStatus" style="margin-top:8px; font-size:0.75rem; color:var(--muted); line-height:1.5;"></p>
         </div>
       </div>
 
@@ -574,7 +581,10 @@
   </a>
 </footer>
 
-<script>
+<script type="module">
+  import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
+  ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+
   const COLORS = {
     water:    [18,  15,  34],
     plain:    [140, 170, 88],
@@ -606,33 +616,40 @@
 
   // Algorithm toggle
   let currentAlgo = 'smooth';
-  const algoLegacyBtn  = document.getElementById('algoLegacy');
-  const algoSmoothBtn  = document.getElementById('algoSmooth');
-  const smoothOptions  = document.getElementById('smoothOptions');
-  const sliderMinIsland = document.getElementById('sliderMinIsland');
-  const valMinIsland    = document.getElementById('valMinIsland');
-  const sliderPasses    = document.getElementById('sliderPasses');
-  const valPasses       = document.getElementById('valPasses');
+  let aiMask = null; // Uint8Array, 1=foreground 0=background
+
+  const algoLegacyBtn    = document.getElementById('algoLegacy');
+  const algoSmoothBtn    = document.getElementById('algoSmooth');
+  const algoAdvancedBtn  = document.getElementById('algoAdvanced');
+  const smoothOptions    = document.getElementById('smoothOptions');
+  const advancedOptions  = document.getElementById('advancedOptions');
+  const sliderMinIsland  = document.getElementById('sliderMinIsland');
+  const valMinIsland     = document.getElementById('valMinIsland');
+  const sliderPasses     = document.getElementById('sliderPasses');
+  const valPasses        = document.getElementById('valPasses');
+  const runSegBtn        = document.getElementById('runSegBtn');
+  const segStatus        = document.getElementById('segStatus');
 
   const algoHint = document.getElementById('algoHint');
 
-  algoLegacyBtn.addEventListener('click', () => {
-    currentAlgo = 'legacy';
-    algoLegacyBtn.classList.add('active');
-    algoSmoothBtn.classList.remove('active');
-    smoothOptions.style.display = 'none';
-    algoHint.textContent = 'Pixel-perfect conversion';
+  function setAlgo(algo) {
+    currentAlgo = algo;
+    algoLegacyBtn.classList.toggle('active',   algo === 'legacy');
+    algoSmoothBtn.classList.toggle('active',   algo === 'smooth');
+    algoAdvancedBtn.classList.toggle('active', algo === 'advanced');
+    smoothOptions.style.display   = algo === 'smooth'   ? 'block' : 'none';
+    advancedOptions.style.display = algo === 'advanced' ? 'block' : 'none';
+    algoHint.textContent = {
+      legacy:   'Pixel-perfect conversion',
+      smooth:   'Removes tiny noise islands for more realistic coastlines',
+      advanced: 'AI cuts out the subject — it becomes the island, background becomes ocean',
+    }[algo];
     scheduleRender();
-  });
+  }
 
-  algoSmoothBtn.addEventListener('click', () => {
-    currentAlgo = 'smooth';
-    algoSmoothBtn.classList.add('active');
-    algoLegacyBtn.classList.remove('active');
-    smoothOptions.style.display = 'block';
-    algoHint.textContent = 'Removes tiny noise islands for more realistic coastlines';
-    scheduleRender();
-  });
+  algoLegacyBtn.addEventListener('click',   () => setAlgo('legacy'));
+  algoSmoothBtn.addEventListener('click',   () => setAlgo('smooth'));
+  algoAdvancedBtn.addEventListener('click', () => setAlgo('advanced'));
 
   sliderMinIsland.addEventListener('input', () => {
     valMinIsland.textContent = sliderMinIsland.value;
@@ -642,6 +659,104 @@
   sliderPasses.addEventListener('input', () => {
     valPasses.textContent = sliderPasses.value;
     scheduleRender();
+  });
+
+  // --- AI segmentation: u2netp (~4.7MB) via ONNX Runtime Web ---
+  const U2NETP_URL  = 'https://huggingface.co/fofr/comfyui/resolve/main/rembg/u2netp.onnx';
+  const IMG_SIZE    = 320;
+  const MEAN        = [0.485, 0.456, 0.406];
+  const STD         = [0.229, 0.224, 0.225];
+
+  let ortSession = null;
+
+  function preprocessForU2Net(imageData, srcW, srcH) {
+    const tmp = document.createElement('canvas');
+    tmp.width = IMG_SIZE; tmp.height = IMG_SIZE;
+    const ctx = tmp.getContext('2d');
+    // draw srcCanvas scaled down
+    ctx.drawImage(srcCanvas, 0, 0, IMG_SIZE, IMG_SIZE);
+    const d = ctx.getImageData(0, 0, IMG_SIZE, IMG_SIZE).data;
+    const pixels = new Float32Array(3 * IMG_SIZE * IMG_SIZE);
+    for (let i = 0; i < IMG_SIZE * IMG_SIZE; i++) {
+      pixels[i]                       = (d[i*4]   / 255 - MEAN[0]) / STD[0];
+      pixels[i + IMG_SIZE*IMG_SIZE]   = (d[i*4+1] / 255 - MEAN[1]) / STD[1];
+      pixels[i + 2*IMG_SIZE*IMG_SIZE] = (d[i*4+2] / 255 - MEAN[2]) / STD[2];
+    }
+    return pixels;
+  }
+
+  runSegBtn.addEventListener('click', async () => {
+    if (!srcImageData) { segStatus.textContent = 'Upload an image first.'; return; }
+    runSegBtn.disabled = true;
+    segStatus.textContent = '⏳ Loading u2netp model (~4.7MB)…';
+    try {
+      if (!ortSession) {
+        // Cache the model in Cache API so subsequent loads are instant
+        let modelBuffer;
+        const cacheName = 'ort-models-v1';
+        const cache = await caches.open(cacheName);
+        const cached = await cache.match(U2NETP_URL);
+        if (cached) {
+          modelBuffer = await cached.arrayBuffer();
+        } else {
+          segStatus.textContent = '⏳ Downloading model (~4.7MB)…';
+          const resp = await fetch(U2NETP_URL);
+          const clone = resp.clone();
+          await cache.put(U2NETP_URL, clone);
+          modelBuffer = await resp.arrayBuffer();
+        }
+        ortSession = await ort.InferenceSession.create(modelBuffer, { executionProviders: ['wasm'] });
+      }
+
+      segStatus.textContent = '🧠 Running segmentation…';
+
+      const W = srcImageData.width, H = srcImageData.height;
+      const pixels = preprocessForU2Net(srcImageData, W, H);
+      const inputTensor = new ort.Tensor('float32', pixels, [1, 3, IMG_SIZE, IMG_SIZE]);
+
+      // u2netp input name is "input.1"
+      const results = await ortSession.run({ 'input.1': inputTensor });
+
+      // output tensor key is the first output
+      const outKey  = ortSession.outputNames[0];
+      const maskRaw = results[outKey].data; // Float32Array [1, 1, 320, 320] flattened
+
+      // Normalize mask 0-1
+      let mn = Infinity, mx = -Infinity;
+      for (let v of maskRaw) { if (v < mn) mn = v; if (v > mx) mx = v; }
+      const range = mx - mn || 1;
+
+      // Draw mask into a 320x320 canvas, then scale to original size
+      const mCanvas = document.createElement('canvas');
+      mCanvas.width = IMG_SIZE; mCanvas.height = IMG_SIZE;
+      const mCtx = mCanvas.getContext('2d');
+      const mImg = mCtx.createImageData(IMG_SIZE, IMG_SIZE);
+      for (let i = 0; i < IMG_SIZE * IMG_SIZE; i++) {
+        const v = Math.round(((maskRaw[i] - mn) / range) * 255);
+        mImg.data[i*4] = mImg.data[i*4+1] = mImg.data[i*4+2] = v;
+        mImg.data[i*4+3] = 255;
+      }
+      mCtx.putImageData(mImg, 0, 0);
+
+      // Scale to original image size
+      const sCanvas = document.createElement('canvas');
+      sCanvas.width = W; sCanvas.height = H;
+      sCanvas.getContext('2d').drawImage(mCanvas, 0, 0, W, H);
+      const sData = sCanvas.getContext('2d').getImageData(0, 0, W, H).data;
+
+      aiMask = new Uint8Array(W * H);
+      for (let i = 0; i < W * H; i++) {
+        aiMask[i] = sData[i * 4] > 128 ? 1 : 0;
+      }
+
+      segStatus.textContent = '✅ Done — adjust thresholds to tune terrain';
+      runSegBtn.disabled = false;
+      scheduleRender();
+    } catch (err) {
+      segStatus.textContent = '❌ ' + err.message;
+      console.error(err);
+      runSegBtn.disabled = false;
+    }
   });
 
   let srcImageData = null;
@@ -671,6 +786,8 @@
       imgInfo.textContent = `${img.width} × ${img.height}`;
       fileNameEl.textContent = file.name;
       fileNameEl.style.display = 'block';
+      aiMask = null;
+      segStatus.textContent = '';
       URL.revokeObjectURL(url);
       scheduleRender();
     };
@@ -765,6 +882,44 @@
     return out;
   }
 
+  // --- Advanced: apply AI mask — background = water, foreground keeps brightness zones ---
+  function applyAiMask(zones, width, height) {
+    if (!aiMask || aiMask.length !== width * height) return zones;
+    const result = new Uint8Array(zones);
+    for (let i = 0; i < result.length; i++) {
+      if (aiMask[i] === 0) result[i] = 0; // background → ocean
+      // foreground keeps its brightness-based zone (water inside = rivers/lakes)
+    }
+    // Run smooth passes so internal water regions look natural
+    let smoothed = result;
+    for (let pass = 0; pass < 3; pass++) {
+      smoothed = smoothPassMasked(smoothed, width, height);
+    }
+    smoothed = filterSmallRegions(smoothed, width, height, 30);
+    return smoothed;
+  }
+
+  // Smooth pass that never touches ocean-background pixels (aiMask === 0)
+  function smoothPassMasked(zones, width, height) {
+    const out = new Uint8Array(zones);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x;
+        if (!aiMask || aiMask[i] === 0) continue; // don't touch ocean
+        const freq = {};
+        for (const n of [i-1, i+1, i-width, i+width]) {
+          freq[zones[n]] = (freq[zones[n]] || 0) + 1;
+        }
+        let best = zones[i], bestC = 0;
+        for (const [z, c] of Object.entries(freq)) {
+          if (+c > bestC) { bestC = +c; best = +z; }
+        }
+        if (bestC >= 3) out[i] = best;
+      }
+    }
+    return out;
+  }
+
   function render() {
     if (!srcImageData) return;
 
@@ -815,12 +970,12 @@
     if (currentAlgo === 'smooth') {
       const minSize = parseInt(sliderMinIsland.value);
       const passes  = parseInt(sliderPasses.value);
-      // Remove small regions iteratively
       zones = filterSmallRegions(zones, width, height, minSize);
-      // Smooth jagged edges
       for (let i = 0; i < passes; i++) {
         zones = smoothPass(zones, width, height);
       }
+    } else if (currentAlgo === 'advanced') {
+      zones = applyAiMask(zones, width, height);
     }
 
     const ZONE_COLORS = [COLORS.water, COLORS.plain, COLORS.highland, COLORS.mountain];
