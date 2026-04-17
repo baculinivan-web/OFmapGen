@@ -211,20 +211,12 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       }
 
       // Update value label live while dragging, recalculate only on release
-      sliderSeaLevel.oninput  = () => { valSeaLevel.textContent = sliderSeaLevel.value; };
-      sliderSeaLevel.onchange = () => {
-        const seaLevel = parseInt(sliderSeaLevel.value);
-        valSeaLevel.textContent = seaLevel;
-        const newImgData = buildElevationImageData(seaLevel);
-        tmpCtx.putImageData(newImgData, 0, 0);
-        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
-      };
+      sliderSeaLevel.oninput = () => { valSeaLevel.textContent = sliderSeaLevel.value; };
 
       document.getElementById('resetSeaLevel').onclick = () => {
         sliderSeaLevel.value = 0;
         valSeaLevel.textContent = '0';
-        tmpCtx.putImageData(buildElevationImageData(0), 0, 0);
-        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+        sliderSeaLevel.dispatchEvent(new Event('change'));
       };
 
       const imgData = buildElevationImageData(0);
@@ -299,8 +291,10 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           console.warn('[GIS] relation query failed:', relErr.message);
         }
 
-        if (elements.length > 0) {
-          tmpCtx.putImageData(imgData, 0, 0);
+        function drawWaterOverlay(baseImgData) {
+          tmpCtx.putImageData(baseImgData, 0, 0);
+          if (elements.length === 0) return;
+
           function latToMercY(lat) {
             const r = lat * Math.PI / 180;
             return Math.log(Math.tan(Math.PI / 4 + r / 2));
@@ -347,6 +341,17 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           console.log(`[GIS] drawn: ${drawnWater} water polygons, ${drawnRivers} rivers, ${relCount} relations`);
           gisStatus.textContent = `Loading: Drew ${drawnWater} water bodies, ${drawnRivers} rivers, finalizing…`;
         }
+
+        drawWaterOverlay(imgData);
+
+        // Wire sea level slider to redraw with water overlay
+        sliderSeaLevel.onchange = () => {
+          const seaLevel = parseInt(sliderSeaLevel.value);
+          valSeaLevel.textContent = seaLevel;
+          const newImgData = buildElevationImageData(seaLevel);
+          drawWaterOverlay(newImgData);
+          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+        };
 
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
         gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
