@@ -267,11 +267,16 @@
 </div>
 
 <!-- Nation edit popup -->
-<div id="nationEditPopup" style="display:none; position:fixed; z-index:2000; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; box-shadow:0 8px 32px rgba(0,0,0,0.6); width:260px;">
+<div id="nationEditPopup" style="display:none; position:fixed; z-index:2000; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; box-shadow:0 8px 32px rgba(0,0,0,0.6); width:268px;">
   <div style="font-size:0.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px;" id="editPopupTitle">Add nation</div>
   <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Name</div>
   <input id="nameInput" type="text" placeholder="e.g. Germany" maxlength="40"
-    style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:inherit; font-size:0.85rem; padding:7px 10px; outline:none; margin-bottom:10px;" />
+    style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:inherit; font-size:0.85rem; padding:7px 10px; outline:none; margin-bottom:8px;" />
+  <!-- Suggested flags -->
+  <div id="suggestedFlags" style="display:none; margin-bottom:8px;">
+    <div style="font-size:0.7rem; color:var(--muted); margin-bottom:5px;">Suggested</div>
+    <div id="suggestedList" style="display:flex; gap:6px; flex-wrap:wrap;"></div>
+  </div>
   <div style="font-size:0.75rem; color:var(--muted); margin-bottom:4px;">Flag</div>
   <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
     <img id="flagPreview" src="" style="width:28px; height:20px; object-fit:contain; border:1px solid var(--border); border-radius:3px; background:var(--surface2); display:none;" />
@@ -280,7 +285,7 @@
   </div>
   <input id="flagSearch" type="text" placeholder="Search flags…" autocomplete="off"
     style="width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:inherit; font-size:0.82rem; padding:6px 10px; outline:none; margin-bottom:4px;" />
-  <div id="flagResults" style="max-height:140px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; background:var(--surface2); display:none;"></div>
+  <div id="flagResults" style="max-height:130px; overflow-y:auto; border:1px solid var(--border); border-radius:6px; background:var(--surface2); display:none;"></div>
   <div style="display:flex; gap:6px; margin-top:10px;">
     <button id="nameConfirmBtn" class="btn btn-primary" style="flex:1; padding:7px; font-size:0.82rem;">Confirm</button>
     <button id="nameCancelBtn" class="btn btn-ghost" style="flex:1; padding:7px; font-size:0.82rem;">Cancel</button>
