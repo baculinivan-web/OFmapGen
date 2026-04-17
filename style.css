@@ -316,3 +316,17 @@ footer a:hover { color: var(--text); }
   background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
 }
 .paint-btn .legend-swatch { width: 14px; height: 14px; flex-shrink: 0; }
+
+.paint-brush-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 10px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2); color: var(--muted);
+  font-size: 0.78rem; font-family: inherit; font-weight: 500;
+  cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: left;
+}
+.paint-brush-btn.active {
+  background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
+}
+.paint-brush-btn svg { flex-shrink: 0; opacity: 0.8; }

@@ -1,0 +1,17 @@
+{
+  "comment": "MyPaint brush file",
+  "group": "ofmapgen",
+  "settings": {
+    "radius_logarithmic": { "base_value": 2.0, "inputs": {} },
+    "hardness":           { "base_value": 1.0, "inputs": {} },
+    "opaque":             { "base_value": 1.0, "inputs": {} },
+    "opaque_linearize":   { "base_value": 0.9, "inputs": {} },
+    "dabs_per_actual_radius": { "base_value": 3.0, "inputs": {} },
+    "offset_by_random":   { "base_value": 0.0, "inputs": {} },
+    "elliptical_dab_ratio": { "base_value": 1.0, "inputs": {} },
+    "elliptical_dab_angle": { "base_value": 90.0, "inputs": {} },
+    "direction_filter":   { "base_value": 2.0, "inputs": {} },
+    "radius_by_random":   { "base_value": 0.0, "inputs": {} }
+  },
+  "version": 3
+}

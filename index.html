@@ -346,6 +346,25 @@
           <button class="paint-btn" data-terrain="highland"><span class="legend-swatch" style="background:var(--highland)"></span>Highland</button>
           <button class="paint-btn" data-terrain="mountain"><span class="legend-swatch" style="background:var(--mountain)"></span>Mountain</button>
         </div>
+        <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush</div>
+        <div style="display:flex;flex-direction:column;gap:5px;" id="paintBrushBtns">
+          <button class="paint-brush-btn active" data-brush="solid">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+            Solid
+          </button>
+          <button class="paint-brush-btn" data-brush="soft-round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>
+            Soft Round
+          </button>
+          <button class="paint-brush-btn" data-brush="hard-round">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
+            Hard Round
+          </button>
+          <button class="paint-brush-btn" data-brush="dunes">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-30 12 12)"/></svg>
+            Dunes
+          </button>
+        </div>
         <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush size</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="range" id="paintBrushSlider" min="1" max="120" step="1" value="16" style="flex:1;" />
