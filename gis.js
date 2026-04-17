@@ -207,11 +207,20 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       gisStatus.textContent = `Loading: Loading rivers and water bodies from OpenStreetMap…`;
       try {
         const overpassQuery = `[out:json][timeout:30];(way["waterway"~"^(river|stream|canal|drain)$"](${south},${west},${north},${east});way["natural"~"^(water|wetland|bay)$"](${south},${west},${north},${east});way["water"~"^(lake|reservoir|pond|lagoon|oxbow|river)$"](${south},${west},${north},${east});relation["natural"~"^(water|wetland)$"](${south},${west},${north},${east}););out geom;`;
+        console.log('[GIS] Sending Overpass query for bbox:', south, west, north, east);
         const overpassResp = await fetch('https://overpass-api.de/api/interpreter', {
           method: 'POST', body: overpassQuery,
         });
+        console.log('[GIS] Overpass response status:', overpassResp.status, overpassResp.ok);
+        if (!overpassResp.ok) {
+          const errText = await overpassResp.text();
+          console.warn('[GIS] Overpass error body:', errText.slice(0, 300));
+        }
         if (overpassResp.ok) {
-          const elements = (await overpassResp.json()).elements || [];
+          const rawText = await overpassResp.text();
+          console.log('[GIS] Overpass raw response (first 200 chars):', rawText.slice(0, 200));
+          let elements = [];
+          try { elements = JSON.parse(rawText).elements || []; } catch(e) { console.error('[GIS] JSON parse error:', e); }
           const relCount = elements.filter(e => e.type === 'relation').length;
           const wayWaterCount = elements.filter(e => e.type === 'way' && (e.tags?.natural === 'water' || e.tags?.water)).length;
           console.log(`[GIS] Overpass: ${elements.length} elements, ${relCount} relations, ${wayWaterCount} water ways`);
