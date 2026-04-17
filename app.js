@@ -241,8 +241,7 @@ worker.onmessage = ({ data }) => {
   placeholder.style.display = 'none';
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
-  nationSpawnsBtn.style.opacity = '';
-  nationSpawnsBtn.style.pointerEvents = '';
+  enableNationBtn();
   if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
 };
 
@@ -334,6 +333,11 @@ downloadSrcBtn.addEventListener('click', () => {
 });
 
 // ── Nation Spawns ─────────────────────────────────────────────────────────────
+function enableNationBtn() {
+  const btn = document.getElementById('nationSpawnsBtn');
+  if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+}
+
 const nationSpawnsBtn   = document.getElementById('nationSpawnsBtn');
 const nationModal       = document.getElementById('nationModal');
 const nationModalClose  = document.getElementById('nationModalClose');
