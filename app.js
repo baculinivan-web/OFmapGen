@@ -1,5 +1,6 @@
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
 import { initGis } from './gis.js';
+import { initDraw } from './draw.js';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 
@@ -815,4 +816,11 @@ initGis({
   clampedSize,
   setGisMode,
   scheduleRender,
+});
+
+initDraw({
+  outCanvas, srcCanvas, imgInfo,
+  scheduleRender,
+  clampedSize,
+  setGisMode,
 });
