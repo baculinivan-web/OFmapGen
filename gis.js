@@ -203,43 +203,78 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       }
       tmpCtx.putImageData(imgData, 0, 0);
 
-      // Rivers from Overpass
-      gisStatus.textContent = `Loading: Loading rivers from OpenStreetMap…`;
+      // Rivers + water bodies from Overpass
+      gisStatus.textContent = `Loading: Loading rivers and water bodies from OpenStreetMap…`;
       try {
-        const overpassQuery = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain)$"](${south},${west},${north},${east}););out geom;`;
+        const overpassQuery = `[out:json][timeout:30];(way["waterway"~"^(river|stream|canal|drain)$"](${south},${west},${north},${east});way["natural"~"^(water|wetland|bay)$"](${south},${west},${north},${east});way["water"~"^(lake|reservoir|pond|lagoon|oxbow|river)$"](${south},${west},${north},${east});relation["natural"~"^(water|wetland)$"](${south},${west},${north},${east}););out geom;`;
         const overpassResp = await fetch('https://overpass-api.de/api/interpreter', {
           method: 'POST', body: overpassQuery,
         });
         if (overpassResp.ok) {
-          const ways = (await overpassResp.json()).elements || [];
-          if (ways.length > 0) {
+          const elements = (await overpassResp.json()).elements || [];
+          if (elements.length > 0) {
             tmpCtx.putImageData(imgData, 0, 0);
             function latToMercY(lat) {
               const r = lat * Math.PI / 180;
               return Math.log(Math.tan(Math.PI / 4 + r / 2));
             }
             const northY = latToMercY(north), southY = latToMercY(south);
-            tmpCtx.strokeStyle = 'rgb(30,30,30)';
-            tmpCtx.lineCap = 'round'; tmpCtx.lineJoin = 'round';
-            for (const way of ways) {
-              if (!way.geometry || way.geometry.length < 2) continue;
-              const wtype = way.tags?.waterway || 'stream';
-              tmpCtx.lineWidth = wtype === 'river' ? 3 : wtype === 'canal' ? 2 : 1;
+
+            // Helper: draw a geometry path
+            function drawGeomPath(geometry) {
+              if (!geometry || geometry.length < 2) return false;
               tmpCtx.beginPath();
-              way.geometry.forEach((pt, k) => {
+              geometry.forEach((pt, k) => {
                 const px = (pt.lon - west) / (east - west) * cropW;
                 const py = (latToMercY(pt.lat) - northY) / (southY - northY) * cropH;
                 k === 0 ? tmpCtx.moveTo(px, py) : tmpCtx.lineTo(px, py);
               });
-              tmpCtx.stroke();
+              return true;
             }
-            gisStatus.textContent = `Loading: Drew ${ways.length} waterways, finalizing…`;
+
+            // First pass: fill water body polygons
+            tmpCtx.fillStyle = 'rgb(20,20,30)';
+            for (const el of elements) {
+              const isWaterBody = el.tags?.natural === 'water' || el.tags?.natural === 'wetland' ||
+                                  el.tags?.natural === 'bay' || el.tags?.water;
+              if (!isWaterBody) continue;
+
+              if (el.type === 'way' && el.geometry) {
+                if (drawGeomPath(el.geometry)) {
+                  tmpCtx.closePath();
+                  tmpCtx.fill();
+                }
+              } else if (el.type === 'relation' && el.members) {
+                // draw each outer member
+                for (const member of el.members) {
+                  if (member.role === 'outer' && member.geometry) {
+                    if (drawGeomPath(member.geometry)) {
+                      tmpCtx.closePath();
+                      tmpCtx.fill();
+                    }
+                  }
+                }
+              }
+            }
+
+            // Second pass: stroke waterways (rivers/streams)
+            tmpCtx.strokeStyle = 'rgb(20,20,30)';
+            tmpCtx.lineCap = 'round'; tmpCtx.lineJoin = 'round';
+            for (const el of elements) {
+              if (el.type !== 'way') continue;
+              const wtype = el.tags?.waterway;
+              if (!wtype) continue;
+              tmpCtx.lineWidth = wtype === 'river' ? 3 : wtype === 'canal' ? 2 : 1;
+              if (drawGeomPath(el.geometry)) tmpCtx.stroke();
+            }
+
+            gisStatus.textContent = `Loading: Drew ${elements.length} water features, finalizing…`;
           }
         }
       } catch (riverErr) {
-        gisStatus.textContent = `Warning: Rivers failed (${riverErr.message}) — elevation loaded without rivers.`;
+        gisStatus.textContent = `Warning: Water features failed (${riverErr.message}) — elevation loaded without water overlay.`;
         gisLoadBtn.disabled = false;
-        gisLoadBtn.textContent = 'Retry with rivers';
+        gisLoadBtn.textContent = 'Retry with water';
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
         fileNameEl.textContent = `elevation z${zoom} ${cropW}×${cropH} (no rivers)`;
         return;
