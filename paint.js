@@ -233,9 +233,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const angle = Math.atan2(dy, dx);
-    const stepFactor = brushMode === 'texture' ? 1.5 : 0.4;
-    const steps = Math.max(1, Math.ceil(dist / (brushSize * stepFactor)));
-    for (let i = 0; i <= steps; i++) {
+    // Stamp every brushSize*1.2 px along path — speed-independent
+    const spacing = brushSize * (brushMode === 'texture' ? 1.2 : 0.4);
+    const steps = Math.max(1, Math.ceil(dist / spacing));
+    for (let i = 1; i <= steps; i++) {
       paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps), angle);
     }
   }
