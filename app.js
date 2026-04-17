@@ -12,7 +12,6 @@ const srcCanvas   = document.getElementById('srcCanvas');
 const outCanvas   = document.getElementById('outCanvas');
 const preview     = document.getElementById('preview');
 const previewWrap = document.getElementById('previewWrap');
-const paintOverlay = document.getElementById('paintOverlay');
 const placeholder = document.getElementById('placeholder');
 const downloadBtn    = document.getElementById('downloadBtn');
 const downloadSrcBtn = document.getElementById('downloadSrcBtn');
@@ -239,12 +238,10 @@ worker.onmessage = ({ data }) => {
   const { pixels, width, height } = data;
   outCanvas.width = width; outCanvas.height = height;
   outCanvas.getContext('2d').putImageData(new ImageData(pixels, width, height), 0, 0);
-  painter.onRenderComplete();
   preview.src = outCanvas.toDataURL('image/png');
   preview.style.display = 'block';
   previewWrap.style.display = 'block';
   placeholder.style.display = 'none';
-  painter.reapply();
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
   enableNationBtn();
@@ -293,7 +290,7 @@ invertCheck.addEventListener('change', () => scheduleRender());
 // ── Download map PNG ──────────────────────────────────────────────────────────
 downloadBtn.addEventListener('click', () => {
   const a = document.createElement('a');
-  a.href = painter.hasPaint() ? painter.getPaintedCanvas().toDataURL('image/png') : outCanvas.toDataURL('image/png');
+  a.href = outCanvas.toDataURL('image/png');
   a.download = 'openfront_map.png';
   a.click();
 });
@@ -313,7 +310,7 @@ const ZONE_TO_MAG = [-1, 4, 14, 25];
 
 downloadSrcBtn.addEventListener('click', () => {
   if (!outCanvas.width) return;
-  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
+  const src = outCanvas;
   const w = src.width, h = src.height;
   const d = src.getContext('2d').getImageData(0, 0, w, h).data;
   const ofCanvas = document.createElement('canvas');
@@ -343,6 +340,8 @@ downloadSrcBtn.addEventListener('click', () => {
 function enableNationBtn() {
   const btn = document.getElementById('nationSpawnsBtn');
   if (btn) { btn.style.opacity = ''; btn.style.pointerEvents = ''; }
+  const pb = document.getElementById('paintTerrainBtn');
+  if (pb) { pb.style.opacity = ''; pb.style.pointerEvents = ''; }
 }
 
 const nationSpawnsBtn   = document.getElementById('nationSpawnsBtn');
@@ -381,8 +380,7 @@ let editingIdx = null;
 let selectedFlag = '';
 
 function openNationModal() {
-  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
-  nationMapImg.src = src.toDataURL('image/png');
+  nationMapImg.src = outCanvas.toDataURL('image/png');
   nationModal.classList.add('open');
   requestAnimationFrame(renderMarkers);
 }
@@ -410,10 +408,9 @@ nationMapArea.addEventListener('click', (e) => {
 
 function isWaterPixel(x, y) {
   if (!outCanvas.width) return false;
-  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
-  const ctx = src.getContext('2d');
-  const d = ctx.getImageData(Math.max(0, Math.min(src.width - 1, x)),
-                              Math.max(0, Math.min(src.height - 1, y)), 1, 1).data;
+  const ctx = outCanvas.getContext('2d');
+  const d = ctx.getImageData(Math.max(0, Math.min(outCanvas.width - 1, x)),
+                              Math.max(0, Math.min(outCanvas.height - 1, y)), 1, 1).data;
   return (d[0] < 40 && d[1] < 30 && d[2] < 60);
 }
 
@@ -780,9 +777,8 @@ async function buildAndDownloadArchive(os) {
 }
 
 function buildSourceCanvas() {
-  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
-  const w = src.width, h = src.height;
-  const d = src.getContext('2d').getImageData(0, 0, w, h).data;
+  const w = outCanvas.width, h = outCanvas.height;
+  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
@@ -804,9 +800,8 @@ function buildSourceCanvas() {
 }
 
 function countLandTiles() {
-  const src = painter.hasPaint() ? painter.getPaintedCanvas() : outCanvas;
-  const w = src.width, h = src.height;
-  const d = src.getContext('2d').getImageData(0, 0, w, h).data;
+  const w = outCanvas.width, h = outCanvas.height;
+  const d = outCanvas.getContext('2d').getImageData(0, 0, w, h).data;
   let count = 0;
   for (let i = 0; i < w * h; i++) {
     const si = i * 4;
@@ -821,44 +816,17 @@ function countLandTiles() {
 // ── Paint tool ────────────────────────────────────────────────────────────────
 const painter = initPaint({
   outCanvas,
-  preview,
-  previewWrap,
-  paintOverlay,
-  onPaintChange: () => {
+  onPaintApplied: () => {
+    // Refresh preview after paint applied
+    preview.src = outCanvas.toDataURL('image/png');
     downloadBtn.disabled = false;
     downloadSrcBtn.disabled = false;
     enableNationBtn();
   },
 });
 
-const paintToggle   = document.getElementById('paintToggle');
-const paintControls = document.getElementById('paintControls');
-const sliderBrush   = document.getElementById('sliderBrush');
-const valBrush      = document.getElementById('valBrush');
-const clearPaintBtn = document.getElementById('clearPaintBtn');
-const paintBtns     = document.querySelectorAll('.paint-btn');
-
-paintToggle.addEventListener('change', () => {
-  const on = paintToggle.checked;
-  paintControls.style.display = on ? 'block' : 'none';
-  painter.setActive(on);
-});
-
-paintBtns.forEach(btn => {
-  btn.addEventListener('click', () => {
-    paintBtns.forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    painter.setTerrain(btn.dataset.terrain);
-  });
-});
-
-sliderBrush.addEventListener('input', () => {
-  valBrush.textContent = sliderBrush.value;
-  painter.setBrushSize(parseInt(sliderBrush.value));
-  updateTrack(sliderBrush, parseInt(sliderBrush.value) / 80);
-});
-
-clearPaintBtn.addEventListener('click', () => painter.clearPaint());
+const paintTerrainBtn = document.getElementById('paintTerrainBtn');
+paintTerrainBtn.addEventListener('click', () => painter.open());
 
 initGis({
   srcCanvas, outCanvas, imgInfo, fileNameEl,
