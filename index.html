@@ -135,6 +135,40 @@
         </div>
       </div>
 
+      <div class="panel-section" id="paintSection">
+        <div class="section-title" style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Paint terrain</span>
+          <label class="toggle" title="Enable paint mode">
+            <input type="checkbox" id="paintToggle" />
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div id="paintControls" style="display:none; margin-top:4px;">
+          <div class="paint-terrain-grid">
+            <button class="paint-btn active" id="paintWater" data-terrain="water">
+              <span class="legend-swatch" style="background:var(--water)"></span>Water
+            </button>
+            <button class="paint-btn" id="paintPlain" data-terrain="plain">
+              <span class="legend-swatch" style="background:var(--plain)"></span>Plain
+            </button>
+            <button class="paint-btn" id="paintHighland" data-terrain="highland">
+              <span class="legend-swatch" style="background:var(--highland)"></span>Highland
+            </button>
+            <button class="paint-btn" id="paintMountain" data-terrain="mountain">
+              <span class="legend-swatch" style="background:var(--mountain)"></span>Mountain
+            </button>
+          </div>
+          <div class="slider-row" style="margin-top:12px;">
+            <div class="slider-label">Brush size</div>
+            <span class="slider-val" id="valBrush">12</span>
+            <input type="range" id="sliderBrush" min="1" max="80" step="1" value="12" />
+          </div>
+          <button class="btn btn-ghost" id="clearPaintBtn" style="margin-top:10px; font-size:0.78rem; padding:7px 10px;">
+            Clear all paint
+          </button>
+        </div>
+      </div>
+
       <div class="panel-section">
         <div class="section-title">Legend</div>
         <div class="legend">
