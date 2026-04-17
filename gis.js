@@ -220,6 +220,13 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
       };
 
+      document.getElementById('resetSeaLevel').onclick = () => {
+        sliderSeaLevel.value = 0;
+        valSeaLevel.textContent = '0';
+        tmpCtx.putImageData(buildElevationImageData(0), 0, 0);
+        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+      };
+
       const imgData = buildElevationImageData(0);
       tmpCtx.putImageData(imgData, 0, 0);
 
