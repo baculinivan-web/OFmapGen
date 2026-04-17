@@ -29,7 +29,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let brushMode = 'solid'; // 'solid' | 'texture'
   let brushSize = 16;
   let painting = false;
-  let lastX = null, lastY = null;
+  let lastX = null, lastY = null, lastAngle = 0;
   let cancelSnapshot = null;
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
@@ -166,22 +166,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   // ── Texture brush — stamp a single dune shape on click ───────────────────
-  // Dune = elongated ellipse (3:1 ratio) rotated by noise-based angle,
-  // with noisy edges so it looks organic. Transparent outside the shape.
-  function paintTextureAt(cx, cy) {
+  // Dune = elongated ellipse perpendicular to stroke direction,
+  // with noisy edges. Fixed orientation — no rotation per position.
+  function paintTextureAt(cx, cy, strokeAngle) {
     const pc = paintCanvas.getContext('2d');
     const r  = brushSize;
 
-    // Dune proportions: long axis = r, short axis = r/3
-    const ra = r;          // semi-major
-    const rb = r / 3;      // semi-minor
+    const ra = r;        // semi-major (across stroke = wide)
+    const rb = r / 3;    // semi-minor (along stroke = thin)
 
-    // Deterministic rotation based on position (so same spot = same angle)
-    const angle = fbm(cx * 0.3, cy * 0.3) * Math.PI; // 0..π
-
+    // Dune is perpendicular to stroke direction
+    const angle = strokeAngle + Math.PI / 2;
     const cosA = Math.cos(angle), sinA = Math.sin(angle);
 
-    // Bounding box of rotated ellipse
     const bw = Math.ceil(Math.sqrt(ra*ra*cosA*cosA + rb*rb*sinA*sinA));
     const bh = Math.ceil(Math.sqrt(ra*ra*sinA*sinA + rb*rb*cosA*cosA));
 
@@ -198,33 +195,23 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
     for (let py = y0; py <= y1; py++) {
       for (let px = x0; px <= x1; px++) {
-        // Rotate point into ellipse local space
         const dx = px - cx, dy = py - cy;
-        const lx =  dx * cosA + dy * sinA;  // along major axis
-        const ly = -dx * sinA + dy * cosA;  // along minor axis
+        const lx =  dx * cosA + dy * sinA;
+        const ly = -dx * sinA + dy * cosA;
 
-        // Ellipse distance (0 = center, 1 = edge)
         const ed = Math.sqrt((lx/ra)*(lx/ra) + (ly/rb)*(ly/rb));
         if (ed > 1.0) continue;
 
-        // Noise-warped edge: adds organic jaggedness
         const n = fbm(px * 1.2, py * 1.2);
-        const edgeNoise = n * 0.35; // how much noise warps the edge
-        const effDist = ed + edgeNoise;
+        const effDist = ed + n * 0.3;
         if (effDist > 1.05) continue;
 
-        // Falloff: sharp ridge at center, fades to edges
         const falloff = Math.max(0, 1 - effDist);
-        // Asymmetric: steeper on one side (windward vs leeward)
         const ridgeFalloff = Math.pow(falloff, 0.6);
-
-        // Only paint the "ridge" part — sparse near edges
-        const threshold = 0.15 + (1 - ridgeFalloff) * 0.3;
-        if (n < threshold) continue;
+        if (n < 0.15 + (1 - ridgeFalloff) * 0.3) continue;
 
         const alpha = Math.min(1, ridgeFalloff * 1.4);
         const idx = ((py - y0) * w + (px - x0)) * 4;
-
         const ea = d[idx+3] / 255;
         const oa = alpha + ea * (1 - alpha);
         if (oa < 0.001) continue;
@@ -237,19 +224,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.putImageData(imgData, x0, y0);
   }
 
-  function paintAt(px, py) {
-    if (brushMode === 'texture') paintTextureAt(px, py);
+  function paintAt(px, py, angle = 0) {
+    if (brushMode === 'texture') paintTextureAt(px, py, angle);
     else paintSolidAt(px, py);
   }
 
   function paintLine(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    // Texture mode: stamp every ~brushSize*1.5 px so dunes don't overlap too much
+    const angle = Math.atan2(dy, dx);
     const stepFactor = brushMode === 'texture' ? 1.5 : 0.4;
     const steps = Math.max(1, Math.ceil(dist / (brushSize * stepFactor)));
     for (let i = 0; i <= steps; i++) {
-      paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps));
+      paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps), angle);
     }
   }
 
@@ -260,7 +247,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
-    paintAt(x, y);
+    paintAt(x, y, lastAngle);
     redraw();
   });
 
@@ -268,6 +255,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!painting) return;
     e.preventDefault();
     const [x, y] = toCanvasCoords(e);
+    const dx = x - lastX, dy = y - lastY;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) lastAngle = Math.atan2(dy, dx);
     paintLine(lastX, lastY, x, y);
     lastX = x; lastY = y;
     redraw();
@@ -282,7 +271,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
-    paintAt(x, y);
+    paintAt(x, y, lastAngle);
     redraw();
   }, { passive: false });
 
@@ -290,6 +279,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!painting) return;
     e.preventDefault();
     const [x, y] = toCanvasCoords(e);
+    const dx = x - lastX, dy = y - lastY;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) lastAngle = Math.atan2(dy, dx);
     paintLine(lastX, lastY, x, y);
     lastX = x; lastY = y;
     redraw();
