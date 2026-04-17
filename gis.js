@@ -207,25 +207,41 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       gisStatus.textContent = `Loading: Loading water features from OpenStreetMap…`;
       try {
         const bbox = `${south},${west},${north},${east}`;
+        const OVERPASS_SERVERS = [
+          'https://overpass-api.de/api/interpreter',
+          'https://overpass.kumi.systems/api/interpreter',
+          'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+        ];
 
-        // Query 1: ways (waterways + water polygons) — fast
-        const waysQuery = `[out:json][timeout:25];(way["waterway"~"^(river|stream|canal|drain)$"](${bbox});way["natural"~"^(water|wetland|bay)$"](${bbox});way["water"](${bbox}););out geom;`;
-        const [waysResp] = await Promise.all([
-          fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: waysQuery }),
-        ]);
+        async function overpassFetch(query) {
+          for (const server of OVERPASS_SERVERS) {
+            try {
+              const resp = await fetch(server, { method: 'POST', body: query, signal: AbortSignal.timeout(20000) });
+              if (resp.ok) return resp;
+              console.warn(`[GIS] ${server} returned ${resp.status}, trying next…`);
+            } catch (e) {
+              console.warn(`[GIS] ${server} failed: ${e.message}, trying next…`);
+            }
+          }
+          return null;
+        }
+
+        // Query 1: ways (waterways + water polygons)
+        const waysQuery = `[out:json][timeout:20];(way["waterway"~"^(river|stream|canal|drain)$"](${bbox});way["natural"~"^(water|wetland|bay)$"](${bbox});way["water"](${bbox}););out geom;`;
+        const waysResp = await overpassFetch(waysQuery);
 
         let elements = [];
-        if (waysResp.ok) {
+        if (waysResp) {
           const data = await waysResp.json().catch(() => ({ elements: [] }));
           elements = data.elements || [];
         }
         console.log(`[GIS] ways: ${elements.length}`);
 
-        // Query 2: relations — separate request to avoid timeout
-        const relQuery = `[out:json][timeout:25];relation["natural"~"^(water|wetland)$"](${bbox});out geom;`;
+        // Query 2: relations
+        const relQuery = `[out:json][timeout:20];relation["natural"~"^(water|wetland)$"](${bbox});out geom;`;
         try {
-          const relResp = await fetch('https://overpass-api.de/api/interpreter', { method: 'POST', body: relQuery });
-          if (relResp.ok) {
+          const relResp = await overpassFetch(relQuery);
+          if (relResp) {
             const relData = await relResp.json().catch(() => ({ elements: [] }));
             const rels = relData.elements || [];
             console.log(`[GIS] relations: ${rels.length}`, rels.map(r => `${r.id} "${r.tags?.name||''}" members:${(r.members||[]).length} geom:${(r.members||[]).filter(m=>m.geometry?.length>0).length}`));
