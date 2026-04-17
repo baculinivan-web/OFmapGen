@@ -1,5 +1,6 @@
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
 import { initGis } from './gis.js';
+import { initPaint } from './paint.js';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 
@@ -236,6 +237,8 @@ worker.onmessage = ({ data }) => {
   const { pixels, width, height } = data;
   outCanvas.width = width; outCanvas.height = height;
   outCanvas.getContext('2d').putImageData(new ImageData(pixels, width, height), 0, 0);
+  painter.onRenderComplete();
+  painter.reapply();
   preview.src = outCanvas.toDataURL('image/png');
   preview.style.display = 'block';
   placeholder.style.display = 'none';
@@ -807,6 +810,46 @@ function countLandTiles() {
   return count;
 }
 
+
+// ── Paint tool ────────────────────────────────────────────────────────────────
+const painter = initPaint({
+  outCanvas,
+  preview,
+  onPaintChange: () => {
+    downloadBtn.disabled = false;
+    downloadSrcBtn.disabled = false;
+    enableNationBtn();
+  },
+});
+
+const paintToggle   = document.getElementById('paintToggle');
+const paintControls = document.getElementById('paintControls');
+const sliderBrush   = document.getElementById('sliderBrush');
+const valBrush      = document.getElementById('valBrush');
+const clearPaintBtn = document.getElementById('clearPaintBtn');
+const paintBtns     = document.querySelectorAll('.paint-btn');
+
+paintToggle.addEventListener('change', () => {
+  const on = paintToggle.checked;
+  paintControls.style.display = on ? 'block' : 'none';
+  painter.setActive(on);
+});
+
+paintBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    paintBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    painter.setTerrain(btn.dataset.terrain);
+  });
+});
+
+sliderBrush.addEventListener('input', () => {
+  valBrush.textContent = sliderBrush.value;
+  painter.setBrushSize(parseInt(sliderBrush.value));
+  updateTrack(sliderBrush, parseInt(sliderBrush.value) / 80);
+});
+
+clearPaintBtn.addEventListener('click', () => painter.clearPaint());
 
 initGis({
   srcCanvas, outCanvas, imgInfo, fileNameEl,

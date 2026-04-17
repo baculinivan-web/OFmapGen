@@ -295,3 +295,22 @@ footer a:hover { color: var(--text); }
 .nation-marker:hover .nm-remove,
 .nation-marker:hover .nm-edit { opacity: 1; }
 
+
+/* Paint terrain tools */
+.paint-terrain-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.paint-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2); color: var(--muted);
+  font-size: 0.8rem; font-family: inherit; font-weight: 500;
+  cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.paint-btn.active {
+  background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
+}
+.paint-btn .legend-swatch { width: 14px; height: 14px; flex-shrink: 0; }
