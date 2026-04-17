@@ -682,7 +682,7 @@ downloadArchiveBtn.addEventListener('click', () => {
         <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:2px;">Choose your OS</div>
 
         <button id="osMac" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <span style="font-size:20px;flex-shrink:0;line-height:1;">🍎</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
           <div>
             <div style="font-size:0.88rem;font-weight:500;color:var(--text);">macOS</div>
             <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.command</code></div>
@@ -690,7 +690,7 @@ downloadArchiveBtn.addEventListener('click', () => {
         </button>
 
         <button id="osWin" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <span style="font-size:20px;flex-shrink:0;line-height:1;">🪟</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V3l-9 1.68V12h9zm-17 1h6v6.57L3 18.25V13zm17 0h-9v7.32L20 22V13z"/></svg>
           <div>
             <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Windows</div>
             <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.bat</code></div>
@@ -698,7 +698,7 @@ downloadArchiveBtn.addEventListener('click', () => {
         </button>
 
         <button id="osLinux" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <span style="font-size:20px;flex-shrink:0;line-height:1;">🐧</span>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm-2.5-6.5c.83 0 1.5-.67 1.5-1.5S10.33 10.5 9.5 10.5 8 11.17 8 12s.67 1.5 1.5 1.5zm5 0c.83 0 1.5-.67 1.5-1.5s-.67-1.5-1.5-1.5-1.5.67-1.5 1.5.67 1.5 1.5 1.5zm-2.5 3c-1.5 0-2.81-.83-3.5-2.06.87.56 1.9.9 3 .9s2.13-.34 3-.9c-.69 1.23-2 2.06-3.5 2.06z"/></svg>
           <div>
             <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Linux</div>
             <div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.sh</code></div>
