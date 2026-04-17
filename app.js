@@ -281,8 +281,8 @@ function updateTrack(input, val) {
   input.style.background = `linear-gradient(to right, var(--accent) ${pct}%, var(--border) ${pct}%)`;
 }
 
-Object.values(sliders).forEach(s => s.addEventListener('input', scheduleRender));
-invertCheck.addEventListener('change', scheduleRender);
+Object.values(sliders).forEach(s => s.addEventListener('input', () => scheduleRender()));
+invertCheck.addEventListener('change', () => scheduleRender());
 
 // ── Download map PNG ──────────────────────────────────────────────────────────
 downloadBtn.addEventListener('click', () => {
