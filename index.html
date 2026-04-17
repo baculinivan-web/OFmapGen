@@ -13,6 +13,15 @@
 <body>
 <div class="page">
 
+  <!-- Notice banner -->
+  <div id="noticeBanner" style="background:rgba(255,180,0,0.08); border-bottom:1px solid rgba(255,180,0,0.2); padding:10px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:0.82rem; color:var(--text);">
+    <div style="display:flex; align-items:center; gap:10px;">
+      <span style="font-size:1rem;">🔧</span>
+      <span>Lake/water body loading from real map is currently being fixed — rivers still work. Stay tuned.</span>
+    </div>
+    <button onclick="document.getElementById('noticeBanner').style.display='none'" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;line-height:1;padding:0;flex-shrink:0;">✕</button>
+  </div>
+
   <div class="header">
     <div class="header-text">
       <h1>OpenFront Map Generator</h1>
