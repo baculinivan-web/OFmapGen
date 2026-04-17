@@ -802,122 +802,139 @@
     rafId = requestAnimationFrame(render);
   }
 
-  // --- Flood-fill region filter ---
-  function filterSmallRegions(zones, width, height, minSize) {
-    const visited = new Int32Array(width * height);
-    const result  = new Uint8Array(zones);
-    let labelId   = 0;
+  // ── Web Worker (inline) ──────────────────────────────────────────────────
+  const workerCode = `
+const COLORS = {
+  water:    [18,  15,  34],
+  plain:    [140, 170, 88],
+  highland: [176, 159, 114],
+  mountain: [190, 190, 190],
+};
 
-    for (let start = 0; start < width * height; start++) {
-      if (visited[start]) continue;
-      labelId++;
-      const zone  = zones[start];
-      const stack = [start];
-      const cells = [];
-      visited[start] = labelId;
-
-      while (stack.length) {
-        const idx = stack.pop();
-        cells.push(idx);
-        const x = idx % width;
-        const y = (idx / width) | 0;
-        const neighbours = [
-          x > 0          ? idx - 1     : -1,
-          x < width - 1  ? idx + 1     : -1,
-          y > 0          ? idx - width : -1,
-          y < height - 1 ? idx + width : -1,
-        ];
-        for (const n of neighbours) {
-          if (n >= 0 && !visited[n] && zones[n] === zone) {
-            visited[n] = labelId;
-            stack.push(n);
-          }
-        }
-      }
-
-      if (cells.length < minSize) {
-        const freq = {};
-        for (const idx of cells) {
-          const x = idx % width;
-          const y = (idx / width) | 0;
-          const neighbours = [
-            x > 0          ? idx - 1     : -1,
-            x < width - 1  ? idx + 1     : -1,
-            y > 0          ? idx - width : -1,
-            y < height - 1 ? idx + width : -1,
-          ];
-          for (const n of neighbours) {
-            if (n >= 0 && zones[n] !== zone) {
-              freq[zones[n]] = (freq[zones[n]] || 0) + 1;
-            }
-          }
-        }
-        let best = zone, bestCount = 0;
-        for (const [z, c] of Object.entries(freq)) {
-          if (c > bestCount) { bestCount = c; best = parseInt(z); }
-        }
-        for (const idx of cells) result[idx] = best;
-      }
+function filterSmallRegions(zones, width, height, minSize) {
+  const visited = new Int32Array(width * height);
+  const result  = new Uint8Array(zones);
+  let labelId   = 0;
+  for (let start = 0; start < width * height; start++) {
+    if (visited[start]) continue;
+    labelId++;
+    const zone = zones[start];
+    const stack = [start], cells = [];
+    visited[start] = labelId;
+    while (stack.length) {
+      const idx = stack.pop(); cells.push(idx);
+      const x = idx % width, y = (idx / width) | 0;
+      const nb = [x>0?idx-1:-1, x<width-1?idx+1:-1, y>0?idx-width:-1, y<height-1?idx+width:-1];
+      for (const n of nb) if (n>=0 && !visited[n] && zones[n]===zone) { visited[n]=labelId; stack.push(n); }
     }
-    return result;
+    if (cells.length < minSize) {
+      const freq = {};
+      for (const idx of cells) {
+        const x = idx % width, y = (idx / width) | 0;
+        const nb = [x>0?idx-1:-1, x<width-1?idx+1:-1, y>0?idx-width:-1, y<height-1?idx+width:-1];
+        for (const n of nb) if (n>=0 && zones[n]!==zone) freq[zones[n]] = (freq[zones[n]]||0)+1;
+      }
+      let best = zone, bestCount = 0;
+      for (const [z,c] of Object.entries(freq)) if (c>bestCount) { bestCount=c; best=+z; }
+      for (const idx of cells) result[idx] = best;
+    }
+  }
+  return result;
+}
+
+function smoothPass(zones, width, height) {
+  const out = new Uint8Array(zones);
+  for (let y=1; y<height-1; y++) for (let x=1; x<width-1; x++) {
+    const i = y*width+x, freq = {};
+    for (const n of [i-1,i+1,i-width,i+width]) freq[zones[n]] = (freq[zones[n]]||0)+1;
+    let best=zones[i], bestC=0;
+    for (const [z,c] of Object.entries(freq)) if (c>bestC) { bestC=c; best=+z; }
+    if (bestC===4) out[i]=best;
+  }
+  return out;
+}
+
+function smoothPassMasked(zones, width, height, mask) {
+  const out = new Uint8Array(zones);
+  for (let y=1; y<height-1; y++) for (let x=1; x<width-1; x++) {
+    const i = y*width+x;
+    if (mask[i]===0) continue;
+    const freq = {};
+    for (const n of [i-1,i+1,i-width,i+width]) freq[zones[n]] = (freq[zones[n]]||0)+1;
+    let best=zones[i], bestC=0;
+    for (const [z,c] of Object.entries(freq)) if (+c>bestC) { bestC=+c; best=+z; }
+    if (bestC>=3) out[i]=best;
+  }
+  return out;
+}
+
+self.onmessage = function({ data }) {
+  const { src, width, height, w, p, h, invert, algo, minSize, passes, aiMask } = data;
+
+  // brightness
+  const br = new Float32Array(width * height);
+  for (let i=0; i<width*height; i++) {
+    const si=i*4, b=(src[si]+src[si+1]+src[si+2])/(3*255);
+    br[i] = invert ? 1-b : b;
   }
 
-  // Majority-vote smoothing: removes isolated single pixels
-  function smoothPass(zones, width, height) {
-    const out = new Uint8Array(zones);
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const i = y * width + x;
-        const freq = {};
-        for (const n of [i-1, i+1, i-width, i+width]) {
-          freq[zones[n]] = (freq[zones[n]] || 0) + 1;
-        }
-        let best = zones[i], bestC = 0;
-        for (const [z, c] of Object.entries(freq)) {
-          if (c > bestC) { bestC = c; best = parseInt(z); }
-        }
-        if (bestC === 4) out[i] = best;
-      }
-    }
-    return out;
+  // classify
+  let zones = new Uint8Array(width * height);
+  for (let i=0; i<width*height; i++) {
+    const b=br[i]; zones[i] = b<=w?0:b<=p?1:b<=h?2:3;
   }
+
+  if (algo === 'smooth') {
+    zones = filterSmallRegions(zones, width, height, minSize);
+    for (let i=0; i<passes; i++) zones = smoothPass(zones, width, height);
+  } else if (algo === 'advanced' && aiMask) {
+    const mask = new Uint8Array(aiMask);
+    for (let i=0; i<zones.length; i++) if (mask[i]===0) zones[i]=0;
+    for (let i=0; i<3; i++) zones = smoothPassMasked(zones, width, height, mask);
+    zones = filterSmallRegions(zones, width, height, 30);
+  }
+
+  // colorize → Uint8ClampedArray
+  const ZONE_COLORS = [COLORS.water, COLORS.plain, COLORS.highland, COLORS.mountain];
+  const pixels = new Uint8ClampedArray(width * height * 4);
+  for (let i=0; i<width*height; i++) {
+    const si=i*4, c=ZONE_COLORS[zones[i]];
+    pixels[si]=c[0]; pixels[si+1]=c[1]; pixels[si+2]=c[2]; pixels[si+3]=255;
+  }
+
+  self.postMessage({ pixels, width, height }, [pixels.buffer]);
+};
+`;
+
+  const workerBlob = new Blob([workerCode], { type: 'application/javascript' });
+  const workerUrl  = URL.createObjectURL(workerBlob);
+  const worker     = new Worker(workerUrl);
+  let   pendingRender = null;
+
+  worker.onmessage = ({ data }) => {
+    const { pixels, width, height } = data;
+    outCanvas.width  = width;
+    outCanvas.height = height;
+    const ctx = outCanvas.getContext('2d');
+    ctx.putImageData(new ImageData(pixels, width, height), 0, 0);
+    preview.src = outCanvas.toDataURL('image/png');
+    preview.style.display = 'block';
+    placeholder.style.display = 'none';
+    downloadBtn.disabled = false;
+    if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
+  };
+
+  // ── Flood-fill / smooth kept on main thread only for legacy reference ────
+  // (all processing now happens in worker)
 
   // --- Advanced: apply AI mask — background = water, foreground keeps brightness zones ---
   function applyAiMask(zones, width, height) {
     if (!aiMask || aiMask.length !== width * height) return zones;
     const result = new Uint8Array(zones);
     for (let i = 0; i < result.length; i++) {
-      if (aiMask[i] === 0) result[i] = 0; // background → ocean
-      // foreground keeps its brightness-based zone (water inside = rivers/lakes)
+      if (aiMask[i] === 0) result[i] = 0;
     }
-    // Run smooth passes so internal water regions look natural
-    let smoothed = result;
-    for (let pass = 0; pass < 3; pass++) {
-      smoothed = smoothPassMasked(smoothed, width, height);
-    }
-    smoothed = filterSmallRegions(smoothed, width, height, 30);
-    return smoothed;
-  }
-
-  // Smooth pass that never touches ocean-background pixels (aiMask === 0)
-  function smoothPassMasked(zones, width, height) {
-    const out = new Uint8Array(zones);
-    for (let y = 1; y < height - 1; y++) {
-      for (let x = 1; x < width - 1; x++) {
-        const i = y * width + x;
-        if (!aiMask || aiMask[i] === 0) continue; // don't touch ocean
-        const freq = {};
-        for (const n of [i-1, i+1, i-width, i+width]) {
-          freq[zones[n]] = (freq[zones[n]] || 0) + 1;
-        }
-        let best = zones[i], bestC = 0;
-        for (const [z, c] of Object.entries(freq)) {
-          if (+c > bestC) { bestC = +c; best = +z; }
-        }
-        if (bestC >= 3) out[i] = best;
-      }
-    }
-    return out;
+    return result;
   }
 
   function render() {
@@ -941,58 +958,20 @@
     updateTrack(sliders.plain,    p);
     updateTrack(sliders.highland, h);
 
-    const invert = invertCheck.checked;
-    const src    = srcImageData.data;
-    const width  = srcImageData.width;
-    const height = srcImageData.height;
-
-    outCanvas.width  = width;
-    outCanvas.height = height;
-    const ctx = outCanvas.getContext('2d');
-    const out = ctx.createImageData(width, height);
-    const d   = out.data;
-
-    // Build raw brightness array
-    const br = new Float32Array(width * height);
-    for (let i = 0; i < width * height; i++) {
-      const si = i * 4;
-      let b = (src[si] + src[si+1] + src[si+2]) / (3 * 255);
-      br[i] = invert ? 1 - b : b;
-    }
-
-    // Classify each pixel into zone index: 0=water,1=plain,2=highland,3=mountain
-    let zones = new Uint8Array(width * height);
-    for (let i = 0; i < width * height; i++) {
-      const b = br[i];
-      zones[i] = b <= w ? 0 : b <= p ? 1 : b <= h ? 2 : 3;
-    }
-
-    if (currentAlgo === 'smooth') {
-      const minSize = parseInt(sliderMinIsland.value);
-      const passes  = parseInt(sliderPasses.value);
-      zones = filterSmallRegions(zones, width, height, minSize);
-      for (let i = 0; i < passes; i++) {
-        zones = smoothPass(zones, width, height);
-      }
-    } else if (currentAlgo === 'advanced') {
-      zones = applyAiMask(zones, width, height);
-    }
-
-    const ZONE_COLORS = [COLORS.water, COLORS.plain, COLORS.highland, COLORS.mountain];
-    for (let i = 0; i < width * height; i++) {
-      const si    = i * 4;
-      const color = ZONE_COLORS[zones[i]];
-      d[si]   = color[0];
-      d[si+1] = color[1];
-      d[si+2] = color[2];
-      d[si+3] = 255;
-    }
-
-    ctx.putImageData(out, 0, 0);
-    preview.src = outCanvas.toDataURL('image/png');
-    preview.style.display = 'block';
-    placeholder.style.display = 'none';
-    downloadBtn.disabled = false;
+    const msg = {
+      src:     srcImageData.data,
+      width:   srcImageData.width,
+      height:  srcImageData.height,
+      w, p, h,
+      invert:  invertCheck.checked,
+      algo:    currentAlgo,
+      minSize: parseInt(sliderMinIsland.value),
+      passes:  parseInt(sliderPasses.value),
+      aiMask:  aiMask ? aiMask.buffer : null,
+    };
+    const transfers = [msg.src.buffer.slice(0)];
+    if (msg.aiMask) transfers.push(msg.aiMask.slice(0));
+    worker.postMessage(msg, transfers);
   }
 
   function updateTrack(input, val) {
