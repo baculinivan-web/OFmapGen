@@ -352,10 +352,20 @@
           <span id="paintBrushVal" style="font-size:0.78rem;color:var(--muted);min-width:24px;text-align:right;">16</span>
         </div>
         <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear all</button>
+        <div style="display:flex;gap:6px;margin-top:4px;">
+          <button class="btn btn-ghost" id="paintUndoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Undo (Ctrl+Z)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 5.5a9 9 0 0 1 5 7.5"/></svg>
+            Undo
+          </button>
+          <button class="btn btn-ghost" id="paintRedoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Redo (Ctrl+Shift+Z)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 5.5a9 9 0 0 0-5 7.5"/></svg>
+            Redo
+          </button>
+        </div>
       </div>
     </div>
     <div class="modal-footer">
-      <span style="font-size:0.75rem;color:var(--muted);flex:2;line-height:1.4;">Click or drag to paint · Choose terrain and brush size</span>
+      <span style="font-size:0.75rem;color:var(--muted);flex:2;line-height:1.4;">Click or drag to paint · Ctrl+Z undo · Ctrl+Shift+Z redo</span>
       <button class="btn btn-primary" id="paintDoneBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;flex:1;">Apply & close</button>
       <button class="btn btn-ghost" id="paintCancelBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;">Cancel</button>
     </div>
