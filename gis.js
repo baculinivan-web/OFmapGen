@@ -186,21 +186,41 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       const tmpC = document.createElement('canvas');
       tmpC.width = cropW; tmpC.height = cropH;
       const tmpCtx = tmpC.getContext('2d', { willReadFrequently: true });
-      const imgData = tmpCtx.createImageData(cropW, cropH);
-      const d = imgData.data;
 
-      for (let i = 0; i < cropW * cropH; i++) {
-        const e = elevations[i];
-        let v;
-        if (e <= 0) {
-          v = Math.max(0, Math.min(99, Math.round(99 * (1 + e / 200))));
-        } else {
-          const t = Math.sqrt(Math.min(e, maxE) / maxE);
-          v = Math.round(102 + t * 153);
+      const sliderSeaLevel = document.getElementById('sliderSeaLevel');
+      const valSeaLevel    = document.getElementById('valSeaLevel');
+      sliderSeaLevel.value = 0;
+      valSeaLevel.textContent = '0';
+
+      function buildElevationImageData(seaLevel) {
+        const imgData = tmpCtx.createImageData(cropW, cropH);
+        const d = imgData.data;
+        for (let i = 0; i < cropW * cropH; i++) {
+          const e = elevations[i] - seaLevel;
+          let v;
+          if (e <= 0) {
+            v = Math.max(0, Math.min(99, Math.round(99 * (1 + e / 200))));
+          } else {
+            const t = Math.sqrt(Math.min(e, maxE) / maxE);
+            v = Math.round(102 + t * 153);
+          }
+          const si = i * 4;
+          d[si] = d[si+1] = d[si+2] = v; d[si+3] = 255;
         }
-        const si = i * 4;
-        d[si] = d[si+1] = d[si+2] = v; d[si+3] = 255;
+        return imgData;
       }
+
+      // Update value label live while dragging, recalculate only on release
+      sliderSeaLevel.oninput  = () => { valSeaLevel.textContent = sliderSeaLevel.value; };
+      sliderSeaLevel.onchange = () => {
+        const seaLevel = parseInt(sliderSeaLevel.value);
+        valSeaLevel.textContent = seaLevel;
+        const newImgData = buildElevationImageData(seaLevel);
+        tmpCtx.putImageData(newImgData, 0, 0);
+        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+      };
+
+      const imgData = buildElevationImageData(0);
       tmpCtx.putImageData(imgData, 0, 0);
 
       // Rivers + water bodies from Overpass
