@@ -1,5 +1,7 @@
 # OpenFront Map Generator
 
+**Live at [maps.mivps.ru](https://maps.mivps.ru)**
+
 Convert any image — or real-world elevation data — into a playable map for [openfront.io](https://openfront.io).
 
 ## Features
