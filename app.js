@@ -421,6 +421,7 @@ function showWaterToast() {
 function showEditPopup(cx, cy, name, flag, title) {
   editPopupTitle.textContent = title;
   nameInput.value = name;
+  nameInput.dataset.lastSuggested = '';
   selectedFlag = flag;
   updateFlagPreview();
   flagSearch.value = flag ? (countriesList.find(c => c.code === flag) || {}).name || flag : '';
@@ -463,9 +464,18 @@ function updateSuggested(name) {
   const q = name.trim().toLowerCase();
   if (!q || !countriesList.length) { suggestedFlags.style.display = 'none'; return; }
   const matches = countriesList.filter(c => c.name.toLowerCase().includes(q)).slice(0, 5);
-  if (!matches.length) { suggestedFlags.style.display = 'none'; return; }
+  if (!matches.length) {
+    // No matches — offer "None" option
+    suggestedList.innerHTML = `
+      <button class="sug-flag" data-code="" data-name=""
+        style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;display:flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--muted);">
+        <span>No flag</span>
+      </button>`;
+    suggestedFlags.style.display = 'block';
+    return;
+  }
   suggestedList.innerHTML = matches.map(c => `
-    <button class="sug-flag" data-code="${escHtml(c.code)}" title="${escHtml(c.name)}"
+    <button class="sug-flag" data-code="${escHtml(c.code)}" data-name="${escHtml(c.name)}"
       style="background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:3px 5px;cursor:pointer;display:flex;align-items:center;gap:5px;font-size:0.72rem;color:var(--text);">
       <img src="${flagUrl(c.code)}" style="width:22px;height:14px;object-fit:contain;" onerror="this.style.display='none'" />
       <span style="max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(c.name)}</span>
@@ -477,9 +487,16 @@ suggestedList.addEventListener('click', (e) => {
   const btn = e.target.closest('.sug-flag');
   if (!btn) return;
   selectedFlag = btn.dataset.code;
-  flagSearch.value = btn.querySelector('span').textContent;
+  const suggestedName = btn.dataset.name;
+  // Apply flag
+  flagSearch.value = suggestedName || '';
   flagResults.style.display = 'none';
   updateFlagPreview();
+  // Apply name if field is empty or user hasn't typed a custom name
+  if (suggestedName && (!nameInput.value.trim() || nameInput.value.trim().toLowerCase() === nameInput.dataset.lastSuggested)) {
+    nameInput.value = suggestedName;
+    nameInput.dataset.lastSuggested = suggestedName.toLowerCase();
+  }
 });
 
 nameInput.addEventListener('input', () => updateSuggested(nameInput.value));
