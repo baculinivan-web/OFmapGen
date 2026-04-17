@@ -208,8 +208,8 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       try {
         const bbox = `${south},${west},${north},${east}`;
         const OVERPASS_SERVERS = [
-          'https://overpass.kumi.systems/api/interpreter',
           'https://overpass-api.de/api/interpreter',
+          'https://overpass.kumi.systems/api/interpreter',
           'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
         ];
 
