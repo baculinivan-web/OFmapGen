@@ -26,7 +26,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
 
   let currentTerrain = 'water';
-  let brushMode = 'solid'; // 'solid' | 'texture'
   let brushSize = 16;
   let painting = false;
   let lastX = null, lastY = null;
@@ -134,63 +133,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     pc.fill();
   }
 
-  // ── Texture brush — striped dune pattern (alternating terrain bands) ───────
-  // Stripes run perpendicular to stroke direction, spacing = brushSize/4
-  function paintTextureAt(cx, cy) {
-    const pc = paintCanvas.getContext('2d');
-    const r  = brushSize;
-    const x0 = Math.max(0, Math.floor(cx - r));
-    const y0 = Math.max(0, Math.floor(cy - r));
-    const x1 = Math.min(paintCanvas.width  - 1, Math.ceil(cx + r));
-    const y1 = Math.min(paintCanvas.height - 1, Math.ceil(cy + r));
-    const w  = x1 - x0 + 1, h = y1 - y0 + 1;
-    if (w <= 0 || h <= 0) return;
-
-    const imgData = pc.getImageData(x0, y0, w, h);
-    const d = imgData.data;
-
-    const base = TERRAIN_COLORS[currentTerrain];
-    const alt  = { water: TERRAIN_COLORS.plain, plain: TERRAIN_COLORS.highland, highland: TERRAIN_COLORS.mountain, mountain: TERRAIN_COLORS.highland }[currentTerrain];
-
-    // Stripe width in pixels — scales with brush
-    const stripeW = Math.max(2, Math.round(brushSize * 0.18));
-
-    for (let py = y0; py <= y1; py++) {
-      for (let px = x0; px <= x1; px++) {
-        const dx = px - cx, dy = py - cy;
-        const dist = Math.sqrt(dx*dx + dy*dy);
-        if (dist > r) continue;
-
-        const t = dist / r;
-        const alpha = (1 - t * t) * 0.85;
-
-        // Stripe along stroke-perpendicular axis using y (horizontal stripes)
-        const stripe = Math.floor(py / stripeW) % 2;
-        const col = stripe === 0 ? base : alt;
-
-        const idx = ((py - y0) * w + (px - x0)) * 4;
-        const ea = d[idx+3] / 255;
-        const oa = alpha + ea * (1 - alpha);
-        if (oa < 0.001) continue;
-        d[idx]   = Math.round((col[0] * alpha + d[idx]   * ea * (1 - alpha)) / oa);
-        d[idx+1] = Math.round((col[1] * alpha + d[idx+1] * ea * (1 - alpha)) / oa);
-        d[idx+2] = Math.round((col[2] * alpha + d[idx+2] * ea * (1 - alpha)) / oa);
-        d[idx+3] = Math.round(oa * 255);
-      }
-    }
-    pc.putImageData(imgData, x0, y0);
-  }
-
   function paintAt(px, py) {
-    if (brushMode === 'texture') paintTextureAt(px, py);
-    else paintSolidAt(px, py);
+    paintSolidAt(px, py);
   }
 
   function paintLine(x0, y0, x1, y1) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const spacing = brushSize * (brushMode === 'texture' ? 0.2 : 0.4);
-    const steps = Math.max(1, Math.ceil(dist / spacing));
+    const steps = Math.max(1, Math.ceil(dist / (brushSize * 0.4)));
     for (let i = 1; i <= steps; i++) {
       paintAt(x0 + dx * (i / steps), y0 + dy * (i / steps));
     }
@@ -260,20 +210,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       btn.classList.add('active');
       currentTerrain = btn.dataset.terrain;
     });
-  });
-
-  // ── Brush mode buttons ─────────────────────────────────────────────────────
-  const brushModeSolid   = document.getElementById('brushModeSolid');
-  const brushModeTexture = document.getElementById('brushModeTexture');
-  brushModeSolid.addEventListener('click', () => {
-    brushMode = 'solid';
-    brushModeSolid.classList.add('active');
-    brushModeTexture.classList.remove('active');
-  });
-  brushModeTexture.addEventListener('click', () => {
-    brushMode = 'texture';
-    brushModeTexture.classList.add('active');
-    brushModeSolid.classList.remove('active');
   });
 
   brushSlider.addEventListener('input', () => {
