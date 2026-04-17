@@ -363,6 +363,44 @@
 
     .btn-primary { background: var(--accent); color: #0d1117; }
 
+    .algo-switch {
+      display: flex;
+      gap: 6px;
+    }
+
+    .algo-btn {
+      flex: 1;
+      padding: 7px 0;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--muted);
+      font-size: 0.8rem;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .algo-btn.active {
+      background: var(--accent-dim);
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .algo-hint {
+      margin-top: 10px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      line-height: 1.5;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      word-break: break-word;
+      white-space: normal;
+    }
+
     canvas { display: none; }
 
     footer {
@@ -445,6 +483,27 @@
             <input type="checkbox" id="invertCheck" />
             <span class="toggle-track"></span>
           </label>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">Algorithm</div>
+        <div class="algo-switch">
+          <button class="algo-btn" id="algoLegacy">Legacy</button>
+          <button class="algo-btn active" id="algoSmooth">Smooth</button>
+        </div>
+        <p class="algo-hint" id="algoHint">Removes tiny noise islands for more realistic coastlines</p>
+        <div id="smoothOptions" style="display:block; margin-top:14px;">
+          <div class="slider-row">
+            <div class="slider-label">Min island size (px)</div>
+            <span class="slider-val" id="valMinIsland">50</span>
+            <input type="range" id="sliderMinIsland" min="1" max="500" step="1" value="50" />
+          </div>
+          <div class="slider-row" style="margin-top:10px;">
+            <div class="slider-label">Smooth passes</div>
+            <span class="slider-val" id="valPasses">2</span>
+            <input type="range" id="sliderPasses" min="1" max="6" step="1" value="2" />
+          </div>
         </div>
       </div>
 
@@ -545,6 +604,46 @@
     highland: document.getElementById('valHighland'),
   };
 
+  // Algorithm toggle
+  let currentAlgo = 'smooth';
+  const algoLegacyBtn  = document.getElementById('algoLegacy');
+  const algoSmoothBtn  = document.getElementById('algoSmooth');
+  const smoothOptions  = document.getElementById('smoothOptions');
+  const sliderMinIsland = document.getElementById('sliderMinIsland');
+  const valMinIsland    = document.getElementById('valMinIsland');
+  const sliderPasses    = document.getElementById('sliderPasses');
+  const valPasses       = document.getElementById('valPasses');
+
+  const algoHint = document.getElementById('algoHint');
+
+  algoLegacyBtn.addEventListener('click', () => {
+    currentAlgo = 'legacy';
+    algoLegacyBtn.classList.add('active');
+    algoSmoothBtn.classList.remove('active');
+    smoothOptions.style.display = 'none';
+    algoHint.textContent = 'Pixel-perfect conversion';
+    scheduleRender();
+  });
+
+  algoSmoothBtn.addEventListener('click', () => {
+    currentAlgo = 'smooth';
+    algoSmoothBtn.classList.add('active');
+    algoLegacyBtn.classList.remove('active');
+    smoothOptions.style.display = 'block';
+    algoHint.textContent = 'Removes tiny noise islands for more realistic coastlines';
+    scheduleRender();
+  });
+
+  sliderMinIsland.addEventListener('input', () => {
+    valMinIsland.textContent = sliderMinIsland.value;
+    scheduleRender();
+  });
+
+  sliderPasses.addEventListener('input', () => {
+    valPasses.textContent = sliderPasses.value;
+    scheduleRender();
+  });
+
   let srcImageData = null;
   let rafId = null;
 
@@ -586,6 +685,86 @@
     rafId = requestAnimationFrame(render);
   }
 
+  // --- Flood-fill region filter ---
+  function filterSmallRegions(zones, width, height, minSize) {
+    const visited = new Int32Array(width * height);
+    const result  = new Uint8Array(zones);
+    let labelId   = 0;
+
+    for (let start = 0; start < width * height; start++) {
+      if (visited[start]) continue;
+      labelId++;
+      const zone  = zones[start];
+      const stack = [start];
+      const cells = [];
+      visited[start] = labelId;
+
+      while (stack.length) {
+        const idx = stack.pop();
+        cells.push(idx);
+        const x = idx % width;
+        const y = (idx / width) | 0;
+        const neighbours = [
+          x > 0          ? idx - 1     : -1,
+          x < width - 1  ? idx + 1     : -1,
+          y > 0          ? idx - width : -1,
+          y < height - 1 ? idx + width : -1,
+        ];
+        for (const n of neighbours) {
+          if (n >= 0 && !visited[n] && zones[n] === zone) {
+            visited[n] = labelId;
+            stack.push(n);
+          }
+        }
+      }
+
+      if (cells.length < minSize) {
+        const freq = {};
+        for (const idx of cells) {
+          const x = idx % width;
+          const y = (idx / width) | 0;
+          const neighbours = [
+            x > 0          ? idx - 1     : -1,
+            x < width - 1  ? idx + 1     : -1,
+            y > 0          ? idx - width : -1,
+            y < height - 1 ? idx + width : -1,
+          ];
+          for (const n of neighbours) {
+            if (n >= 0 && zones[n] !== zone) {
+              freq[zones[n]] = (freq[zones[n]] || 0) + 1;
+            }
+          }
+        }
+        let best = zone, bestCount = 0;
+        for (const [z, c] of Object.entries(freq)) {
+          if (c > bestCount) { bestCount = c; best = parseInt(z); }
+        }
+        for (const idx of cells) result[idx] = best;
+      }
+    }
+    return result;
+  }
+
+  // Majority-vote smoothing: removes isolated single pixels
+  function smoothPass(zones, width, height) {
+    const out = new Uint8Array(zones);
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const i = y * width + x;
+        const freq = {};
+        for (const n of [i-1, i+1, i-width, i+width]) {
+          freq[zones[n]] = (freq[zones[n]] || 0) + 1;
+        }
+        let best = zones[i], bestC = 0;
+        for (const [z, c] of Object.entries(freq)) {
+          if (c > bestC) { bestC = c; best = parseInt(z); }
+        }
+        if (bestC === 4) out[i] = best;
+      }
+    }
+    return out;
+  }
+
   function render() {
     if (!srcImageData) return;
 
@@ -603,7 +782,6 @@
     vals.plain.textContent    = p.toFixed(2);
     vals.highland.textContent = h.toFixed(2);
 
-    // Update slider track fill
     updateTrack(sliders.water,    w);
     updateTrack(sliders.plain,    p);
     updateTrack(sliders.highland, h);
@@ -619,17 +797,36 @@
     const out = ctx.createImageData(width, height);
     const d   = out.data;
 
+    // Build raw brightness array
+    const br = new Float32Array(width * height);
     for (let i = 0; i < width * height; i++) {
       const si = i * 4;
-      let br = (src[si] + src[si+1] + src[si+2]) / (3 * 255);
-      if (invert) br = 1 - br;
+      let b = (src[si] + src[si+1] + src[si+2]) / (3 * 255);
+      br[i] = invert ? 1 - b : b;
+    }
 
-      let color;
-      if      (br <= w) color = COLORS.water;
-      else if (br <= p) color = COLORS.plain;
-      else if (br <= h) color = COLORS.highland;
-      else              color = COLORS.mountain;
+    // Classify each pixel into zone index: 0=water,1=plain,2=highland,3=mountain
+    let zones = new Uint8Array(width * height);
+    for (let i = 0; i < width * height; i++) {
+      const b = br[i];
+      zones[i] = b <= w ? 0 : b <= p ? 1 : b <= h ? 2 : 3;
+    }
 
+    if (currentAlgo === 'smooth') {
+      const minSize = parseInt(sliderMinIsland.value);
+      const passes  = parseInt(sliderPasses.value);
+      // Remove small regions iteratively
+      zones = filterSmallRegions(zones, width, height, minSize);
+      // Smooth jagged edges
+      for (let i = 0; i < passes; i++) {
+        zones = smoothPass(zones, width, height);
+      }
+    }
+
+    const ZONE_COLORS = [COLORS.water, COLORS.plain, COLORS.highland, COLORS.mountain];
+    for (let i = 0; i < width * height; i++) {
+      const si    = i * 4;
+      const color = ZONE_COLORS[zones[i]];
       d[si]   = color[0];
       d[si+1] = color[1];
       d[si+2] = color[2];
@@ -637,7 +834,6 @@
     }
 
     ctx.putImageData(out, 0, 0);
-
     preview.src = outCanvas.toDataURL('image/png');
     preview.style.display = 'block';
     placeholder.style.display = 'none';
