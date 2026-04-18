@@ -80,7 +80,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const undoBtn     = document.getElementById('paintUndoBtn');
   const redoBtn     = document.getElementById('paintRedoBtn');
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
-  const brushBtns   = document.querySelectorAll('#paintBrushBtns .paint-brush-btn');
   const loadBrushBtn = document.getElementById('paintLoadBrushBtn');
   const loadBrushInput = document.getElementById('paintLoadBrushInput');
 
@@ -104,6 +103,68 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     brushCache[id] = { type: 'myb', params: parseMybBrush(myb) };
     console.log(`[paint] loaded brush ${id} from fallback`);
   }
+
+  // Create built-in brush buttons
+  const brushBtnsContainer = document.getElementById('paintBrushBtns');
+  BRUSH_PRESETS.forEach((preset, idx) => {
+    const btn = document.createElement('button');
+    btn.className = 'paint-brush-btn';
+    if (idx === 0) btn.classList.add('active'); // First brush is active by default
+    btn.dataset.brush = preset.id;
+    
+    // SVG icons for each brush type
+    const icons = {
+      'solid': '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>',
+      'soft-round': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>',
+      'hard-round': '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>',
+      'dunes': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-30 12 12)"/></svg>',
+    };
+    
+    btn.innerHTML = `${icons[preset.id] || ''}${preset.label}`;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentBrushId = preset.id;
+      updateSpacingVisibility();
+    });
+    brushBtnsContainer.appendChild(btn);
+  });
+
+  // Auto-load default .abr brush pack on init
+  (async () => {
+    try {
+      const resp = await fetch('./brushes-map-free.abr');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const buffer = await resp.arrayBuffer();
+      const brushes = await loadAbrFromArrayBuffer(buffer, 'brushes-map-free.abr');
+      if (brushes && brushes.length > 0) {
+        for (const abrBrush of brushes) {
+          if (!abrBrush.valid) continue;
+          const id = `default-${++customBrushCounter}`;
+          const label = abrBrush.name.length > 20 ? abrBrush.name.slice(0, 20) + '…' : abrBrush.name;
+          brushCache[id] = { type: 'abr', abrBrush };
+          customBrushes.push({ id, label, type: 'abr' });
+          
+          // Add button to UI
+          const btn = document.createElement('button');
+          btn.className = 'paint-brush-btn';
+          btn.dataset.brush = id;
+          btn.title = abrBrush.name;
+          btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>${label}`;
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentBrushId = id;
+            updateSpacingVisibility();
+          });
+          brushBtnsContainer.appendChild(btn);
+        }
+        console.log(`[paint] auto-loaded ${brushes.length} default brushes from brushes-map-free.abr`);
+      }
+    } catch (err) {
+      console.warn('[paint] failed to auto-load default .abr brushes:', err);
+    }
+  })();
 
   // Custom brush loading
   const customBrushes = []; // { id, label, params }
@@ -464,14 +525,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Brush buttons ──────────────────────────────────────────────────────────
-  brushBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      brushBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      currentBrushId = btn.dataset.brush;
-      updateSpacingVisibility();
-    });
-  });
+  // Brush buttons are now created dynamically, event listeners are attached during creation
 
   function updateSpacingVisibility() {
     const brush = brushCache[currentBrushId];
