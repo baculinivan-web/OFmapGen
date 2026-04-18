@@ -318,29 +318,37 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!img || !img.width || !img.height) return;
     
     const scale = size / Math.max(img.width, img.height);
-    const w = img.width * scale;
-    const h = img.height * scale;
+    const w = Math.ceil(img.width * scale);
+    const h = Math.ceil(img.height * scale);
     
-    // Create offscreen canvas for tinting
+    // Create offscreen canvas for compositing
     const temp = document.createElement('canvas');
     temp.width = w;
     temp.height = h;
     const tempCtx = temp.getContext('2d');
     
-    // Draw brush texture
+    // Draw scaled brush texture
     tempCtx.drawImage(img, 0, 0, w, h);
     
-    // Tint with terrain color using multiply blend
-    tempCtx.globalCompositeOperation = 'multiply';
-    tempCtx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    tempCtx.fillRect(0, 0, w, h);
+    // Get image data to manipulate pixels
+    const imageData = tempCtx.getImageData(0, 0, w, h);
+    const data = imageData.data;
     
-    // Restore alpha from original
-    tempCtx.globalCompositeOperation = 'destination-in';
-    tempCtx.drawImage(img, 0, 0, w, h);
+    // ABR brushes: grayscale value = opacity, we need to tint with terrain color
+    // For each pixel: set RGB to terrain color, keep alpha from grayscale
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = data[i]; // R channel (grayscale)
+      const alpha = 255 - gray; // Invert: black in brush = opaque, white = transparent
+      data[i]     = rgb[0]; // R
+      data[i + 1] = rgb[1]; // G
+      data[i + 2] = rgb[2]; // B
+      data[i + 3] = alpha;  // A
+    }
+    
+    tempCtx.putImageData(imageData, 0, 0);
     
     // Draw to main canvas
-    ctx.drawImage(temp, px - w/2, py - h/2);
+    ctx.drawImage(temp, Math.round(px - w/2), Math.round(py - h/2));
   }
 
   function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
