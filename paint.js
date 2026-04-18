@@ -1,5 +1,5 @@
 // paint.js — Fullscreen terrain paint modal
-// Version: 2024-01-19-v3 (with rivers)
+// Version: 2024-01-19-v4 (fix escapeHtml)
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
 import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
 import { RiverLayer, generateRiverPath } from './rivers.js';
