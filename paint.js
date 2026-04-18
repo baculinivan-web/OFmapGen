@@ -665,6 +665,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       layer.jaggedEdges = { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 };
     }
     
+    // Auto-enable effect when opening panel
+    if (!layer.jaggedEdges.enabled) {
+      layer.jaggedEdges.enabled = true;
+      updateLayersList();
+      redraw();
+    }
+    
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
     jaggedIntensity.value = layer.jaggedEdges.intensity;
     jaggedIntensityVal.textContent = layer.jaggedEdges.intensity;
@@ -1431,7 +1438,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           </div>
           <button class="layer-btn layer-jagged-btn ${jaggedActive}" data-layer-id="${layer.id}" title="Jagged edges">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M2 12 L6 8 L10 14 L14 6 L18 10 L22 12"/>
+              <text x="2" y="18" font-family="serif" font-size="16" font-style="italic" fill="currentColor" stroke="none">fx</text>
             </svg>
           </button>
           <button class="layer-btn layer-rename-btn" data-layer-id="${layer.id}" title="Rename">
