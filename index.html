@@ -347,11 +347,25 @@
       </button>
     </div>
     <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+      <!-- Left sidebar - Layers -->
+      <div style="width:220px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
+        <div style="flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);display:flex;align-items:center;justify-content:space-between;">
+            <span>Layers</span>
+            <button onclick="addNewLayer()" style="background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;font-weight:600;" title="Add new layer">+</button>
+          </div>
+          <div id="paintLayersPanel" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px;max-height:300px;overflow-y:auto;">
+            <div id="paintLayersList"></div>
+          </div>
+        </div>
+      </div>
+      
       <!-- Canvas area -->
       <div style="flex:1;position:relative;background:#080b10;overflow:hidden;touch-action:none;display:flex;align-items:center;justify-content:center;" id="paintMapArea">
         <canvas id="paintCanvas" style="image-rendering:pixelated;cursor:crosshair;display:block;"></canvas>
       </div>
-      <!-- Sidebar -->
+      
+      <!-- Right sidebar - Tools -->
       <div style="width:200px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
         <div style="flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:12px;">
           <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Mode</div>
@@ -389,14 +403,6 @@
             </div>
           </div>
           
-          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);display:flex;align-items:center;justify-content:space-between;">
-            <span>Layers</span>
-            <button onclick="addNewLayer()" style="background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;font-weight:600;" title="Add new layer">+</button>
-          </div>
-          <div id="paintLayersPanel" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px;max-height:200px;overflow-y:auto;">
-            <div id="paintLayersList"></div>
-          </div>
-          
           <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Terrain</div>
           <div style="display:flex;flex-direction:column;gap:6px;" id="paintTerrainBtns">
             <button class="paint-btn active" data-terrain="water"><span class="legend-swatch" style="background:var(--water)"></span>Water</button>
@@ -428,7 +434,7 @@
               <span id="paintSpacingVal" style="font-size:0.78rem;color:var(--muted);min-width:32px;text-align:right;">25%</span>
             </div>
           </div>
-          <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear all</button>
+          <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear layer</button>
           <div style="display:flex;gap:6px;margin-top:4px;">
             <button class="btn btn-ghost" id="paintUndoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Undo (Ctrl+Z)">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 5.5a9 9 0 0 1 5 7.5"/></svg>
