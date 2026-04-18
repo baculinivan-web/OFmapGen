@@ -691,10 +691,16 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         // Calculate distance from edge if we're near one
         if (isNearEdge) {
-          // Find closest edge pixel (alpha transition)
+          // Optimized distance calculation: check in expanding rings
           let minDist = effectDepth + 1;
-          for (let dy = -effectDepth; dy <= effectDepth; dy++) {
-            for (let dx = -effectDepth; dx <= effectDepth; dx++) {
+          const maxSearchRadius = Math.min(effectDepth, 50); // Cap search radius for performance
+          
+          // Check in expanding rings until we find an edge
+          outerLoop: for (let radius = 1; radius <= maxSearchRadius; radius += 2) {
+            // Check only the perimeter of the current radius
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / (4 * radius)) {
+              const dx = Math.round(Math.cos(angle) * radius);
+              const dy = Math.round(Math.sin(angle) * radius);
               const nx = x + dx;
               const ny = y + dy;
               if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
@@ -702,8 +708,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               const nAlpha = srcData.data[nIdx + 3];
               // Edge is where alpha changes significantly
               if (Math.abs(nAlpha - alpha) > 100) {
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                minDist = Math.min(minDist, dist);
+                minDist = radius;
+                break outerLoop; // Found edge, stop searching
               }
             }
           }
@@ -1057,8 +1063,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!isNaN(val) && val >= 1) {
       const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
       if (layer) {
-        layer.jaggedEdges.depth = val;
-        jaggedDepth.value = Math.min(100, val); // Clamp slider only
+        // Cap at 200 for performance
+        const cappedVal = Math.min(200, val);
+        layer.jaggedEdges.depth = cappedVal;
+        jaggedDepth.value = Math.min(100, cappedVal); // Clamp slider only
+        if (val !== cappedVal) {
+          jaggedDepthVal.value = cappedVal;
+        }
       }
     }
   });
