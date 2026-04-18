@@ -857,13 +857,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 };
     }
     
-    // Auto-enable effect when opening panel
-    if (!layer.jaggedEdges.enabled) {
-      layer.jaggedEdges.enabled = true;
-      updateLayersList();
-      redraw();
-    }
-    
+    // Don't auto-enable - just load current state
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
     jaggedAlgorithm.value = layer.jaggedEdges.algorithm || 'fractal';
     jaggedSeed.value = layer.jaggedEdges.seed || 12345;
@@ -907,7 +901,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       const val = parseInt(jaggedSeed.value);
-      if (!isNaN(val) && val >= 1 && val <= 999999) {
+      if (!isNaN(val) && val >= 1) {
         layer.jaggedEdges.seed = val;
         redraw();
       }
@@ -932,11 +926,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   jaggedIntensityVal?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const val = parseFloat(jaggedIntensityVal.value);
-    if (!isNaN(val) && val >= 0 && val <= 50) {
+    if (!isNaN(val) && val >= 0) {
       const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
       if (layer) {
         layer.jaggedEdges.intensity = val;
-        jaggedIntensity.value = val;
+        jaggedIntensity.value = Math.min(50, val); // Clamp slider only
       }
     }
   });
@@ -964,11 +958,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   jaggedScaleVal?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const val = parseFloat(jaggedScaleVal.value);
-    if (!isNaN(val) && val >= 0.1 && val <= 10) {
+    if (!isNaN(val) && val >= 0.1) {
       const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
       if (layer) {
         layer.jaggedEdges.scale = val;
-        jaggedScale.value = val;
+        jaggedScale.value = Math.min(10, val); // Clamp slider only
       }
     }
   });
@@ -996,11 +990,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   jaggedFrequencyVal?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const val = parseFloat(jaggedFrequencyVal.value);
-    if (!isNaN(val) && val >= 0.1 && val <= 5) {
+    if (!isNaN(val) && val >= 0.1) {
       const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
       if (layer) {
         layer.jaggedEdges.frequency = val;
-        jaggedFrequency.value = val;
+        jaggedFrequency.value = Math.min(5, val); // Clamp slider only
       }
     }
   });
