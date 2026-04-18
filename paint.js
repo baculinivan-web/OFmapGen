@@ -253,8 +253,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Init MYB state for this stroke
     if (currentBrushId !== 'solid' && brushCache[currentBrushId]) {
       mybState = new MybBrushState(brushCache[currentBrushId]);
+      console.log('[paint] myb stroke start, brush=', currentBrushId, 'params=', brushCache[currentBrushId]);
     } else {
       mybState = null;
+      console.log('[paint] no myb state, brushId=', currentBrushId, 'cache keys=', Object.keys(brushCache));
     }
     paintDot(x, y);
     redraw();
