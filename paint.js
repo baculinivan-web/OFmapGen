@@ -213,6 +213,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedFrequencyVal = document.getElementById('paintJaggedFrequencyVal');
   const jaggedDepth = document.getElementById('paintJaggedDepth');
   const jaggedDepthVal = document.getElementById('paintJaggedDepthVal');
+  const jaggedAllTerrains = document.getElementById('paintJaggedAllTerrains');
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
 
   // Validate all required DOM elements
@@ -515,7 +516,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -597,7 +598,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   function getCacheKey(layer) {
     const je = layer.jaggedEdges;
-    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}-${je.depth}`;
+    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}-${je.depth}-${je.allTerrains}`;
   }
   
   function applyJaggedEdges(layer) {
@@ -606,7 +607,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
     
-    const { intensity, frequency, scale, algorithm, seed, depth } = layer.jaggedEdges;
+    const { intensity, frequency, scale, algorithm, seed, depth, allTerrains } = layer.jaggedEdges;
     if (intensity === 0) return layer.canvas;
     
     // Check cache
@@ -615,13 +616,109 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       return jaggedCache.get(cacheKey);
     }
     
-    // Create temporary canvas for effect
+    // If allTerrains is enabled, process each terrain type separately
+    if (allTerrains) {
+      return applyJaggedEdgesToAllTerrains(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey);
+    }
+    
+    // Original single-layer processing
+    return applyJaggedEdgesToSingleLayer(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey);
+  }
+  
+  function applyJaggedEdgesToSingleLayer(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey) {
+    const temp = applyJaggedEdgesToCanvas(layer.canvas, intensity, frequency, scale, algorithm, seed, depth);
+    
+    // Cache result (limit cache size)
+    if (jaggedCache.size > 10) {
+      const firstKey = jaggedCache.keys().next().value;
+      jaggedCache.delete(firstKey);
+    }
+    jaggedCache.set(cacheKey, temp);
+    
+    return temp;
+  }
+  
+  function applyJaggedEdgesToAllTerrains(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey) {
+    // Create temporary canvas for result
     const temp = document.createElement('canvas');
     temp.width = layer.canvas.width;
     temp.height = layer.canvas.height;
     const tempCtx = temp.getContext('2d');
     
     const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
+    const w = temp.width;
+    const h = temp.height;
+    
+    // Define terrain colors to process
+    const terrainColors = [
+      { name: 'water', rgb: [18, 15, 34] },
+      { name: 'plain', rgb: [140, 170, 88] },
+      { name: 'highland', rgb: [176, 159, 114] },
+      { name: 'mountain', rgb: [190, 190, 190] }
+    ];
+    
+    // Process each terrain type separately
+    const processedLayers = [];
+    
+    for (const terrain of terrainColors) {
+      // Create mask for this terrain color
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const maskCtx = maskCanvas.getContext('2d');
+      const maskData = maskCtx.createImageData(w, h);
+      
+      // Extract pixels of this terrain color
+      for (let i = 0; i < srcData.data.length; i += 4) {
+        const r = srcData.data[i];
+        const g = srcData.data[i + 1];
+        const b = srcData.data[i + 2];
+        const a = srcData.data[i + 3];
+        
+        // Check if pixel matches terrain color (with small tolerance)
+        const dr = Math.abs(r - terrain.rgb[0]);
+        const dg = Math.abs(g - terrain.rgb[1]);
+        const db = Math.abs(b - terrain.rgb[2]);
+        
+        if (dr < 5 && dg < 5 && db < 5 && a > 0) {
+          // This pixel belongs to this terrain
+          maskData.data[i] = r;
+          maskData.data[i + 1] = g;
+          maskData.data[i + 2] = b;
+          maskData.data[i + 3] = a;
+        }
+      }
+      
+      maskCtx.putImageData(maskData, 0, 0);
+      
+      // Apply jagged edges to this terrain mask
+      const processedMask = applyJaggedEdgesToCanvas(maskCanvas, intensity, frequency, scale, algorithm, seed, depth);
+      processedLayers.push(processedMask);
+    }
+    
+    // Composite all processed layers back together
+    for (const processedLayer of processedLayers) {
+      tempCtx.drawImage(processedLayer, 0, 0);
+    }
+    
+    // Cache result
+    if (jaggedCache.size > 10) {
+      const firstKey = jaggedCache.keys().next().value;
+      jaggedCache.delete(firstKey);
+    }
+    jaggedCache.set(cacheKey, temp);
+    
+    return temp;
+  }
+  
+  function applyJaggedEdgesToCanvas(sourceCanvas, intensity, frequency, scale, algorithm, seed, depth) {
+    // This is the core jagged edges algorithm extracted to work on any canvas
+    const temp = document.createElement('canvas');
+    temp.width = sourceCanvas.width;
+    temp.height = sourceCanvas.height;
+    const tempCtx = temp.getContext('2d');
+    
+    const srcData = sourceCanvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
     const dstData = tempCtx.createImageData(temp.width, temp.height);
     
     // Select noise generator based on algorithm
@@ -646,7 +743,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const w = temp.width;
     const h = temp.height;
     const totalPixels = w * h;
-    const step = totalPixels > 1000000 ? 2 : 1; // Skip pixels for images > 1MP
+    const step = totalPixels > 1000000 ? 2 : 1;
     
     // Scale affects the search radius for edges
     const edgeRadius = Math.max(2, Math.round(scale * 2));
@@ -679,7 +776,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         let isNearEdge = false;
         let minAlpha = 255;
         let maxAlpha = 0;
-        let distanceFromEdge = effectDepth + 1; // Start beyond effect range
+        let distanceFromEdge = effectDepth + 1;
         
         for (let dy = -edgeRadius; dy <= edgeRadius; dy += Math.max(1, Math.floor(edgeRadius / 2))) {
           for (let dx = -edgeRadius; dx <= edgeRadius; dx += Math.max(1, Math.floor(edgeRadius / 2))) {
@@ -699,11 +796,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         if (isNearEdge) {
           // Optimized distance calculation: check in expanding rings
           let minDist = effectDepth + 1;
-          const maxSearchRadius = Math.min(effectDepth, 50); // Cap search radius for performance
+          const maxSearchRadius = Math.min(effectDepth, 50);
           
-          // Check in expanding rings until we find an edge
           outerLoop: for (let radius = 1; radius <= maxSearchRadius; radius += 2) {
-            // Check only the perimeter of the current radius
             for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / (4 * radius)) {
               const dx = Math.round(Math.cos(angle) * radius);
               const dy = Math.round(Math.sin(angle) * radius);
@@ -712,10 +807,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
               const nIdx = (ny * w + nx) * 4;
               const nAlpha = srcData.data[nIdx + 3];
-              // Edge is where alpha changes significantly
               if (Math.abs(nAlpha - alpha) > 100) {
                 minDist = radius;
-                break outerLoop; // Found edge, stop searching
+                break outerLoop;
               }
             }
           }
@@ -790,14 +884,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     tempCtx.putImageData(dstData, 0, 0);
-    
-    // Cache result (limit cache size)
-    if (jaggedCache.size > 10) {
-      const firstKey = jaggedCache.keys().next().value;
-      jaggedCache.delete(firstKey);
-    }
-    jaggedCache.set(cacheKey, temp);
-    
     return temp;
   }
 
@@ -896,11 +982,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Load current settings
     if (!layer.jaggedEdges) {
-      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 };
+      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false };
     }
     
     // Don't auto-enable - just load current state
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
+    jaggedAllTerrains.checked = layer.jaggedEdges.allTerrains || false;
     jaggedAlgorithm.value = layer.jaggedEdges.algorithm || 'fractal';
     jaggedSeed.value = layer.jaggedEdges.seed || 12345;
     jaggedIntensity.value = layer.jaggedEdges.intensity;
@@ -926,6 +1013,16 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.enabled = jaggedEnabled.checked;
+      updateLayersList();
+      redraw();
+    }
+  });
+  
+  jaggedAllTerrains?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.allTerrains = jaggedAllTerrains.checked;
       updateLayersList();
       redraw();
     }
@@ -1097,7 +1194,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
-      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -2063,7 +2160,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -2129,7 +2226,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
-        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;
