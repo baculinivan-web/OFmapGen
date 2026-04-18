@@ -365,7 +365,7 @@
           
           <div id="paintRiverControls" style="display:none;margin-bottom:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;">
             <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">
-              Click to place start point, then end point. Add more points to refine the path.
+              Click to place points. Right-click or Ctrl+click to delete. Drag to move.
             </div>
             <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
               <div>
@@ -384,9 +384,14 @@
               </div>
             </div>
             <div style="display:flex;gap:6px;">
-              <button class="btn btn-primary" id="paintRiverFinishBtn" style="flex:1;font-size:0.75rem;padding:6px;">Finish river</button>
+              <button class="btn btn-primary" id="paintRiverFinishBtn" style="flex:1;font-size:0.75rem;padding:6px;">Finish</button>
               <button class="btn btn-ghost" id="paintRiverCancelBtn" style="flex:1;font-size:0.75rem;padding:6px;">Cancel</button>
             </div>
+          </div>
+          
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Layers</div>
+          <div id="paintLayersPanel" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px;max-height:150px;overflow-y:auto;">
+            <div id="paintLayersList"></div>
           </div>
           
           <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Terrain</div>
