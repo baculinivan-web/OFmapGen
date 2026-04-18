@@ -1,6 +1,5 @@
 This a raodmap of changes coming to map studio: 
 
-- [ ] Naturalisation tool (select are, press a button, tool would make it more realistic with rites and land transitions) 
 - [ ] Import roads tool (import roads as rivers) 
 - [ ] Start from the scratch (plain sea)
 - [ ] Add licence files (if you need to add licence, you can type in in the map builder and it would generate license files and add to to the repo via the script ) 
