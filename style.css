@@ -367,6 +367,10 @@ footer a:hover { color: var(--text); }
 }
 .paint-brush-btn svg { flex-shrink: 0; opacity: 0.8; }
 
+.layer-jagged-btn.active {
+  background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
+}
+
 /* Eyedropper mode */
 .eyedropper-active { cursor: crosshair !important; }
 .eyedropper-active #preview { 

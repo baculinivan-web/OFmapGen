@@ -1,10 +1,53 @@
 // paint.js — Fullscreen terrain paint modal
-// Version: 2024-01-19-v4 (fix escapeHtml)
+// Version: 2024-01-19-v5 (jagged edges)
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
 import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
 import { RiverLayer, generateRiverPath } from './rivers.js';
 
-console.log('[paint.js] Module loading - Version 2024-01-19-v3 (with rivers)');
+console.log('[paint.js] Module loading - Version 2024-01-19-v5 (jagged edges)');
+
+// ── Simple Perlin Noise for jagged edges ──────────────────────────────────
+class SimplexNoise {
+  constructor(seed = Math.random()) {
+    this.p = [];
+    for (let i = 0; i < 256; i++) this.p[i] = i;
+    // Shuffle using seed
+    let n, q;
+    for (let i = 255; i > 0; i--) {
+      seed = (seed * 9301 + 49297) % 233280;
+      n = Math.floor((seed / 233280) * (i + 1));
+      q = this.p[i];
+      this.p[i] = this.p[n];
+      this.p[n] = q;
+    }
+    // Duplicate
+    for (let i = 0; i < 256; i++) this.p[256 + i] = this.p[i];
+  }
+  
+  fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  lerp(t, a, b) { return a + t * (b - a); }
+  grad(hash, x, y) {
+    const h = hash & 15;
+    const u = h < 8 ? x : y;
+    const v = h < 4 ? y : h === 12 || h === 14 ? x : 0;
+    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+  }
+  
+  noise(x, y) {
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    x -= Math.floor(x);
+    y -= Math.floor(y);
+    const u = this.fade(x);
+    const v = this.fade(y);
+    const a = this.p[X] + Y;
+    const b = this.p[X + 1] + Y;
+    return this.lerp(v,
+      this.lerp(u, this.grad(this.p[a], x, y), this.grad(this.p[b], x - 1, y)),
+      this.lerp(u, this.grad(this.p[a + 1], x, y - 1), this.grad(this.p[b + 1], x - 1, y - 1))
+    );
+  }
+}
 
 export function initPaint({ outCanvas, onPaintApplied }) {
 
@@ -63,6 +106,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const zoomInBtn   = document.getElementById('paintZoomInBtn');
   const zoomOutBtn  = document.getElementById('paintZoomOutBtn');
   const zoomResetBtn = document.getElementById('paintZoomResetBtn');
+  const jaggedPanel = document.getElementById('paintJaggedPanel');
+  const jaggedEnabled = document.getElementById('paintJaggedEnabled');
+  const jaggedIntensity = document.getElementById('paintJaggedIntensity');
+  const jaggedIntensityVal = document.getElementById('paintJaggedIntensityVal');
+  const jaggedFrequency = document.getElementById('paintJaggedFrequency');
+  const jaggedFrequencyVal = document.getElementById('paintJaggedFrequencyVal');
+  const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
 
   // Validate all required DOM elements
   const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList };
@@ -100,7 +150,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let spaceDown = false;
   
   // Layer system
-  let paintLayers = []; // Array of {name, canvas, visible, locked}
+  let paintLayers = []; // Array of {name, canvas, visible, locked, jaggedEdges: {enabled, intensity, frequency}}
   let currentLayerId = 0;
   let layerIdCounter = 1;
   
@@ -327,7 +377,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           name: 'Layer 1',
           canvas: document.createElement('canvas'),
           visible: true,
-          locked: false
+          locked: false,
+          jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0 }
         };
         layer.canvas.width = paintCanvas.width;
         layer.canvas.height = paintCanvas.height;
@@ -348,7 +399,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: 'Layer 1',
       canvas: document.createElement('canvas'),
       visible: true,
-      locked: false
+      locked: false,
+      jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -424,15 +476,94 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     applyTransform();
   }
 
+  // ── Jagged edges effect ───────────────────────────────────────────────────
+  function applyJaggedEdges(layer) {
+    if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
+    
+    const { intensity, frequency } = layer.jaggedEdges;
+    if (intensity === 0) return layer.canvas;
+    
+    // Create temporary canvas for effect
+    const temp = document.createElement('canvas');
+    temp.width = layer.canvas.width;
+    temp.height = layer.canvas.height;
+    const tempCtx = temp.getContext('2d');
+    
+    // Start with original layer
+    tempCtx.drawImage(layer.canvas, 0, 0);
+    
+    const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
+    const dstData = tempCtx.getImageData(0, 0, temp.width, temp.height);
+    
+    const noise = new SimplexNoise(layer.id); // Use layer ID as seed for consistency
+    
+    // First pass: identify edge pixels
+    const edges = new Uint8Array(temp.width * temp.height);
+    for (let y = 1; y < temp.height - 1; y++) {
+      for (let x = 1; x < temp.width - 1; x++) {
+        const idx = (y * temp.width + x) * 4;
+        const alpha = srcData.data[idx + 3];
+        
+        if (alpha === 0 || alpha === 255) continue; // Skip fully transparent or opaque
+        
+        // Check if this is an edge pixel (has different alpha neighbors)
+        let isEdge = false;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nIdx = ((y + dy) * temp.width + (x + dx)) * 4;
+            const nAlpha = srcData.data[nIdx + 3];
+            if (Math.abs(nAlpha - alpha) > 50) {
+              isEdge = true;
+              break;
+            }
+          }
+          if (isEdge) break;
+        }
+        
+        if (isEdge) {
+          edges[y * temp.width + x] = 1;
+        }
+      }
+    }
+    
+    // Second pass: apply displacement to edge pixels
+    for (let y = 0; y < temp.height; y++) {
+      for (let x = 0; x < temp.width; x++) {
+        const idx = (y * temp.width + x) * 4;
+        
+        if (edges[y * temp.width + x]) {
+          // Apply noise displacement
+          const noiseVal = noise.noise(x * frequency * 0.05, y * frequency * 0.05);
+          const offsetX = Math.round(noiseVal * intensity);
+          const offsetY = Math.round(noise.noise(x * frequency * 0.05 + 100, y * frequency * 0.05 + 100) * intensity);
+          
+          const srcX = Math.max(0, Math.min(temp.width - 1, x + offsetX));
+          const srcY = Math.max(0, Math.min(temp.height - 1, y + offsetY));
+          const srcIdx = (srcY * temp.width + srcX) * 4;
+          
+          dstData.data[idx]     = srcData.data[srcIdx];
+          dstData.data[idx + 1] = srcData.data[srcIdx + 1];
+          dstData.data[idx + 2] = srcData.data[srcIdx + 2];
+          dstData.data[idx + 3] = srcData.data[srcIdx + 3];
+        }
+      }
+    }
+    
+    tempCtx.putImageData(dstData, 0, 0);
+    return temp;
+  }
+
   function redraw() {
     if (!outCanvas.width) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(outCanvas, 0, 0);
     
-    // Composite all visible paint layers
+    // Composite all visible paint layers with jagged edges effect
     for (const layer of paintLayers) {
       if (layer.visible) {
-        ctx.drawImage(layer.canvas, 0, 0);
+        const layerCanvas = applyJaggedEdges(layer);
+        ctx.drawImage(layerCanvas, 0, 0);
       }
     }
     
@@ -506,6 +637,66 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     lastTouchDist = dist;
   }, { passive: false });
 
+  // ── Jagged edges panel ─────────────────────────────────────────────────────
+  let currentJaggedLayerId = null;
+  
+  function openJaggedEdgesPanel(layerId) {
+    const layer = paintLayers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    currentJaggedLayerId = layerId;
+    jaggedPanel.style.display = 'block';
+    
+    // Load current settings
+    if (!layer.jaggedEdges) {
+      layer.jaggedEdges = { enabled: false, intensity: 3, frequency: 1.0 };
+    }
+    
+    jaggedEnabled.checked = layer.jaggedEdges.enabled;
+    jaggedIntensity.value = layer.jaggedEdges.intensity;
+    jaggedIntensityVal.textContent = layer.jaggedEdges.intensity;
+    jaggedFrequency.value = layer.jaggedEdges.frequency;
+    jaggedFrequencyVal.textContent = layer.jaggedEdges.frequency.toFixed(1);
+  }
+  
+  function closeJaggedEdgesPanel() {
+    jaggedPanel.style.display = 'none';
+    currentJaggedLayerId = null;
+    updateLayersList();
+  }
+  
+  jaggedCloseBtn?.addEventListener('click', closeJaggedEdgesPanel);
+  
+  jaggedEnabled?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.enabled = jaggedEnabled.checked;
+      updateLayersList();
+      redraw();
+    }
+  });
+  
+  jaggedIntensity?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.intensity = parseFloat(jaggedIntensity.value);
+      jaggedIntensityVal.textContent = jaggedIntensity.value;
+      redraw();
+    }
+  });
+  
+  jaggedFrequency?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.frequency = parseFloat(jaggedFrequency.value);
+      jaggedFrequencyVal.textContent = parseFloat(jaggedFrequency.value).toFixed(1);
+      redraw();
+    }
+  });
+
   // ── Open ───────────────────────────────────────────────────────────────────
   function open() {
     console.log('[paint] modal opening...');
@@ -518,6 +709,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 3, frequency: 1.0 },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -541,6 +733,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     fillModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
+    closeJaggedEdgesPanel();
     updateUndoRedoBtns();
     updateLayersList();
     modal.classList.add('open');
@@ -1195,6 +1388,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     for (let i = paintLayers.length - 1; i >= 0; i--) {
       const layer = paintLayers[i];
       const isSelected = currentLayerId === layer.id;
+      const jaggedActive = layer.jaggedEdges?.enabled ? 'active' : '';
       html += `
         <div class="layer-item ${isSelected ? 'selected' : ''}" data-layer-id="${layer.id}" data-layer-type="paint">
           <button class="layer-btn layer-visibility-btn" data-layer-id="${layer.id}" title="${layer.visible ? 'Hide' : 'Show'}">
@@ -1210,6 +1404,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             <span style="font-size:0.78rem;" id="layerName${layer.id}">${escapeHtml(layer.name)}</span>
             ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
+          <button class="layer-btn layer-jagged-btn ${jaggedActive}" data-layer-id="${layer.id}" title="Jagged edges">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M2 12 L6 8 L10 14 L14 6 L18 10 L22 12"/>
+            </svg>
+          </button>
           <button class="layer-btn layer-rename-btn" data-layer-id="${layer.id}" title="Rename">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -1332,6 +1531,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       });
     });
     
+    // Jagged edges toggle
+    list.querySelectorAll('.layer-jagged-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const layerId = parseInt(el.dataset.layerId);
+        openJaggedEdgesPanel(layerId);
+      });
+    });
+    
     // Layer rename
     list.querySelectorAll('.layer-rename-btn').forEach(el => {
       el.addEventListener('click', (e) => {
@@ -1440,7 +1648,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: `Layer ${layerIdCounter}`,
       canvas: document.createElement('canvas'),
       visible: true,
-      locked: false
+      locked: false,
+      jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -1460,12 +1669,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function applyAndClose() {
-    // Composite all layers to paintCanvas
+    // Composite all layers to paintCanvas (with jagged edges applied)
     const pc = paintCanvas.getContext('2d');
     pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
     for (const layer of paintLayers) {
       if (layer.visible) {
-        pc.drawImage(layer.canvas, 0, 0);
+        const layerCanvas = applyJaggedEdges(layer);
+        pc.drawImage(layerCanvas, 0, 0);
       }
     }
     
@@ -1489,6 +1699,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
     selectedRiverId = null;
+    closeJaggedEdgesPanel();
     modal.classList.remove('open');
     onPaintApplied();
   }
@@ -1504,6 +1715,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 3, frequency: 1.0 },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;
