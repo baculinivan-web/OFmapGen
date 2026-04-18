@@ -317,50 +317,45 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const img = abrBrush.brushTipImage;
     if (!img || !img.width || !img.height) return;
     
-    // Use higher resolution if brush is small relative to desired size
-    const scale = size / Math.max(img.width, img.height);
-    const useHighRes = scale > 2; // If scaling up more than 2x, use original resolution
-    
-    const w = useHighRes ? img.width : Math.ceil(img.width * scale);
-    const h = useHighRes ? img.height : Math.ceil(img.height * scale);
-    
-    // Create offscreen canvas for compositing
+    // Create offscreen canvas at original resolution
     const temp = document.createElement('canvas');
-    temp.width = w;
-    temp.height = h;
+    temp.width = img.width;
+    temp.height = img.height;
     const tempCtx = temp.getContext('2d');
     
-    // Disable smoothing for crisp edges
-    tempCtx.imageSmoothingEnabled = false;
-    
-    // Draw scaled brush texture
-    tempCtx.drawImage(img, 0, 0, w, h);
+    // Draw original brush
+    tempCtx.drawImage(img, 0, 0);
     
     // Get image data to manipulate pixels
-    const imageData = tempCtx.getImageData(0, 0, w, h);
+    const imageData = tempCtx.getImageData(0, 0, img.width, img.height);
     const data = imageData.data;
     
-    // ABR brushes: grayscale value = opacity, we need to tint with terrain color
-    // For each pixel: set RGB to terrain color, keep alpha from grayscale
+    // ABR format from abr-js: RGB contains inverted grayscale (255-gray), alpha=255
+    // We need: RGB = terrain color, alpha = luminance of original
     for (let i = 0; i < data.length; i += 4) {
-      const gray = data[i]; // R channel (grayscale)
-      const alpha = 255 - gray; // Invert: black in brush = opaque, white = transparent
-      data[i]     = rgb[0]; // R
-      data[i + 1] = rgb[1]; // G
-      data[i + 2] = rgb[2]; // B
-      data[i + 3] = alpha;  // A
+      // Calculate luminance from RGB (they're all same in grayscale)
+      const luminance = data[i]; // R channel
+      // Luminance represents opacity: bright = opaque, dark = transparent
+      const alpha = luminance;
+      
+      data[i]     = rgb[0]; // R = terrain color
+      data[i + 1] = rgb[1]; // G = terrain color
+      data[i + 2] = rgb[2]; // B = terrain color
+      data[i + 3] = alpha;  // A = luminance
     }
     
     tempCtx.putImageData(imageData, 0, 0);
     
-    // Draw to main canvas with final scaling if needed
-    ctx.imageSmoothingEnabled = false;
-    if (useHighRes) {
-      ctx.drawImage(temp, Math.round(px - size/2), Math.round(py - size/2), size, size);
-    } else {
-      ctx.drawImage(temp, Math.round(px - w/2), Math.round(py - h/2));
-    }
-    ctx.imageSmoothingEnabled = true;
+    // Draw to main canvas with scaling
+    const scale = size / Math.max(img.width, img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    
+    ctx.save();
+    ctx.imageSmoothingEnabled = true; // Use smooth scaling for better quality
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(temp, Math.round(px - w/2), Math.round(py - h/2), w, h);
+    ctx.restore();
   }
 
   function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
