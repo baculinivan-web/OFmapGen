@@ -1,8 +1,13 @@
 // paint.js — Fullscreen terrain paint modal
+// Version: 2024-01-19-v2
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
 import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
 
+console.log('[paint.js] Module loading - Version 2024-01-19-v2');
+
 export function initPaint({ outCanvas, onPaintApplied }) {
+
+  console.log('[paint] initPaint() called - module loaded');
 
   let paintCanvas = null;
 
