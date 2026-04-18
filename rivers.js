@@ -334,12 +334,46 @@ export class RiverLayer {
   
   /**
    * Render all rivers to canvas
+   * @param {CanvasRenderingContext2D} ctx - Canvas context
+   * @param {Array<number>} color - RGB color [r, g, b]
+   * @param {number|null} selectedRiverId - ID of selected river to show control points
    */
-  render(ctx, color) {
+  render(ctx, color, selectedRiverId = null) {
     // Render completed rivers
-    for (const river of this.rivers) {
+    for (let i = 0; i < this.rivers.length; i++) {
+      const river = this.rivers[i];
       if (river.path) {
         drawRiver(ctx, river.path, river.width, color);
+        
+        // Draw control points for selected river
+        if (selectedRiverId === i) {
+          ctx.fillStyle = 'rgba(88, 166, 255, 0.8)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+          ctx.lineWidth = 2;
+          
+          for (let j = 0; j < river.controlPoints.length; j++) {
+            const p = river.controlPoints[j];
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Draw lines between control points
+            if (j > 0) {
+              const prev = river.controlPoints[j - 1];
+              ctx.strokeStyle = 'rgba(88, 166, 255, 0.4)';
+              ctx.lineWidth = 1;
+              ctx.setLineDash([5, 5]);
+              ctx.beginPath();
+              ctx.moveTo(prev.x, prev.y);
+              ctx.lineTo(p.x, p.y);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+              ctx.lineWidth = 2;
+            }
+          }
+        }
       }
     }
     
