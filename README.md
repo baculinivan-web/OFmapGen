@@ -2,6 +2,7 @@
 
 **Live at [maps.mivps.ru](https://maps.mivps.ru)**
 Convert any image — or real-world elevation data — into a playable map for [openfront.io](https://openfront.io).
+Aloows to complile OF maps with a click of a button, using .py script, than allows to run OF locally with custom maps. No coding required. 
 
 ## Features
 
