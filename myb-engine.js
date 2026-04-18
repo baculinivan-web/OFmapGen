@@ -100,7 +100,7 @@ function drawDab(ctx, cx, cy, radius, hardness, alpha, ratio, angleDeg, rgb) {
     ctx.fill();
   } else {
     // Gradient: inner solid region = hardness * radius, outer feather to 0
-    const innerR = hardness * radius;
+    const innerR = Math.max(0.001, hardness * radius);
     const grad = ctx.createRadialGradient(0, 0, innerR, 0, 0, radius);
     grad.addColorStop(0,   `rgba(${r},${g},${b},${alpha})`);
     grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
@@ -146,60 +146,49 @@ export function mybPaintSegment(ctx, state, x0, y0, x1, y1, brushSizePx, rgb) {
   const dirInput = ((dirAngleDeg % 180) + 180) % 180;
 
   // Dab spacing: move dabs_per_actual_radius dabs per radius distance
-  const dabSpacing = baseRadius / Math.max(0.1, p.dabs_per_actual_radius);
+  const dabSpacing = Math.max(1, baseRadius / Math.max(0.1, p.dabs_per_actual_radius));
 
-  // Accumulate distance and place dabs
-  const totalDist = segLen;
-  let traveled = dabSpacing - state._partial; // distance until next dab
+  // Ellipse angle: base + direction curve contribution (computed once per segment)
+  let ellipseAngle = p.elliptical_dab_angle_base;
+  const dirCurve = p.elliptical_dab_angle_curve['direction'];
+  if (dirCurve && dirCurve.length > 0) {
+    ellipseAngle += evalCurve(dirCurve, dirInput) * 180;
+  }
 
-  while (traveled <= totalDist) {
-    const t = traveled / totalDist;
+  const alpha = Math.min(1, p.opaque);
+
+  // _partial: how far into the next dab spacing we already are from previous segment
+  // Start placing dabs from offset = dabSpacing - _partial
+  let offset = dabSpacing - state._partial;
+  if (offset <= 0) offset += dabSpacing;
+
+  while (offset <= segLen) {
+    const t = segLen > 0 ? offset / segLen : 0;
     const cx = x0 + dx * t;
     const cy = y0 + dy * t;
 
     // Random radius variation
-    const rndRadius = Math.random();
     const radiusVariation = p.radius_by_random > 0
-      ? Math.exp(p.radius_by_random * (rndRadius * 2 - 1))
+      ? Math.exp(p.radius_by_random * (Math.random() * 2 - 1))
       : 1;
-    const actualRadius = baseRadius * radiusVariation;
+    const actualRadius = Math.max(0.5, baseRadius * radiusVariation);
 
     // Jitter offset
     let jx = 0, jy = 0;
     if (p.offset_by_random > 0) {
       const jitterR = p.offset_by_random * actualRadius;
       const jAngle = Math.random() * Math.PI * 2;
-      jx = Math.cos(jAngle) * jitterR * (Math.random() + Math.random()) * 0.5;
-      jy = Math.sin(jAngle) * jitterR * (Math.random() + Math.random()) * 0.5;
+      jx = Math.cos(jAngle) * jitterR;
+      jy = Math.sin(jAngle) * jitterR;
     }
 
-    // Ellipse angle: base + direction curve contribution
-    let ellipseAngle = p.elliptical_dab_angle_base;
-    const dirCurve = p.elliptical_dab_angle_curve['direction'];
-    if (dirCurve && dirCurve.length > 0) {
-      // curve output is a multiplier on 180 degrees
-      ellipseAngle += evalCurve(dirCurve, dirInput) * 180;
-    }
+    drawDab(ctx, cx + jx, cy + jy, actualRadius, p.hardness, alpha, p.elliptical_dab_ratio, ellipseAngle, rgb);
 
-    // Opacity
-    const alpha = Math.min(1, p.opaque);
-
-    drawDab(
-      ctx,
-      cx + jx, cy + jy,
-      actualRadius,
-      p.hardness,
-      alpha,
-      p.elliptical_dab_ratio,
-      ellipseAngle,
-      rgb
-    );
-
-    traveled += dabSpacing;
+    offset += dabSpacing;
   }
 
-  // Store leftover distance for next segment
-  state._partial = Math.max(0, totalDist - (traveled - dabSpacing));
+  // How far past the last dab we traveled — carry over to next segment
+  state._partial = segLen - (offset - dabSpacing);
 }
 
 /**
