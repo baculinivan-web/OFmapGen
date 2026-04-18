@@ -60,11 +60,24 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const riverControlsRow = document.getElementById('paintRiverControls');
   const layersPanel = document.getElementById('paintLayersPanel');
   const layersList = document.getElementById('paintLayersList');
+  const zoomInBtn   = document.getElementById('paintZoomInBtn');
+  const zoomOutBtn  = document.getElementById('paintZoomOutBtn');
+  const zoomResetBtn = document.getElementById('paintZoomResetBtn');
 
   // Validate all required DOM elements
   const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList };
   for (const [name, el] of Object.entries(domRefs)) {
     if (!el) console.error(`[paint] DOM element not found: ${name}`);
+  }
+
+  // Zoom button handlers (buttons may not exist in older HTML, guard with ?)
+  zoomInBtn?.addEventListener('click',    () => { zoomAt(1.25, ...mapAreaCenter()); });
+  zoomOutBtn?.addEventListener('click',   () => { zoomAt(1 / 1.25, ...mapAreaCenter()); });
+  zoomResetBtn?.addEventListener('click', () => resetZoom());
+
+  function mapAreaCenter() {
+    const ar = mapArea.getBoundingClientRect();
+    return [ar.left + ar.width / 2, ar.top + ar.height / 2];
   }
 
   let currentTerrain = 'water';
@@ -78,6 +91,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let cancelRiversData = null;
   let cancelLayersData = null;
   let hasChanges = false; // Track if any changes were made
+
+  // ── Zoom / Pan state ───────────────────────────────────────────────────────
+  let zoomLevel = 1;
+  let panX = 0, panY = 0;
+  let isPanning = false;
+  let panStartX = 0, panStartY = 0;
+  let spaceDown = false;
   
   // Layer system
   let paintLayers = []; // Array of {name, canvas, visible, locked}
@@ -344,17 +364,64 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   // ── Fit / redraw ───────────────────────────────────────────────────────────
+  // Base scale: fit canvas to area (zoom=1 means "fit to screen")
+  let baseScale = 1;
+
   function fitCanvas() {
     const ar = mapArea.getBoundingClientRect();
     if (!ar.width || !ar.height || !outCanvas.width) return;
-    const scale = Math.min(ar.width / outCanvas.width, ar.height / outCanvas.height);
+    baseScale = Math.min(ar.width / outCanvas.width, ar.height / outCanvas.height);
     canvas.width  = outCanvas.width;
     canvas.height = outCanvas.height;
-    canvas.style.width   = Math.floor(outCanvas.width  * scale) + 'px';
-    canvas.style.height  = Math.floor(outCanvas.height * scale) + 'px';
-    canvas.style.margin  = 'auto';
-    canvas.style.display = 'block';
+    applyTransform();
     redraw();
+  }
+
+  function applyTransform() {
+    const s = baseScale * zoomLevel;
+    canvas.style.width   = Math.floor(outCanvas.width  * baseScale) + 'px';
+    canvas.style.height  = Math.floor(outCanvas.height * baseScale) + 'px';
+    canvas.style.margin  = '0';
+    canvas.style.display = 'block';
+    canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${zoomLevel})`;
+    canvas.style.transformOrigin = '50% 50%';
+    updateZoomDisplay();
+  }
+
+  function updateZoomDisplay() {
+    const el = document.getElementById('paintZoomVal');
+    if (el) el.textContent = Math.round(zoomLevel * 100) + '%';
+  }
+
+  function clampPan() {
+    // Allow panning up to half the canvas size beyond the viewport
+    const ar = mapArea.getBoundingClientRect();
+    const scaledW = outCanvas.width  * baseScale * zoomLevel;
+    const scaledH = outCanvas.height * baseScale * zoomLevel;
+    const maxPanX = Math.max(0, (scaledW - ar.width)  / 2 + ar.width  * 0.5);
+    const maxPanY = Math.max(0, (scaledH - ar.height) / 2 + ar.height * 0.5);
+    panX = Math.max(-maxPanX, Math.min(maxPanX, panX));
+    panY = Math.max(-maxPanY, Math.min(maxPanY, panY));
+  }
+
+  function zoomAt(factor, clientX, clientY) {
+    const ar = mapArea.getBoundingClientRect();
+    // Point in mapArea-local coords (relative to center)
+    const cx = clientX - ar.left - ar.width  / 2;
+    const cy = clientY - ar.top  - ar.height / 2;
+    // Adjust pan so the point under cursor stays fixed
+    panX = cx - factor * (cx - panX);
+    panY = cy - factor * (cy - panY);
+    zoomLevel = Math.max(0.25, Math.min(16, zoomLevel * factor));
+    clampPan();
+    applyTransform();
+  }
+
+  function resetZoom() {
+    zoomLevel = 1;
+    panX = 0;
+    panY = 0;
+    applyTransform();
   }
 
   function redraw() {
@@ -379,6 +446,65 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
+
+  // ── Zoom & Pan event handlers ──────────────────────────────────────────────
+  mapArea.addEventListener('wheel', e => {
+    if (!modal.classList.contains('open')) return;
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    zoomAt(factor, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // Space key for pan mode — handled in keyboard shortcuts block below
+  document.addEventListener('keyup', e => {
+    if (e.code === 'Space') {
+      spaceDown = false;
+      if (modal.classList.contains('open')) mapArea.style.cursor = '';
+    }
+  });
+
+  // Pan with space+drag or middle mouse button
+  mapArea.addEventListener('mousedown', e => {
+    if (!modal.classList.contains('open')) return;
+    if (e.button === 1 || spaceDown) {
+      e.preventDefault();
+      isPanning = true;
+      panStartX = e.clientX - panX;
+      panStartY = e.clientY - panY;
+      mapArea.style.cursor = 'grabbing';
+    }
+  });
+  window.addEventListener('mousemove', e => {
+    if (!isPanning) return;
+    panX = e.clientX - panStartX;
+    panY = e.clientY - panStartY;
+    clampPan();
+    applyTransform();
+  });
+  window.addEventListener('mouseup', e => {
+    if (!isPanning) return;
+    isPanning = false;
+    mapArea.style.cursor = spaceDown ? 'grab' : '';
+  });
+
+  // Pinch-to-zoom on touch
+  let lastTouchDist = null;
+  mapArea.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) lastTouchDist = null;
+  }, { passive: true });
+  mapArea.addEventListener('touchmove', e => {
+    if (e.touches.length !== 2) { lastTouchDist = null; return; }
+    e.preventDefault();
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (lastTouchDist !== null && dist > 0) {
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+      zoomAt(dist / lastTouchDist, midX, midY);
+    }
+    lastTouchDist = dist;
+  }, { passive: false });
 
   // ── Open ───────────────────────────────────────────────────────────────────
   function open() {
@@ -408,6 +534,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     undoStack = []; redoStack = [];
     hasChanges = false;
+    zoomLevel = 1; panX = 0; panY = 0;
     riverMode = false;
     fillMode = false;
     riverModeBtn.classList.remove('active');
@@ -746,6 +873,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // ── Pointer events ─────────────────────────────────────────────────────────
   canvas.addEventListener('mousedown', e => {
     e.preventDefault();
+    if (isPanning || spaceDown) return; // panning takes priority
     
     const [x, y] = toCanvasCoords(e);
     
@@ -860,6 +988,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   canvas.addEventListener('mousemove', e => {
+    if (isPanning) return;
     if (riverMode) {
       // Handle dragging control points
       if (draggingPointId) {
@@ -980,6 +1109,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     if (ctrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
+    if (e.code === 'Space' && !e.target.matches('input,textarea')) {
+      e.preventDefault();
+      spaceDown = true;
+      mapArea.style.cursor = 'grab';
+    }
+    // Zoom shortcuts: + / - / 0
+    if (!e.target.matches('input,textarea')) {
+      if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAt(1.25, ...mapAreaCenter()); }
+      if (e.key === '-')                  { e.preventDefault(); zoomAt(1 / 1.25, ...mapAreaCenter()); }
+      if (e.key === '0')                  { e.preventDefault(); resetZoom(); }
+    }
     // ESC disabled - user must explicitly click Done or Cancel
   });
 
