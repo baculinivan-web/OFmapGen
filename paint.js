@@ -255,6 +255,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let currentLayerId = 0;
   let layerIdCounter = 1;
   
+  // Flag to disable jagged edges during painting for performance
+  let isPaintingActive = false;
+  
   // River mode state
   let riverMode = false;
   let fillMode = false;
@@ -598,6 +601,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function applyJaggedEdges(layer) {
+    // Skip jagged edges during active painting for performance
+    if (isPaintingActive) return layer.canvas;
+    
     if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
     
     const { intensity, frequency, scale, algorithm, seed, depth } = layer.jaggedEdges;
@@ -1558,6 +1564,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Normal paint mode
     saveHistory();
     painting = true;
+    isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
     const brush = brushCache[currentBrushId];
     if (brush && brush.type === 'myb') {
@@ -1605,11 +1612,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = false; 
     mybState = null;
     draggingPointId = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      redraw(); // Redraw with jagged edges applied
+    }
   });
   canvas.addEventListener('mouseleave', () => { 
     painting = false; 
     mybState = null;
     draggingPointId = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      redraw(); // Redraw with jagged edges applied
+    }
   });
 
   canvas.addEventListener('touchstart', e => {
@@ -1657,6 +1672,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Normal paint mode
     saveHistory();
     painting = true;
+    isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
     const brush = brushCache[currentBrushId];
     if (brush && brush.type === 'myb') {
@@ -1679,6 +1695,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     lastX = x; lastY = y;
     redraw();
   }, { passive: false });
+  
+  canvas.addEventListener('touchend', () => {
+    painting = false;
+    mybState = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      redraw(); // Redraw with jagged edges applied
+    }
+  });
 
   // Disable context menu on canvas for right-click delete
   canvas.addEventListener('contextmenu', e => {
