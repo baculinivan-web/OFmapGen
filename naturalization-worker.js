@@ -340,60 +340,76 @@ self.onmessage = function({ data }) {
         const distToPlain = distanceFields.plain[index];
         const distToWater = distanceFields.water[index];
         
-        // Calculate noise value at this position
-        const noiseValue = noise.noise2D(x * noiseFrequency, y * noiseFrequency);
-        // Normalize noise from [-1, 1] to [0, 1]
-        const normalizedNoise = (noiseValue + 1) / 2;
+        // Multi-octave fractal noise for more organic results
+        // Combine multiple frequencies for detail at different scales
+        const noise1 = noise.noise2D(x * noiseFrequency, y * noiseFrequency);
+        const noise2 = noise.noise2D(x * noiseFrequency * 2, y * noiseFrequency * 2) * 0.5;
+        const noise3 = noise.noise2D(x * noiseFrequency * 4, y * noiseFrequency * 4) * 0.25;
+        const fractalNoise = noise1 + noise2 + noise3;
         
-        // Determine terrain based on elevation hierarchy and distance fields
-        // Elevation hierarchy: Mountain (3) > Highland (2) > Plain (1) > Water (0)
+        // Normalize fractal noise from [-1.75, 1.75] to [0, 1]
+        const normalizedNoise = (fractalNoise + 1.75) / 3.5;
         
-        // If close to mountain, create mountain-to-highland-to-plain transition
-        if (distToMountain < transitionWidth * 3) {
-          // Calculate elevation based on distance from mountain with noise
-          const distFactor = distToMountain / (transitionWidth * 3);
-          const noisyDistFactor = distFactor + (normalizedNoise - 0.5) * 0.3;
-          
-          if (noisyDistFactor < 0.33) {
-            naturalizedZones[index] = 3; // Mountain
-          } else if (noisyDistFactor < 0.66) {
-            naturalizedZones[index] = 2; // Highland
-          } else {
-            naturalizedZones[index] = 1; // Plain
-          }
+        // Find the closest terrain type (minimum distance)
+        const distances = [
+          { type: 0, dist: distToWater },
+          { type: 1, dist: distToPlain },
+          { type: 2, dist: distToHighland },
+          { type: 3, dist: distToMountain }
+        ];
+        distances.sort((a, b) => a.dist - b.dist);
+        
+        const closestTerrain = distances[0].type;
+        const closestDist = distances[0].dist;
+        const secondClosest = distances[1].type;
+        const secondDist = distances[1].dist;
+        
+        // If we're very close to a terrain type (within 2 pixels), keep it
+        if (closestDist <= 2) {
+          naturalizedZones[index] = closestTerrain;
+          continue;
         }
-        // If close to highland (but not mountain), create highland-to-plain transition
-        else if (distToHighland < transitionWidth * 2) {
-          const distFactor = distToHighland / (transitionWidth * 2);
-          const noisyDistFactor = distFactor + (normalizedNoise - 0.5) * 0.3;
-          
-          if (noisyDistFactor < 0.5) {
-            naturalizedZones[index] = 2; // Highland
-          } else {
-            naturalizedZones[index] = 1; // Plain
-          }
+        
+        // Calculate "elevation" based on distance to higher terrain types
+        // This creates a height field where mountains are high, water is low
+        let elevation = 0;
+        
+        // Mountain influence (highest elevation)
+        if (distToMountain < transitionWidth * 4) {
+          const influence = 1 - (distToMountain / (transitionWidth * 4));
+          elevation += influence * 3;
         }
-        // If close to plain (but not highland/mountain), create plain-to-water transition with jagged coastline
-        else if (distToPlain < transitionWidth * 2) {
-          const distFactor = distToPlain / (transitionWidth * 2);
-          // Add more noise variation for coastlines to make them jagged
-          const noisyDistFactor = distFactor + (normalizedNoise - 0.5) * 0.6;
-          
-          if (noisyDistFactor < 0.5) {
-            naturalizedZones[index] = 1; // Plain
-          } else {
-            // Add small islands based on island density
-            const islandThreshold = 0.9 - (islandDensity * 0.5);
-            if (normalizedNoise > islandThreshold && distFactor < 0.7) {
-              naturalizedZones[index] = 1; // Small island
-            } else {
-              naturalizedZones[index] = 0; // Water
-            }
-          }
+        
+        // Highland influence
+        if (distToHighland < transitionWidth * 3) {
+          const influence = 1 - (distToHighland / (transitionWidth * 3));
+          elevation += influence * 2;
         }
-        // Far from any drawn terrain - default to water
-        else {
-          naturalizedZones[index] = 0; // Water
+        
+        // Plain influence
+        if (distToPlain < transitionWidth * 2) {
+          const influence = 1 - (distToPlain / (transitionWidth * 2));
+          elevation += influence * 1;
+        }
+        
+        // Add significant noise to elevation to break up geometric patterns
+        elevation += normalizedNoise * 1.5 - 0.75;
+        
+        // Determine terrain type based on elevation thresholds
+        if (elevation > 2.5) {
+          naturalizedZones[index] = 3; // Mountain
+        } else if (elevation > 1.5) {
+          naturalizedZones[index] = 2; // Highland
+        } else if (elevation > 0.5) {
+          naturalizedZones[index] = 1; // Plain
+        } else {
+          // Water, but check for small islands based on island density
+          const islandThreshold = 0.85 - (islandDensity * 0.4);
+          if (normalizedNoise > islandThreshold && elevation > 0.2) {
+            naturalizedZones[index] = 1; // Small island
+          } else {
+            naturalizedZones[index] = 0; // Water
+          }
         }
       }
     }
