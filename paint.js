@@ -70,6 +70,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const ctx         = canvas.getContext('2d');
   const brushSlider = document.getElementById('paintBrushSlider');
   const brushVal    = document.getElementById('paintBrushVal');
+  const spacingSlider = document.getElementById('paintSpacingSlider');
+  const spacingVal    = document.getElementById('paintSpacingVal');
+  const spacingRow    = document.getElementById('paintSpacingRow');
   const clearBtn    = document.getElementById('paintClearBtn');
   const doneBtn     = document.getElementById('paintDoneBtn');
   const cancelBtn   = document.getElementById('paintCancelBtn');
@@ -83,6 +86,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   let currentTerrain = 'water';
   let brushSize = 16;
+  let brushSpacing = 25; // % of brush size for custom brushes
   let painting = false;
   let lastX = null, lastY = null;
   let lastAngle = 0;
@@ -107,7 +111,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function addCustomBrush(brushData, fileName, type) {
     const id = `custom-${++customBrushCounter}`;
-    const label = (type === 'abr' ? brushData.name : fileName.replace(/\.myb$/i, '')).slice(0, 20);
+    const fullName = type === 'abr' ? brushData.name : fileName.replace(/\.myb$/i, '');
+    const label = fullName.length > 20 ? fullName.slice(0, 20) + '…' : fullName;
     
     if (type === 'myb') {
       const params = parseMybBrush(brushData);
@@ -123,11 +128,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const btn = document.createElement('button');
     btn.className = 'paint-brush-btn';
     btn.dataset.brush = id;
+    btn.title = fullName; // Show full name on hover
     btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>${label}`;
     btn.addEventListener('click', () => {
       document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentBrushId = id;
+      updateSpacingVisibility();
     });
     brushBtnsContainer.appendChild(btn);
     
@@ -306,9 +313,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         pc.fill();
       }
     } else if (brush && brush.type === 'myb' && mybState) {
-      mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, rgb);
+      mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
     } else if (brush && brush.type === 'abr') {
-      abrPaintSegment(getPaintCtx(), brush.abrBrush, x0, y0, x1, y1, brushSize, rgb);
+      abrPaintSegment(getPaintCtx(), brush.abrBrush, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
     }
   }
 
@@ -317,37 +324,56 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const img = abrBrush.brushTipImage;
     if (!img || !img.width || !img.height) return;
     
+    // Use higher resolution if brush is small relative to desired size
     const scale = size / Math.max(img.width, img.height);
-    const w = img.width * scale;
-    const h = img.height * scale;
+    const useHighRes = scale > 2; // If scaling up more than 2x, use original resolution
     
-    // Create offscreen canvas for tinting
+    const w = useHighRes ? img.width : Math.ceil(img.width * scale);
+    const h = useHighRes ? img.height : Math.ceil(img.height * scale);
+    
+    // Create offscreen canvas for compositing
     const temp = document.createElement('canvas');
     temp.width = w;
     temp.height = h;
     const tempCtx = temp.getContext('2d');
     
-    // Draw brush texture
+    // Disable smoothing for crisp edges
+    tempCtx.imageSmoothingEnabled = false;
+    
+    // Draw scaled brush texture
     tempCtx.drawImage(img, 0, 0, w, h);
     
-    // Tint with terrain color using multiply blend
-    tempCtx.globalCompositeOperation = 'multiply';
-    tempCtx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    tempCtx.fillRect(0, 0, w, h);
+    // Get image data to manipulate pixels
+    const imageData = tempCtx.getImageData(0, 0, w, h);
+    const data = imageData.data;
     
-    // Restore alpha from original
-    tempCtx.globalCompositeOperation = 'destination-in';
-    tempCtx.drawImage(img, 0, 0, w, h);
+    // ABR brushes: grayscale value = opacity, we need to tint with terrain color
+    // For each pixel: set RGB to terrain color, keep alpha from grayscale
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = data[i]; // R channel (grayscale)
+      const alpha = 255 - gray; // Invert: black in brush = opaque, white = transparent
+      data[i]     = rgb[0]; // R
+      data[i + 1] = rgb[1]; // G
+      data[i + 2] = rgb[2]; // B
+      data[i + 3] = alpha;  // A
+    }
     
-    // Draw to main canvas
-    ctx.drawImage(temp, px - w/2, py - h/2);
+    tempCtx.putImageData(imageData, 0, 0);
+    
+    // Draw to main canvas with final scaling if needed
+    ctx.imageSmoothingEnabled = false;
+    if (useHighRes) {
+      ctx.drawImage(temp, Math.round(px - size/2), Math.round(py - size/2), size, size);
+    } else {
+      ctx.drawImage(temp, Math.round(px - w/2), Math.round(py - h/2));
+    }
+    ctx.imageSmoothingEnabled = true;
   }
 
-  function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
+  function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, spacingPercent, rgb) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const spacing = abrBrush.spacing || 25; // % of brush size
-    const step = Math.max(1, size * spacing / 100);
+    const step = Math.max(1, size * spacingPercent / 100);
     const steps = Math.max(1, Math.ceil(dist / step));
     
     for (let i = 0; i <= steps; i++) {
@@ -443,12 +469,28 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       brushBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentBrushId = btn.dataset.brush;
+      updateSpacingVisibility();
     });
   });
+
+  function updateSpacingVisibility() {
+    const brush = brushCache[currentBrushId];
+    // Show spacing slider only for custom brushes (myb/abr)
+    if (brush && (brush.type === 'myb' || brush.type === 'abr')) {
+      spacingRow.style.display = 'flex';
+    } else {
+      spacingRow.style.display = 'none';
+    }
+  }
 
   brushSlider.addEventListener('input', () => {
     brushSize = parseInt(brushSlider.value);
     brushVal.textContent = brushSize;
+  });
+
+  spacingSlider.addEventListener('input', () => {
+    brushSpacing = parseInt(spacingSlider.value);
+    spacingVal.textContent = brushSpacing + '%';
   });
 
   undoBtn.addEventListener('click', undo);

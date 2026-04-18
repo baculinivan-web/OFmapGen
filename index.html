@@ -338,53 +338,62 @@
         <canvas id="paintCanvas" style="image-rendering:pixelated;cursor:crosshair;display:block;"></canvas>
       </div>
       <!-- Sidebar -->
-      <div style="width:200px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;padding:16px 14px;gap:12px;overflow-y:auto;">
-        <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Terrain</div>
-        <div style="display:flex;flex-direction:column;gap:6px;" id="paintTerrainBtns">
-          <button class="paint-btn active" data-terrain="water"><span class="legend-swatch" style="background:var(--water)"></span>Water</button>
-          <button class="paint-btn" data-terrain="plain"><span class="legend-swatch" style="background:var(--plain)"></span>Plain</button>
-          <button class="paint-btn" data-terrain="highland"><span class="legend-swatch" style="background:var(--highland)"></span>Highland</button>
-          <button class="paint-btn" data-terrain="mountain"><span class="legend-swatch" style="background:var(--mountain)"></span>Mountain</button>
-        </div>
-        <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush</div>
-        <div style="display:flex;flex-direction:column;gap:5px;" id="paintBrushBtns">
-          <button class="paint-brush-btn active" data-brush="solid">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
-            Solid
+      <div style="width:200px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
+        <div style="flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Terrain</div>
+          <div style="display:flex;flex-direction:column;gap:6px;" id="paintTerrainBtns">
+            <button class="paint-btn active" data-terrain="water"><span class="legend-swatch" style="background:var(--water)"></span>Water</button>
+            <button class="paint-btn" data-terrain="plain"><span class="legend-swatch" style="background:var(--plain)"></span>Plain</button>
+            <button class="paint-btn" data-terrain="highland"><span class="legend-swatch" style="background:var(--highland)"></span>Highland</button>
+            <button class="paint-btn" data-terrain="mountain"><span class="legend-swatch" style="background:var(--mountain)"></span>Mountain</button>
+          </div>
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush</div>
+          <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;padding-right:4px;" id="paintBrushBtns">
+            <button class="paint-brush-btn active" data-brush="solid">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+              Solid
+            </button>
+            <button class="paint-brush-btn" data-brush="soft-round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>
+              Soft Round
+            </button>
+            <button class="paint-brush-btn" data-brush="hard-round">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
+              Hard Round
+            </button>
+            <button class="paint-brush-btn" data-brush="dunes">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-30 12 12)"/></svg>
+              Dunes
+            </button>
+          </div>
+          <button class="btn btn-ghost" id="paintLoadBrushBtn" style="font-size:0.75rem;padding:6px 10px;margin-top:6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Load custom brush (.myb/.abr)
           </button>
-          <button class="paint-brush-btn" data-brush="soft-round">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>
-            Soft Round
-          </button>
-          <button class="paint-brush-btn" data-brush="hard-round">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
-            Hard Round
-          </button>
-          <button class="paint-brush-btn" data-brush="dunes">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-30 12 12)"/></svg>
-            Dunes
-          </button>
-        </div>
-        <button class="btn btn-ghost" id="paintLoadBrushBtn" style="font-size:0.75rem;padding:6px 10px;margin-top:6px;">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Load custom brush (.myb/.abr)
-        </button>
-        <input type="file" id="paintLoadBrushInput" accept=".myb,.abr" style="display:none;" />
-        <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush size</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <input type="range" id="paintBrushSlider" min="1" max="120" step="1" value="16" style="flex:1;" />
-          <span id="paintBrushVal" style="font-size:0.78rem;color:var(--muted);min-width:24px;text-align:right;">16</span>
-        </div>
-        <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear all</button>
-        <div style="display:flex;gap:6px;margin-top:4px;">
-          <button class="btn btn-ghost" id="paintUndoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Undo (Ctrl+Z)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 5.5a9 9 0 0 1 5 7.5"/></svg>
-            Undo
-          </button>
-          <button class="btn btn-ghost" id="paintRedoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Redo (Ctrl+Shift+Z)">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 5.5a9 9 0 0 0-5 7.5"/></svg>
-            Redo
-          </button>
+          <input type="file" id="paintLoadBrushInput" accept=".myb,.abr" style="display:none;" />
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush size</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="range" id="paintBrushSlider" min="1" max="120" step="1" value="16" style="flex:1;" />
+            <span id="paintBrushVal" style="font-size:0.78rem;color:var(--muted);min-width:24px;text-align:right;">16</span>
+          </div>
+          <div id="paintSpacingRow" style="display:none;margin-top:8px;">
+            <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:6px;">Brush spacing</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="range" id="paintSpacingSlider" min="5" max="100" step="5" value="25" style="flex:1;" />
+              <span id="paintSpacingVal" style="font-size:0.78rem;color:var(--muted);min-width:32px;text-align:right;">25%</span>
+            </div>
+          </div>
+          <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear all</button>
+          <div style="display:flex;gap:6px;margin-top:4px;">
+            <button class="btn btn-ghost" id="paintUndoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Undo (Ctrl+Z)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 5.5a9 9 0 0 1 5 7.5"/></svg>
+              Undo
+            </button>
+            <button class="btn btn-ghost" id="paintRedoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Redo (Ctrl+Shift+Z)">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 5.5a9 9 0 0 0-5 7.5"/></svg>
+              Redo
+            </button>
+          </div>
         </div>
       </div>
     </div>
