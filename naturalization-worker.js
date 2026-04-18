@@ -247,6 +247,9 @@ self.onmessage = function({ data }) {
     const noiseFrequency = params?.noiseFrequency ?? 0.05;
     const islandDensity = params?.islandDensity ?? 0.3;
     
+    // Task 2.6: Store original imageData for blending BEFORE any processing
+    const originalImageData = new Uint8ClampedArray(imageData);
+    
     // Create terrain zone map from imageData
     const zones = new Uint8Array(width * height);
     for (let i = 0; i < width * height; i++) {
@@ -543,9 +546,6 @@ self.onmessage = function({ data }) {
     }
     
     // Task 2.6: Mask blending
-    // Store original imageData for blending
-    const originalImageData = new Uint8ClampedArray(imageData);
-    
     // Convert naturalized zones to colors
     const naturalizedImageData = new Uint8ClampedArray(imageData.length);
     for (let i = 0; i < naturalizedZones.length; i++) {
