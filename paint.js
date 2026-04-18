@@ -380,7 +380,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           canvas: document.createElement('canvas'),
           visible: true,
           locked: false,
-          jaggedEdges: { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 }
+          jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5 }
         };
         layer.canvas.width = paintCanvas.width;
         layer.canvas.height = paintCanvas.height;
@@ -402,7 +402,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -662,7 +662,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Load current settings
     if (!layer.jaggedEdges) {
-      layer.jaggedEdges = { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 };
+      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5 };
     }
     
     // Auto-enable effect when opening panel
@@ -756,7 +756,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
-      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 },
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5 },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -1452,7 +1452,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
           <button class="layer-btn layer-jagged-btn ${jaggedActive}" data-layer-id="${layer.id}" title="Jagged edges">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <text x="2" y="18" font-family="serif" font-size="16" font-style="italic" fill="currentColor" stroke="none">fx</text>
             </svg>
           </button>
@@ -1696,7 +1696,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -1762,7 +1762,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
-        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 },
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5 },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;

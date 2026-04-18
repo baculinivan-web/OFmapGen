@@ -366,9 +366,12 @@
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-              <input type="checkbox" id="paintJaggedEnabled" style="cursor:pointer;" checked />
-              <label for="paintJaggedEnabled" style="font-size:0.78rem;cursor:pointer;">Enable effect</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <label for="paintJaggedEnabled" style="font-size:0.78rem;font-weight:600;">Enable effect</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="paintJaggedEnabled" />
+                <span class="toggle-slider"></span>
+              </label>
             </div>
             <div style="margin-bottom:8px;">
               <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Intensity</div>
