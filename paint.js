@@ -211,6 +211,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedScaleVal = document.getElementById('paintJaggedScaleVal');
   const jaggedFrequency = document.getElementById('paintJaggedFrequency');
   const jaggedFrequencyVal = document.getElementById('paintJaggedFrequencyVal');
+  const jaggedDepth = document.getElementById('paintJaggedDepth');
+  const jaggedDepthVal = document.getElementById('paintJaggedDepthVal');
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
 
   // Validate all required DOM elements
@@ -510,7 +512,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -592,13 +594,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   function getCacheKey(layer) {
     const je = layer.jaggedEdges;
-    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}`;
+    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}-${je.depth}`;
   }
   
   function applyJaggedEdges(layer) {
     if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
     
-    const { intensity, frequency, scale, algorithm, seed } = layer.jaggedEdges;
+    const { intensity, frequency, scale, algorithm, seed, depth } = layer.jaggedEdges;
     if (intensity === 0) return layer.canvas;
     
     // Check cache
@@ -643,6 +645,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Scale affects the search radius for edges
     const edgeRadius = Math.max(2, Math.round(scale * 2));
     
+    // Depth parameter controls how far from edge to apply effect
+    const effectDepth = depth || 20;
+    
     // Process pixels with optional downsampling
     for (let y = 0; y < h; y += step) {
       for (let x = 0; x < w; x += step) {
@@ -664,10 +669,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           continue;
         }
         
-        // Check neighbors for edge detection
+        // Check neighbors for edge detection and distance from edge
         let isNearEdge = false;
         let minAlpha = 255;
         let maxAlpha = 0;
+        let distanceFromEdge = effectDepth + 1; // Start beyond effect range
         
         for (let dy = -edgeRadius; dy <= edgeRadius; dy += Math.max(1, Math.floor(edgeRadius / 2))) {
           for (let dx = -edgeRadius; dx <= edgeRadius; dx += Math.max(1, Math.floor(edgeRadius / 2))) {
@@ -683,7 +689,31 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         isNearEdge = (maxAlpha - minAlpha) > 30;
         
+        // Calculate distance from edge if we're near one
         if (isNearEdge) {
+          // Find closest edge pixel (alpha transition)
+          let minDist = effectDepth + 1;
+          for (let dy = -effectDepth; dy <= effectDepth; dy++) {
+            for (let dx = -effectDepth; dx <= effectDepth; dx++) {
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+              const nIdx = (ny * w + nx) * 4;
+              const nAlpha = srcData.data[nIdx + 3];
+              // Edge is where alpha changes significantly
+              if (Math.abs(nAlpha - alpha) > 100) {
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                minDist = Math.min(minDist, dist);
+              }
+            }
+          }
+          distanceFromEdge = minDist;
+        }
+        
+        if (isNearEdge && distanceFromEdge <= effectDepth) {
+          // Calculate fade factor based on distance from edge
+          const fadeFactor = 1 - (distanceFromEdge / effectDepth);
+          
           // Apply noise displacement
           let noiseX, noiseY, noiseX2, noiseY2;
           
@@ -699,8 +729,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
           }
           
-          const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale);
-          const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale);
+          const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale * fadeFactor);
+          const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale * fadeFactor);
           
           const srcX = Math.max(0, Math.min(w - 1, x + offsetX));
           const srcY = Math.max(0, Math.min(h - 1, y + offsetY));
@@ -854,7 +884,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Load current settings
     if (!layer.jaggedEdges) {
-      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 };
+      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 };
     }
     
     // Don't auto-enable - just load current state
@@ -867,6 +897,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     jaggedScaleVal.value = (layer.jaggedEdges.scale || 1.0).toFixed(1);
     jaggedFrequency.value = layer.jaggedEdges.frequency;
     jaggedFrequencyVal.value = layer.jaggedEdges.frequency.toFixed(1);
+    jaggedDepth.value = layer.jaggedEdges.depth || 20;
+    jaggedDepthVal.value = layer.jaggedEdges.depth || 20;
   }
   
   function closeJaggedEdgesPanel() {
@@ -1003,6 +1035,38 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (currentJaggedLayerId === null) return;
     redraw();
   });
+  
+  jaggedDepth?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.depth = parseFloat(jaggedDepth.value);
+      jaggedDepthVal.value = jaggedDepth.value;
+    }
+  });
+  
+  jaggedDepth?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  // Manual input for depth
+  jaggedDepthVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedDepthVal.value);
+    if (!isNaN(val) && val >= 1) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.depth = val;
+        jaggedDepth.value = Math.min(100, val); // Clamp slider only
+      }
+    }
+  });
+  
+  jaggedDepthVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
 
   // ── Open ───────────────────────────────────────────────────────────────────
   function open() {
@@ -1016,7 +1080,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
-      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 },
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -1963,7 +2027,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -2029,7 +2093,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
-        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 },
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;
