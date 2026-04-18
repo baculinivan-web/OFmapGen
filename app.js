@@ -41,6 +41,7 @@ const valPasses       = document.getElementById('valPasses');
 const runSegBtn       = document.getElementById('runSegBtn');
 const segStatus       = document.getElementById('segStatus');
 const algoHint        = document.getElementById('algoHint');
+const eyedropperBtn   = document.getElementById('eyedropperBtn');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let currentAlgo  = 'smooth';
@@ -48,6 +49,7 @@ let aiMask       = null;
 let srcImageData = null;
 let rafId        = null;
 let isGisSource  = false;
+let eyedropperMode = false;
 
 // ── Advanced threshold toggle ─────────────────────────────────────────────────
 const advThreshBtn   = document.getElementById('advThreshBtn');
@@ -91,6 +93,7 @@ function setGisMode(enabled) {
   document.getElementById('terrainPresets').style.display = enabled ? 'block' : 'none';
   algoAdvancedBtn.style.display = enabled ? 'none' : '';
   document.querySelector('#advThreshPanel .slider-row:has(#sliderWater)').style.display = enabled ? 'none' : '';
+  eyedropperBtn.style.display = enabled ? 'none' : '';
   if (enabled && currentAlgo === 'advanced') setAlgo('smooth');
   if (enabled) applyPreset('default');
 }
@@ -224,6 +227,8 @@ function loadFile(file) {
     aiMask = null;
     segStatus.textContent = '';
     setGisMode(false);
+    eyedropperBtn.style.opacity = '';
+    eyedropperBtn.style.pointerEvents = '';
     URL.revokeObjectURL(url);
     scheduleRender();
   };
@@ -286,6 +291,148 @@ function updateTrack(input, val) {
 
 Object.values(sliders).forEach(s => s.addEventListener('input', () => scheduleRender()));
 invertCheck.addEventListener('change', () => scheduleRender());
+
+// ── Eyedropper tool ───────────────────────────────────────────────────────────
+eyedropperBtn.addEventListener('click', () => {
+  eyedropperMode = !eyedropperMode;
+  eyedropperBtn.classList.toggle('active', eyedropperMode);
+  previewWrap.classList.toggle('eyedropper-active', eyedropperMode);
+  if (eyedropperMode) {
+    eyedropperBtn.textContent = 'Click on image to pick';
+    eyedropperBtn.style.background = 'var(--accent-dim)';
+    eyedropperBtn.style.borderColor = 'var(--accent)';
+    eyedropperBtn.style.color = 'var(--accent)';
+  } else {
+    eyedropperBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m2 22 1-1h3l9-9"/>
+        <path d="M3 21v-3l9-9"/>
+        <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l-3-3Z"/>
+      </svg>
+      Pick color to set threshold`;
+    eyedropperBtn.style.background = '';
+    eyedropperBtn.style.borderColor = '';
+    eyedropperBtn.style.color = '';
+  }
+});
+
+preview.addEventListener('click', (e) => {
+  if (!eyedropperMode || !srcImageData) return;
+  
+  const rect = preview.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  
+  // Map click coords to canvas coords
+  const scaleX = srcCanvas.width / rect.width;
+  const scaleY = srcCanvas.height / rect.height;
+  const cx = Math.floor(px * scaleX);
+  const cy = Math.floor(py * scaleY);
+  
+  if (cx < 0 || cy < 0 || cx >= srcCanvas.width || cy >= srcCanvas.height) return;
+  
+  // Get pixel color
+  const idx = (cy * srcCanvas.width + cx) * 4;
+  const r = srcImageData.data[idx];
+  const g = srcImageData.data[idx + 1];
+  const b = srcImageData.data[idx + 2];
+  
+  // Calculate brightness (0-1)
+  const brightness = (r + g + b) / (3 * 255);
+  
+  // Show picker modal
+  showThresholdPicker(brightness, r, g, b);
+});
+
+function showThresholdPicker(brightness, r, g, b) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px;max-width:380px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+      <div style="font-size:1.05rem;font-weight:600;margin-bottom:16px;color:var(--text);">Set threshold for picked color</div>
+      
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;">
+        <div style="width:48px;height:48px;border-radius:6px;border:1px solid var(--border);background:rgb(${r},${g},${b});flex-shrink:0;"></div>
+        <div style="flex:1;">
+          <div style="font-size:0.75rem;color:var(--muted);margin-bottom:2px;">Picked color</div>
+          <div style="font-size:0.82rem;color:var(--text);font-family:monospace;">RGB(${r}, ${g}, ${b})</div>
+          <div style="font-size:0.82rem;color:var(--muted);font-family:monospace;">Brightness: ${brightness.toFixed(2)}</div>
+        </div>
+      </div>
+
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:16px;line-height:1.5;">
+        Choose which threshold to set with this brightness value:
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        <button id="pickWater" style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;text-align:left;transition:border-color 0.15s,background 0.15s;">
+          <span class="swatch" style="background:var(--water);width:20px;height:20px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"></span>
+          <div style="flex:1;">
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Water threshold</div>
+            <div style="font-size:0.72rem;color:var(--muted);">Pixels darker than this become water</div>
+          </div>
+        </button>
+
+        <button id="pickPlain" style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;text-align:left;transition:border-color 0.15s,background 0.15s;">
+          <span class="swatch" style="background:var(--plain);width:20px;height:20px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"></span>
+          <div style="flex:1;">
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Plain threshold</div>
+            <div style="font-size:0.72rem;color:var(--muted);">Pixels darker than this become plains</div>
+          </div>
+        </button>
+
+        <button id="pickHighland" style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;text-align:left;transition:border-color 0.15s,background 0.15s;">
+          <span class="swatch" style="background:var(--highland);width:20px;height:20px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"></span>
+          <div style="flex:1;">
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Highland threshold</div>
+            <div style="font-size:0.72rem;color:var(--muted);">Pixels darker than this become highlands</div>
+          </div>
+        </button>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;justify-content:flex-end;">
+        <button id="pickCancel" class="btn btn-ghost" style="font-size:0.82rem;padding:8px 16px;">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  const applyThreshold = (slider) => {
+    slider.value = brightness;
+    scheduleRender();
+    overlay.remove();
+    eyedropperMode = false;
+    eyedropperBtn.classList.remove('active');
+    previewWrap.classList.remove('eyedropper-active');
+    eyedropperBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m2 22 1-1h3l9-9"/>
+        <path d="M3 21v-3l9-9"/>
+        <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l-3-3Z"/>
+      </svg>
+      Pick color to set threshold`;
+    eyedropperBtn.style.background = '';
+    eyedropperBtn.style.borderColor = '';
+    eyedropperBtn.style.color = '';
+  };
+
+  overlay.querySelector('#pickWater').onclick = () => applyThreshold(sliders.water);
+  overlay.querySelector('#pickPlain').onclick = () => applyThreshold(sliders.plain);
+  overlay.querySelector('#pickHighland').onclick = () => applyThreshold(sliders.highland);
+  overlay.querySelector('#pickCancel').onclick = () => overlay.remove();
+
+  // Hover effects
+  ['pickWater','pickPlain','pickHighland'].forEach(id => {
+    const btn = overlay.querySelector(`#${id}`);
+    btn.addEventListener('mouseenter', () => {
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.background = 'var(--accent-dim)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.borderColor = 'var(--border)';
+      btn.style.background = 'var(--surface2)';
+    });
+  });
+}
 
 // ── Download map PNG ──────────────────────────────────────────────────────────
 downloadBtn.addEventListener('click', () => {
