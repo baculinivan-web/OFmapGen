@@ -83,30 +83,35 @@ function drawDab(ctx, cx, cy, radius, hardness, alpha, ratio, angleDeg, rgb) {
   if (radius < 0.5 || alpha < 0.004) return;
 
   const [r, g, b] = rgb;
-  const angleRad = (angleDeg * Math.PI) / 180;
 
   ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate(angleRad);
-  ctx.scale(1, 1 / ratio); // squash Y to create ellipse
+  ctx.globalAlpha = alpha;
 
-  // Soft brush: radial gradient from opaque center to transparent edge
-  // Hard brush: solid fill with slight feather
+  // Apply ellipse transform if needed
+  const isEllipse = ratio > 1.01;
+  let drawX = cx, drawY = cy;
+  if (isEllipse) {
+    const angleRad = (angleDeg * Math.PI) / 180;
+    ctx.translate(cx, cy);
+    ctx.rotate(angleRad);
+    ctx.scale(1, 1 / ratio);
+    drawX = 0;
+    drawY = 0;
+  }
+
   if (hardness >= 0.99) {
-    ctx.globalAlpha = alpha;
     ctx.fillStyle = `rgb(${r},${g},${b})`;
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
     ctx.fill();
   } else {
-    // Gradient: inner solid region = hardness * radius, outer feather to 0
-    const innerR = Math.max(0.001, hardness * radius);
-    const grad = ctx.createRadialGradient(0, 0, innerR, 0, 0, radius);
-    grad.addColorStop(0,   `rgba(${r},${g},${b},${alpha})`);
-    grad.addColorStop(1,   `rgba(${r},${g},${b},0)`);
+    const innerR = Math.max(radius * 0.001, hardness * radius);
+    const grad = ctx.createRadialGradient(drawX, drawY, innerR, drawX, drawY, radius);
+    grad.addColorStop(0, `rgb(${r},${g},${b})`);
+    grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
     ctx.fillStyle = grad;
     ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -198,5 +203,6 @@ export function mybPaintDot(ctx, state, x, y, brushSizePx, rgb) {
   const p = state.params;
   const baseRadius = brushSizePx;
   const alpha = Math.min(1, p.opaque);
+  console.log('[myb] dot', x, y, 'r=', baseRadius, 'h=', p.hardness, 'a=', alpha, 'ratio=', p.elliptical_dab_ratio);
   drawDab(ctx, x, y, baseRadius, p.hardness, alpha, p.elliptical_dab_ratio, p.elliptical_dab_angle_base, rgb);
 }
