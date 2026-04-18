@@ -398,6 +398,14 @@ function showThresholdPicker(brightness, r, g, b) {
             <div style="font-size:0.72rem;color:var(--muted);">Pixels darker than this become highlands</div>
           </div>
         </button>
+
+        <button id="pickMountain" style="display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;cursor:pointer;text-align:left;transition:border-color 0.15s,background 0.15s;">
+          <span class="swatch" style="background:var(--mountain);width:20px;height:20px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"></span>
+          <div style="flex:1;">
+            <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Mountain threshold</div>
+            <div style="font-size:0.72rem;color:var(--muted);">Pixels brighter than this become mountains</div>
+          </div>
+        </button>
       </div>
 
       <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;justify-content:flex-end;">
@@ -433,6 +441,7 @@ function showThresholdPicker(brightness, r, g, b) {
   overlay.querySelector('#pickWater').onclick = () => applyThreshold(sliders.water);
   overlay.querySelector('#pickPlain').onclick = () => applyThreshold(sliders.plain);
   overlay.querySelector('#pickHighland').onclick = () => applyThreshold(sliders.highland);
+  overlay.querySelector('#pickMountain').onclick = () => applyThreshold(sliders.highland);
   overlay.querySelector('#pickCancel').onclick = () => {
     overlay.remove();
     eyedropperMode = false;
@@ -456,7 +465,7 @@ function showThresholdPicker(brightness, r, g, b) {
   };
 
   // Hover effects
-  ['pickWater','pickPlain','pickHighland'].forEach(id => {
+  ['pickWater','pickPlain','pickHighland','pickMountain'].forEach(id => {
     const btn = overlay.querySelector(`#${id}`);
     btn.addEventListener('mouseenter', () => {
       btn.style.borderColor = 'var(--accent)';
