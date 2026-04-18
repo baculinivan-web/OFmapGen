@@ -374,6 +374,19 @@
               </label>
             </div>
             <div style="margin-bottom:8px;">
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Algorithm</div>
+              <select id="paintJaggedAlgorithm" style="width:100%;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;cursor:pointer;">
+                <option value="fractal">Fractal (Natural coastlines)</option>
+                <option value="perlin">Perlin (Smooth waves)</option>
+                <option value="simplex">Simplex (Classic noise)</option>
+                <option value="voronoi">Voronoi (Cellular/rocky)</option>
+              </select>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Seed</div>
+              <input type="number" id="paintJaggedSeed" min="1" max="999999" step="1" value="12345" style="width:100%;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;" />
+            </div>
+            <div style="margin-bottom:8px;">
               <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Intensity</div>
               <div style="display:flex;align-items:center;gap:8px;">
                 <input type="range" id="paintJaggedIntensity" min="0" max="50" step="1" value="8" style="flex:1;" />
