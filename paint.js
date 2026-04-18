@@ -705,8 +705,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (layer) {
       layer.jaggedEdges.intensity = parseFloat(jaggedIntensity.value);
       jaggedIntensityVal.textContent = jaggedIntensity.value;
-      redraw();
+      // Don't redraw on input - wait for change event
     }
+  });
+  
+  jaggedIntensity?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw(); // Only redraw when slider is released
   });
   
   jaggedScale?.addEventListener('input', () => {
@@ -715,8 +720,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (layer) {
       layer.jaggedEdges.scale = parseFloat(jaggedScale.value);
       jaggedScaleVal.textContent = parseFloat(jaggedScale.value).toFixed(1);
-      redraw();
+      // Don't redraw on input - wait for change event
     }
+  });
+  
+  jaggedScale?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw(); // Only redraw when slider is released
   });
   
   jaggedFrequency?.addEventListener('input', () => {
@@ -725,8 +735,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (layer) {
       layer.jaggedEdges.frequency = parseFloat(jaggedFrequency.value);
       jaggedFrequencyVal.textContent = parseFloat(jaggedFrequency.value).toFixed(1);
-      redraw();
+      // Don't redraw on input - wait for change event
     }
+  });
+  
+  jaggedFrequency?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw(); // Only redraw when slider is released
   });
 
   // ── Open ───────────────────────────────────────────────────────────────────
