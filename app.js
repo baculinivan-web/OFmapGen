@@ -1100,6 +1100,13 @@ function createBlankMap() {
   
   scheduleRender();
   closeBlankMapModal();
+  
+  // Open paint editor immediately
+  setTimeout(() => {
+    if (painter && painter.open) {
+      painter.open();
+    }
+  }, 100);
 }
 
 // Aspect ratio button selection
