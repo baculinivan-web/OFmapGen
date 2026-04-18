@@ -293,16 +293,26 @@ Object.values(sliders).forEach(s => s.addEventListener('input', () => scheduleRe
 invertCheck.addEventListener('change', () => scheduleRender());
 
 // ── Eyedropper tool ───────────────────────────────────────────────────────────
+let savedPreviewSrc = null;
+
 eyedropperBtn.addEventListener('click', () => {
   eyedropperMode = !eyedropperMode;
   eyedropperBtn.classList.toggle('active', eyedropperMode);
   previewWrap.classList.toggle('eyedropper-active', eyedropperMode);
   if (eyedropperMode) {
+    // Save current preview and show original image
+    savedPreviewSrc = preview.src;
+    preview.src = srcCanvas.toDataURL('image/png');
     eyedropperBtn.textContent = 'Click on image to pick';
     eyedropperBtn.style.background = 'var(--accent-dim)';
     eyedropperBtn.style.borderColor = 'var(--accent)';
     eyedropperBtn.style.color = 'var(--accent)';
   } else {
+    // Restore processed preview
+    if (savedPreviewSrc) {
+      preview.src = savedPreviewSrc;
+      savedPreviewSrc = null;
+    }
     eyedropperBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="m2 22 1-1h3l9-9"/>
@@ -403,6 +413,11 @@ function showThresholdPicker(brightness, r, g, b) {
     eyedropperMode = false;
     eyedropperBtn.classList.remove('active');
     previewWrap.classList.remove('eyedropper-active');
+    // Restore processed preview
+    if (savedPreviewSrc) {
+      preview.src = savedPreviewSrc;
+      savedPreviewSrc = null;
+    }
     eyedropperBtn.innerHTML = `
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="m2 22 1-1h3l9-9"/>
@@ -418,7 +433,27 @@ function showThresholdPicker(brightness, r, g, b) {
   overlay.querySelector('#pickWater').onclick = () => applyThreshold(sliders.water);
   overlay.querySelector('#pickPlain').onclick = () => applyThreshold(sliders.plain);
   overlay.querySelector('#pickHighland').onclick = () => applyThreshold(sliders.highland);
-  overlay.querySelector('#pickCancel').onclick = () => overlay.remove();
+  overlay.querySelector('#pickCancel').onclick = () => {
+    overlay.remove();
+    eyedropperMode = false;
+    eyedropperBtn.classList.remove('active');
+    previewWrap.classList.remove('eyedropper-active');
+    // Restore processed preview
+    if (savedPreviewSrc) {
+      preview.src = savedPreviewSrc;
+      savedPreviewSrc = null;
+    }
+    eyedropperBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m2 22 1-1h3l9-9"/>
+        <path d="M3 21v-3l9-9"/>
+        <path d="m15 6 3.4-3.4a2.1 2.1 0 1 1 3 3L18 9l-3-3Z"/>
+      </svg>
+      Pick color to set threshold`;
+    eyedropperBtn.style.background = '';
+    eyedropperBtn.style.borderColor = '';
+    eyedropperBtn.style.color = '';
+  };
 
   // Hover effects
   ['pickWater','pickPlain','pickHighland'].forEach(id => {
