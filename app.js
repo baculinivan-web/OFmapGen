@@ -1056,3 +1056,70 @@ initGis({
   setGisMode,
   scheduleRender,
 });
+
+// ── Blank map modal ───────────────────────────────────────────────────────────
+const blankMapModal = document.getElementById('blankMapModal');
+const blankMapModalClose = document.getElementById('blankMapModalClose');
+const blankMapModalClose2 = document.getElementById('blankMapModalClose2');
+const fromScratchBtn = document.getElementById('fromScratchBtn');
+const createBlankMapBtn = document.getElementById('createBlankMapBtn');
+const aspectRatioList = document.getElementById('aspectRatioList');
+
+let selectedAspectRatio = { width: 1920, height: 1080 };
+
+function openBlankMapModal() {
+  blankMapModal.classList.add('open');
+}
+
+function closeBlankMapModal() {
+  blankMapModal.classList.remove('open');
+}
+
+function createBlankMap() {
+  const { width, height } = selectedAspectRatio;
+  
+  // Create a canvas filled with water (dark blue)
+  srcCanvas.width = width;
+  srcCanvas.height = height;
+  const ctx = srcCanvas.getContext('2d');
+  
+  // Fill with dark blue (water color in brightness terms = low brightness)
+  ctx.fillStyle = '#1a1a3a'; // Dark blue representing water
+  ctx.fillRect(0, 0, width, height);
+  
+  srcImageData = ctx.getImageData(0, 0, width, height);
+  imgInfo.textContent = `${width} × ${height}`;
+  fileNameEl.textContent = `Blank ${selectedAspectRatio.ratio || width + 'x' + height}`;
+  fileNameEl.style.display = 'block';
+  aiMask = null;
+  brightnessData = null;
+  segStatus.textContent = '';
+  setGisMode(false);
+  eyedropperBtn.style.opacity = '';
+  eyedropperBtn.style.pointerEvents = '';
+  
+  scheduleRender();
+  closeBlankMapModal();
+}
+
+// Aspect ratio button selection
+aspectRatioList.addEventListener('click', (e) => {
+  const btn = e.target.closest('.aspect-btn');
+  if (!btn) return;
+  
+  // Update active state
+  document.querySelectorAll('.aspect-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  
+  // Store selected dimensions
+  selectedAspectRatio = {
+    ratio: btn.dataset.ratio,
+    width: parseInt(btn.dataset.width),
+    height: parseInt(btn.dataset.height)
+  };
+});
+
+fromScratchBtn.addEventListener('click', openBlankMapModal);
+blankMapModalClose.addEventListener('click', closeBlankMapModal);
+blankMapModalClose2.addEventListener('click', closeBlankMapModal);
+createBlankMapBtn.addEventListener('click', createBlankMap);
