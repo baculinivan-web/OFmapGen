@@ -342,6 +342,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack = [];
     hasChanges = true; // Mark that changes were made
+    
+    // Clear jagged edges cache for current layer since content changed
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (layer) {
+      for (const key of jaggedCache.keys()) {
+        if (key.startsWith(`${layer.id}-`)) {
+          jaggedCache.delete(key);
+        }
+      }
+    }
+    
     updateUndoRedoBtns();
   }
 
@@ -479,11 +490,25 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   // ── Jagged edges effect ───────────────────────────────────────────────────
+  // Cache for processed layers
+  const jaggedCache = new Map();
+  
+  function getCacheKey(layer) {
+    const je = layer.jaggedEdges;
+    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}`;
+  }
+  
   function applyJaggedEdges(layer) {
     if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
     
     const { intensity, frequency, scale } = layer.jaggedEdges;
     if (intensity === 0) return layer.canvas;
+    
+    // Check cache
+    const cacheKey = getCacheKey(layer);
+    if (jaggedCache.has(cacheKey)) {
+      return jaggedCache.get(cacheKey);
+    }
     
     // Create temporary canvas for effect
     const temp = document.createElement('canvas');
@@ -494,22 +519,35 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
     const dstData = tempCtx.createImageData(temp.width, temp.height);
     
-    const noise = new SimplexNoise(layer.id); // Use layer ID as seed for consistency
+    const noise = new SimplexNoise(layer.id);
+    
+    // Optimize: process every Nth pixel for large images
+    const w = temp.width;
+    const h = temp.height;
+    const totalPixels = w * h;
+    const step = totalPixels > 1000000 ? 2 : 1; // Skip pixels for images > 1MP
     
     // Scale affects the search radius for edges
     const edgeRadius = Math.max(2, Math.round(scale * 2));
     
-    // Process each pixel with displacement
-    for (let y = 0; y < temp.height; y++) {
-      for (let x = 0; x < temp.width; x++) {
-        const idx = (y * temp.width + x) * 4;
+    // Process pixels with optional downsampling
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const idx = (y * w + x) * 4;
         
-        // Check if pixel is near an edge
         const alpha = srcData.data[idx + 3];
         
         if (alpha === 0) {
-          // Fully transparent - keep transparent
           dstData.data[idx + 3] = 0;
+          // Fill skipped pixels
+          if (step > 1) {
+            for (let dy = 0; dy < step && y + dy < h; dy++) {
+              for (let dx = 0; dx < step && x + dx < w; dx++) {
+                const i = ((y + dy) * w + (x + dx)) * 4;
+                dstData.data[i + 3] = 0;
+              }
+            }
+          }
           continue;
         }
         
@@ -518,52 +556,85 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         let minAlpha = 255;
         let maxAlpha = 0;
         
-        for (let dy = -edgeRadius; dy <= edgeRadius; dy++) {
-          for (let dx = -edgeRadius; dx <= edgeRadius; dx++) {
+        for (let dy = -edgeRadius; dy <= edgeRadius; dy += Math.max(1, Math.floor(edgeRadius / 2))) {
+          for (let dx = -edgeRadius; dx <= edgeRadius; dx += Math.max(1, Math.floor(edgeRadius / 2))) {
             const nx = x + dx;
             const ny = y + dy;
-            if (nx < 0 || nx >= temp.width || ny < 0 || ny >= temp.height) continue;
-            const nIdx = (ny * temp.width + nx) * 4;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nIdx = (ny * w + nx) * 4;
             const nAlpha = srcData.data[nIdx + 3];
             minAlpha = Math.min(minAlpha, nAlpha);
             maxAlpha = Math.max(maxAlpha, nAlpha);
           }
         }
         
-        // If there's significant alpha variation, we're near an edge
         isNearEdge = (maxAlpha - minAlpha) > 30;
         
         if (isNearEdge) {
-          // Apply strong noise displacement
+          // Apply noise displacement
           const noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale);
           const noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100);
           
-          // Multi-octave noise for more natural look
           const noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50);
           const noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
           
           const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale);
           const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale);
           
-          const srcX = Math.max(0, Math.min(temp.width - 1, x + offsetX));
-          const srcY = Math.max(0, Math.min(temp.height - 1, y + offsetY));
-          const srcIdx = (srcY * temp.width + srcX) * 4;
+          const srcX = Math.max(0, Math.min(w - 1, x + offsetX));
+          const srcY = Math.max(0, Math.min(h - 1, y + offsetY));
+          const srcIdx = (srcY * w + srcX) * 4;
           
+          // Copy pixel
           dstData.data[idx]     = srcData.data[srcIdx];
           dstData.data[idx + 1] = srcData.data[srcIdx + 1];
           dstData.data[idx + 2] = srcData.data[srcIdx + 2];
           dstData.data[idx + 3] = srcData.data[srcIdx + 3];
+          
+          // Fill skipped pixels with same value
+          if (step > 1) {
+            for (let dy = 0; dy < step && y + dy < h; dy++) {
+              for (let dx = 0; dx < step && x + dx < w; dx++) {
+                const i = ((y + dy) * w + (x + dx)) * 4;
+                dstData.data[i]     = srcData.data[srcIdx];
+                dstData.data[i + 1] = srcData.data[srcIdx + 1];
+                dstData.data[i + 2] = srcData.data[srcIdx + 2];
+                dstData.data[i + 3] = srcData.data[srcIdx + 3];
+              }
+            }
+          }
         } else {
           // Copy pixel as-is
           dstData.data[idx]     = srcData.data[idx];
           dstData.data[idx + 1] = srcData.data[idx + 1];
           dstData.data[idx + 2] = srcData.data[idx + 2];
           dstData.data[idx + 3] = srcData.data[idx + 3];
+          
+          // Fill skipped pixels
+          if (step > 1) {
+            for (let dy = 0; dy < step && y + dy < h; dy++) {
+              for (let dx = 0; dx < step && x + dx < w; dx++) {
+                const i = ((y + dy) * w + (x + dx)) * 4;
+                dstData.data[i]     = srcData.data[idx];
+                dstData.data[i + 1] = srcData.data[idx + 1];
+                dstData.data[i + 2] = srcData.data[idx + 2];
+                dstData.data[i + 3] = srcData.data[idx + 3];
+              }
+            }
+          }
         }
       }
     }
     
     tempCtx.putImageData(dstData, 0, 0);
+    
+    // Cache result (limit cache size)
+    if (jaggedCache.size > 10) {
+      const firstKey = jaggedCache.keys().next().value;
+      jaggedCache.delete(firstKey);
+    }
+    jaggedCache.set(cacheKey, temp);
+    
     return temp;
   }
 
@@ -1146,6 +1217,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (riverLayer.currentRiver) {
       saveHistory();
       riverLayer.finishRiver();
+      hasChanges = true;
+      selectedRiverId = null;
+      updateLayersList();
+      redraw();
+    } else if (selectedRiverId !== null) {
+      // Finish editing existing river
+      saveHistory();
       hasChanges = true;
       selectedRiverId = null;
       updateLayersList();
