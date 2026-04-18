@@ -93,5 +93,5 @@ self.onmessage = function({ data }) {
     pixels[si]=c[0]; pixels[si+1]=c[1]; pixels[si+2]=c[2]; pixels[si+3]=255;
   }
 
-  self.postMessage({ pixels, width, height }, [pixels.buffer]);
+  self.postMessage({ pixels, width, height, brightness: br }, [pixels.buffer, br.buffer]);
 };

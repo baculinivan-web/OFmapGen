@@ -607,7 +607,13 @@ nationMapArea.addEventListener('click', (e) => {
 });
 
 function isWaterPixel(x, y) {
-  if (!brightnessData || !outCanvas.width) return false;
+  if (!brightnessData || !outCanvas.width) {
+    console.warn('isWaterPixel: brightnessData or canvas not ready', { 
+      hasBrightnessData: !!brightnessData, 
+      canvasWidth: outCanvas.width 
+    });
+    return false;
+  }
   const width = outCanvas.width;
   const height = outCanvas.height;
   const clampedX = Math.max(0, Math.min(width - 1, Math.round(x)));
@@ -615,7 +621,9 @@ function isWaterPixel(x, y) {
   const idx = clampedY * width + clampedX;
   const brightness = brightnessData[idx];
   const waterThresh = parseFloat(sliders.water.value);
-  return brightness <= waterThresh;
+  const isWater = brightness <= waterThresh;
+  console.log('isWaterPixel check:', { x, y, idx, brightness, waterThresh, isWater });
+  return isWater;
 }
 
 let waterToastTimer = null;
