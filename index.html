@@ -354,6 +354,41 @@
       <!-- Sidebar -->
       <div style="width:200px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;">
         <div style="flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Mode</div>
+          <button class="paint-btn" id="paintRiverModeBtn" style="margin-bottom:8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+              <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+            </svg>
+            Create river
+          </button>
+          
+          <div id="paintRiverControls" style="display:none;margin-bottom:12px;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;">
+            <div style="font-size:0.72rem;color:var(--muted);margin-bottom:8px;line-height:1.4;">
+              Click to place start point, then end point. Add more points to refine the path.
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
+              <div>
+                <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Windiness</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="range" id="paintRiverWindinessSlider" min="0" max="1" step="0.05" value="0.5" style="flex:1;" />
+                  <span id="paintRiverWindinessVal" style="font-size:0.78rem;color:var(--muted);min-width:32px;text-align:right;">50%</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Width</div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <input type="range" id="paintRiverWidthSlider" min="1" max="20" step="1" value="3" style="flex:1;" />
+                  <span id="paintRiverWidthVal" style="font-size:0.78rem;color:var(--muted);min-width:24px;text-align:right;">3</span>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-primary" id="paintRiverFinishBtn" style="flex:1;font-size:0.75rem;padding:6px;">Finish river</button>
+              <button class="btn btn-ghost" id="paintRiverCancelBtn" style="flex:1;font-size:0.75rem;padding:6px;">Cancel</button>
+            </div>
+          </div>
+          
           <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Terrain</div>
           <div style="display:flex;flex-direction:column;gap:6px;" id="paintTerrainBtns">
             <button class="paint-btn active" data-terrain="water"><span class="legend-swatch" style="background:var(--water)"></span>Water</button>
@@ -400,7 +435,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <span style="font-size:0.75rem;color:var(--muted);flex:2;line-height:1.4;">Click or drag to paint · Ctrl+Z undo · Ctrl+Shift+Z redo</span>
+      <span style="font-size:0.75rem;color:var(--muted);flex:2;line-height:1.4;">Paint: Click/drag · Rivers: Click to place points · Ctrl+Z undo</span>
       <button class="btn btn-primary" id="paintDoneBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;flex:1;">Apply & close</button>
       <button class="btn btn-ghost" id="paintCancelBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;">Cancel</button>
     </div>

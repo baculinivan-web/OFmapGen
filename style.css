@@ -316,6 +316,7 @@ footer a:hover { color: var(--text); }
   background: var(--accent-dim); border-color: var(--accent); color: var(--accent);
 }
 .paint-btn .legend-swatch { width: 14px; height: 14px; flex-shrink: 0; }
+.paint-btn svg { flex-shrink: 0; opacity: 0.8; }
 
 .paint-brush-btn {
   display: flex; align-items: center; gap: 7px;

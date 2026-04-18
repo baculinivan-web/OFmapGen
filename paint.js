@@ -1,9 +1,10 @@
 // paint.js — Fullscreen terrain paint modal
-// Version: 2024-01-19-v2
+// Version: 2024-01-19-v3 (with rivers)
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
 import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
+import { RiverLayer } from './rivers.js';
 
-console.log('[paint.js] Module loading - Version 2024-01-19-v2');
+console.log('[paint.js] Module loading - Version 2024-01-19-v3 (with rivers)');
 
 export function initPaint({ outCanvas, onPaintApplied }) {
 
@@ -17,6 +18,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     highland: [176, 159, 114],
     mountain: [190, 190, 190],
   };
+  
+  const WATER_COLOR = [18, 15, 34]; // Same as water terrain
 
   // Built-in brush presets — params are inlined as fallback if fetch fails
   const BRUSH_PRESETS = [
@@ -45,6 +48,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
   const loadBrushBtn = document.getElementById('paintLoadBrushBtn');
   const loadBrushInput = document.getElementById('paintLoadBrushInput');
+  const riverModeBtn = document.getElementById('paintRiverModeBtn');
+  const riverWindinessSlider = document.getElementById('paintRiverWindinessSlider');
+  const riverWindinessVal = document.getElementById('paintRiverWindinessVal');
+  const riverWidthSlider = document.getElementById('paintRiverWidthSlider');
+  const riverWidthVal = document.getElementById('paintRiverWidthVal');
+  const riverFinishBtn = document.getElementById('paintRiverFinishBtn');
+  const riverCancelBtn = document.getElementById('paintRiverCancelBtn');
+  const riverControlsRow = document.getElementById('paintRiverControls');
 
   let currentTerrain = 'water';
   let brushSize = 16;
@@ -54,6 +65,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let lastAngle = 0;
   let cancelSnapshot = null;
   let hasChanges = false; // Track if any changes were made
+  
+  // River mode state
+  let riverMode = false;
+  let riverLayer = new RiverLayer();
+  let riverCanvas = null; // Separate canvas for river layer
+  let riverWindiness = 0.5;
+  let riverWidth = 3;
 
   // ── Brush state ────────────────────────────────────────────────────────────
   let currentBrushId = 'solid';
@@ -263,6 +281,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     paintCanvas = document.createElement('canvas');
     paintCanvas.width  = outCanvas.width;
     paintCanvas.height = outCanvas.height;
+    
+    // Create river canvas
+    riverCanvas = document.createElement('canvas');
+    riverCanvas.width = outCanvas.width;
+    riverCanvas.height = outCanvas.height;
+    
     undoStack = []; redoStack = [];
   }
 
@@ -284,6 +308,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!outCanvas.width) return;
     ctx.drawImage(outCanvas, 0, 0);
     if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
+    if (riverCanvas) {
+      // Render rivers to river canvas
+      const rCtx = riverCanvas.getContext('2d');
+      rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
+      riverLayer.render(rCtx, WATER_COLOR);
+      ctx.drawImage(riverCanvas, 0, 0);
+    }
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
@@ -299,6 +330,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     cancelSnapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
     undoStack = []; redoStack = [];
     hasChanges = false; // Reset changes flag on open
+    riverMode = false;
+    riverModeBtn.classList.remove('active');
+    riverControlsRow.style.display = 'none';
+    riverLayer.clearAll();
+    window.riverStartPoint = null;
     updateUndoRedoBtns();
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
@@ -428,12 +464,106 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
   }
 
+  // ── River mode controls ────────────────────────────────────────────────────
+  function toggleRiverMode() {
+    riverMode = !riverMode;
+    riverModeBtn.classList.toggle('active', riverMode);
+    riverControlsRow.style.display = riverMode ? 'block' : 'none';
+    
+    if (riverMode) {
+      // Disable terrain/brush selection
+      document.querySelectorAll('#paintTerrainBtns .paint-btn').forEach(b => b.style.opacity = '0.3');
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.style.opacity = '0.3');
+      document.getElementById('paintBrushSlider').disabled = true;
+      document.getElementById('paintBrushSlider').style.opacity = '0.3';
+    } else {
+      // Re-enable terrain/brush selection
+      document.querySelectorAll('#paintTerrainBtns .paint-btn').forEach(b => b.style.opacity = '');
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.style.opacity = '');
+      document.getElementById('paintBrushSlider').disabled = false;
+      document.getElementById('paintBrushSlider').style.opacity = '';
+      
+      // Cancel any in-progress river
+      if (riverLayer.currentRiver) {
+        riverLayer.cancelRiver();
+        redraw();
+      }
+    }
+  }
+  
+  riverModeBtn.addEventListener('click', toggleRiverMode);
+  
+  riverWindinessSlider.addEventListener('input', () => {
+    riverWindiness = parseFloat(riverWindinessSlider.value);
+    riverWindinessVal.textContent = Math.round(riverWindiness * 100) + '%';
+    riverLayer.setWindiness(riverWindiness);
+    redraw();
+  });
+  
+  riverWidthSlider.addEventListener('input', () => {
+    riverWidth = parseInt(riverWidthSlider.value);
+    riverWidthVal.textContent = riverWidth;
+    riverLayer.setWidth(riverWidth);
+    redraw();
+  });
+  
+  riverFinishBtn.addEventListener('click', () => {
+    if (riverLayer.currentRiver) {
+      saveHistory();
+      riverLayer.finishRiver();
+      hasChanges = true;
+      redraw();
+    }
+  });
+  
+  riverCancelBtn.addEventListener('click', () => {
+    if (riverLayer.currentRiver) {
+      riverLayer.cancelRiver();
+      redraw();
+    }
+  });
+
   // ── Pointer events ─────────────────────────────────────────────────────────
   canvas.addEventListener('mousedown', e => {
     e.preventDefault();
+    
+    const [x, y] = toCanvasCoords(e);
+    
+    // River mode: place control points
+    if (riverMode) {
+      if (!riverLayer.currentRiver) {
+        // Need start and end points first
+        if (!window.riverStartPoint) {
+          window.riverStartPoint = { x, y };
+          // Show temporary marker
+          redraw();
+          const tempCtx = canvas.getContext('2d');
+          tempCtx.fillStyle = 'rgba(88, 166, 255, 0.8)';
+          tempCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+          tempCtx.lineWidth = 2;
+          tempCtx.beginPath();
+          tempCtx.arc(x, y, 5, 0, Math.PI * 2);
+          tempCtx.fill();
+          tempCtx.stroke();
+          return;
+        } else {
+          // Create river with start and end
+          riverLayer.startRiver(window.riverStartPoint, { x, y }, riverWindiness, riverWidth);
+          window.riverStartPoint = null;
+          redraw();
+          return;
+        }
+      } else {
+        // Add control point to existing river
+        riverLayer.addControlPoint({ x, y });
+        redraw();
+        return;
+      }
+    }
+    
+    // Normal paint mode
     saveHistory();
     painting = true;
-    const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
     // Init MYB state for this stroke (only for myb brushes)
     const brush = brushCache[currentBrushId];
@@ -447,6 +577,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   canvas.addEventListener('mousemove', e => {
+    if (riverMode) return; // No drag in river mode
     if (!painting) return;
     e.preventDefault();
     const [x, y] = toCanvasCoords(e);
@@ -468,9 +599,40 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
+    
+    const [x, y] = toCanvasCoords(e);
+    
+    // River mode: place control points
+    if (riverMode) {
+      if (!riverLayer.currentRiver) {
+        if (!window.riverStartPoint) {
+          window.riverStartPoint = { x, y };
+          redraw();
+          const tempCtx = canvas.getContext('2d');
+          tempCtx.fillStyle = 'rgba(88, 166, 255, 0.8)';
+          tempCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+          tempCtx.lineWidth = 2;
+          tempCtx.beginPath();
+          tempCtx.arc(x, y, 5, 0, Math.PI * 2);
+          tempCtx.fill();
+          tempCtx.stroke();
+          return;
+        } else {
+          riverLayer.startRiver(window.riverStartPoint, { x, y }, riverWindiness, riverWidth);
+          window.riverStartPoint = null;
+          redraw();
+          return;
+        }
+      } else {
+        riverLayer.addControlPoint({ x, y });
+        redraw();
+        return;
+      }
+    }
+    
+    // Normal paint mode
     saveHistory();
     painting = true;
-    const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
     const brush = brushCache[currentBrushId];
     if (brush && brush.type === 'myb') {
@@ -483,6 +645,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }, { passive: false });
 
   canvas.addEventListener('touchmove', e => {
+    if (riverMode) return; // No drag in river mode
     if (!painting) return;
     e.preventDefault();
     const [x, y] = toCanvasCoords(e);
@@ -555,6 +718,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   clearBtn.addEventListener('click', () => {
     saveHistory();
     paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+    riverLayer.clearAll();
     redraw();
   });
 
@@ -566,7 +730,18 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function applyAndClose() {
     if (paintCanvas) outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
+    // Apply rivers to outCanvas
+    if (riverCanvas) {
+      const rCtx = riverCanvas.getContext('2d');
+      rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
+      riverLayer.render(rCtx, WATER_COLOR);
+      outCanvas.getContext('2d').drawImage(riverCanvas, 0, 0);
+    }
     hasChanges = false; // Reset after applying
+    riverMode = false;
+    riverModeBtn.classList.remove('active');
+    riverControlsRow.style.display = 'none';
+    window.riverStartPoint = null;
     modal.classList.remove('open');
     onPaintApplied();
   }
@@ -584,6 +759,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       pc.drawImage(cancelSnapshot, 0, 0);
     }
     hasChanges = false; // Reset after canceling
+    riverMode = false;
+    riverModeBtn.classList.remove('active');
+    riverControlsRow.style.display = 'none';
+    riverLayer.clearAll();
+    window.riverStartPoint = null;
     modal.classList.remove('open');
   }
 
