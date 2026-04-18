@@ -23,83 +23,27 @@
 export function generateRiverPath(controlPoints, windiness = 0.5, segmentLength = 5) {
   if (controlPoints.length < 2) return [];
   
-  const path = [];
+  // First, create a smooth base path using Catmull-Rom spline through control points
+  const basePath = [];
   
-  // For each segment between control points
   for (let i = 0; i < controlPoints.length - 1; i++) {
-    const p0 = controlPoints[i];
-    const p1 = controlPoints[i + 1];
+    const p0 = controlPoints[Math.max(0, i - 1)];
+    const p1 = controlPoints[i];
+    const p2 = controlPoints[i + 1];
+    const p3 = controlPoints[Math.min(controlPoints.length - 1, i + 2)];
     
-    // Calculate segment direction and length
-    const dx = p1.x - p0.x;
-    const dy = p1.y - p0.y;
+    // Calculate segment length for this section
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const angle = Math.atan2(dy, dx);
+    const numPoints = Math.max(10, Math.ceil(dist / segmentLength));
     
-    // Number of intermediate points
-    const numPoints = Math.max(2, Math.ceil(dist / segmentLength));
-    
-    // Generate points along this segment with Perlin-like noise
-    for (let j = 0; j <= numPoints; j++) {
+    // Generate smooth base points using Catmull-Rom
+    for (let j = 0; j < numPoints; j++) {
       const t = j / numPoints;
-      
-      // Base position (linear interpolation)
-      const baseX = p0.x + dx * t;
-      const baseY = p0.y + dy * t;
-      
-      // Add perpendicular offset for windiness
-      // Use multiple sine waves at different frequencies for natural look
-      const perpAngle = angle + Math.PI / 2;
-      
-      // Smooth windiness that's 0 at control points, max in middle
-      const windFactor = Math.sin(t * Math.PI) * windiness;
-      
-      // Multi-frequency noise for natural curves
-      const freq1 = 0.3;
-      const freq2 = 0.7;
-      const freq3 = 1.5;
-      
-      const noise = 
-        Math.sin(t * Math.PI * 2 * freq1 + i * 3.7) * 0.5 +
-        Math.sin(t * Math.PI * 2 * freq2 + i * 7.3) * 0.3 +
-        Math.sin(t * Math.PI * 2 * freq3 + i * 11.1) * 0.2;
-      
-      // Scale offset by distance and windiness
-      const maxOffset = dist * 0.15 * windFactor;
-      const offset = noise * maxOffset;
-      
-      const x = baseX + Math.cos(perpAngle) * offset;
-      const y = baseY + Math.sin(perpAngle) * offset;
-      
-      path.push({ x, y });
-    }
-  }
-  
-  return path;
-}
-
-/**
- * Smooth a river path using Catmull-Rom spline interpolation
- * @param {Array<{x, y}>} points - Input points
- * @param {number} smoothness - Number of interpolated points between each pair (higher = smoother)
- * @returns {Array<{x, y}>} - Smoothed path
- */
-export function smoothRiverPath(points, smoothness = 3) {
-  if (points.length < 2) return points;
-  
-  const smoothed = [];
-  
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-    
-    for (let t = 0; t < 1; t += 1 / smoothness) {
       const t2 = t * t;
       const t3 = t2 * t;
       
-      // Catmull-Rom spline formula
       const x = 0.5 * (
         (2 * p1.x) +
         (-p0.x + p2.x) * t +
@@ -114,11 +58,126 @@ export function smoothRiverPath(points, smoothness = 3) {
         (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
       );
       
-      smoothed.push({ x, y });
+      basePath.push({ x, y, segmentIndex: i, t });
     }
   }
   
   // Add final point
+  basePath.push({ 
+    x: controlPoints[controlPoints.length - 1].x, 
+    y: controlPoints[controlPoints.length - 1].y,
+    segmentIndex: controlPoints.length - 2,
+    t: 1
+  });
+  
+  // Now add windiness as perpendicular offset to the smooth base path
+  const windyPath = [];
+  
+  for (let i = 0; i < basePath.length; i++) {
+    const point = basePath[i];
+    
+    // Calculate tangent direction at this point
+    let tangentX, tangentY;
+    if (i === 0) {
+      tangentX = basePath[1].x - basePath[0].x;
+      tangentY = basePath[1].y - basePath[0].y;
+    } else if (i === basePath.length - 1) {
+      tangentX = basePath[i].x - basePath[i - 1].x;
+      tangentY = basePath[i].y - basePath[i - 1].y;
+    } else {
+      tangentX = basePath[i + 1].x - basePath[i - 1].x;
+      tangentY = basePath[i + 1].y - basePath[i - 1].y;
+    }
+    
+    const tangentLen = Math.sqrt(tangentX * tangentX + tangentY * tangentY);
+    if (tangentLen > 0) {
+      tangentX /= tangentLen;
+      tangentY /= tangentLen;
+    }
+    
+    // Perpendicular direction
+    const perpX = -tangentY;
+    const perpY = tangentX;
+    
+    // Calculate windiness offset using smooth noise
+    const globalT = i / basePath.length;
+    
+    // Multi-frequency noise for natural variation
+    const freq1 = 2.0;
+    const freq2 = 5.0;
+    const freq3 = 10.0;
+    
+    const noise = 
+      Math.sin(globalT * Math.PI * 2 * freq1 + point.segmentIndex * 2.1) * 0.5 +
+      Math.sin(globalT * Math.PI * 2 * freq2 + point.segmentIndex * 5.3) * 0.3 +
+      Math.sin(globalT * Math.PI * 2 * freq3 + point.segmentIndex * 8.7) * 0.2;
+    
+    // Scale offset by windiness parameter
+    // Reduce offset near control points for smoother transitions
+    const distToNearestControl = Math.min(
+      Math.abs(point.t),
+      Math.abs(1 - point.t)
+    );
+    const controlFade = Math.min(1, distToNearestControl * 3); // Fade in first/last 33%
+    
+    const maxOffset = 30 * windiness * controlFade;
+    const offset = noise * maxOffset;
+    
+    windyPath.push({
+      x: point.x + perpX * offset,
+      y: point.y + perpY * offset
+    });
+  }
+  
+  return windyPath;
+}
+
+/**
+ * Smooth a river path using Catmull-Rom spline interpolation
+ * This is now mainly used as a final pass for extra smoothness
+ * @param {Array<{x, y}>} points - Input points
+ * @param {number} smoothness - Number of interpolated points between each pair (higher = smoother)
+ * @returns {Array<{x, y}>} - Smoothed path
+ */
+export function smoothRiverPath(points, smoothness = 2) {
+  if (points.length < 4) return points;
+  
+  const smoothed = [];
+  
+  // Use fewer interpolation steps since path is already smooth
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[Math.max(0, i - 1)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(points.length - 1, i + 2)];
+    
+    // Only interpolate every Nth point to avoid over-smoothing
+    if (i % 3 === 0 || i === points.length - 2) {
+      for (let t = 0; t < 1; t += 1 / smoothness) {
+        const t2 = t * t;
+        const t3 = t2 * t;
+        
+        const x = 0.5 * (
+          (2 * p1.x) +
+          (-p0.x + p2.x) * t +
+          (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+          (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3
+        );
+        
+        const y = 0.5 * (
+          (2 * p1.y) +
+          (-p0.y + p2.y) * t +
+          (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+          (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3
+        );
+        
+        smoothed.push({ x, y });
+      }
+    } else {
+      smoothed.push(p1);
+    }
+  }
+  
   smoothed.push(points[points.length - 1]);
   
   return smoothed;
@@ -230,12 +289,16 @@ export class RiverLayer {
    */
   updateCurrentRiverPath() {
     if (!this.currentRiver) return;
-    const raw = generateRiverPath(
+    // Generate path with improved algorithm (already smooth)
+    this.currentRiver.path = generateRiverPath(
       this.currentRiver.controlPoints,
       this.currentRiver.windiness,
       5
     );
-    this.currentRiver.path = smoothRiverPath(raw, 3);
+    // Optional: apply light final smoothing
+    if (this.currentRiver.controlPoints.length > 3) {
+      this.currentRiver.path = smoothRiverPath(this.currentRiver.path, 2);
+    }
   }
   
   /**
@@ -329,11 +392,14 @@ export class RiverLayer {
    * Import rivers data
    */
   import(data) {
-    this.rivers = data.rivers.map(r => ({
-      controlPoints: r.controlPoints,
-      windiness: r.windiness,
-      width: r.width,
-      path: smoothRiverPath(generateRiverPath(r.controlPoints, r.windiness, 5), 3)
-    }));
+    this.rivers = data.rivers.map(r => {
+      const path = generateRiverPath(r.controlPoints, r.windiness, 5);
+      return {
+        controlPoints: r.controlPoints,
+        windiness: r.windiness,
+        width: r.width,
+        path: r.controlPoints.length > 3 ? smoothRiverPath(path, 2) : path
+      };
+    });
   }
 }
