@@ -61,6 +61,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const layersPanel = document.getElementById('paintLayersPanel');
   const layersList = document.getElementById('paintLayersList');
 
+  // Validate all required DOM elements
+  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList };
+  for (const [name, el] of Object.entries(domRefs)) {
+    if (!el) console.error(`[paint] DOM element not found: ${name}`);
+  }
+
   let currentTerrain = 'water';
   let brushSize = 16;
   let brushSpacing = 25; // % of brush size for custom brushes
