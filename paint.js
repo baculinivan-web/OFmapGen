@@ -674,11 +674,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
     jaggedIntensity.value = layer.jaggedEdges.intensity;
-    jaggedIntensityVal.textContent = layer.jaggedEdges.intensity;
+    jaggedIntensityVal.value = layer.jaggedEdges.intensity;
     jaggedScale.value = layer.jaggedEdges.scale || 1.0;
-    jaggedScaleVal.textContent = (layer.jaggedEdges.scale || 1.0).toFixed(1);
+    jaggedScaleVal.value = (layer.jaggedEdges.scale || 1.0).toFixed(1);
     jaggedFrequency.value = layer.jaggedEdges.frequency;
-    jaggedFrequencyVal.textContent = layer.jaggedEdges.frequency.toFixed(1);
+    jaggedFrequencyVal.value = layer.jaggedEdges.frequency.toFixed(1);
   }
   
   function closeJaggedEdgesPanel() {
@@ -704,14 +704,31 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.intensity = parseFloat(jaggedIntensity.value);
-      jaggedIntensityVal.textContent = jaggedIntensity.value;
-      // Don't redraw on input - wait for change event
+      jaggedIntensityVal.value = jaggedIntensity.value;
     }
   });
   
   jaggedIntensity?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    redraw(); // Only redraw when slider is released
+    redraw();
+  });
+  
+  // Manual input for intensity
+  jaggedIntensityVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedIntensityVal.value);
+    if (!isNaN(val) && val >= 0 && val <= 50) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.intensity = val;
+        jaggedIntensity.value = val;
+      }
+    }
+  });
+  
+  jaggedIntensityVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
   });
   
   jaggedScale?.addEventListener('input', () => {
@@ -719,14 +736,31 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.scale = parseFloat(jaggedScale.value);
-      jaggedScaleVal.textContent = parseFloat(jaggedScale.value).toFixed(1);
-      // Don't redraw on input - wait for change event
+      jaggedScaleVal.value = parseFloat(jaggedScale.value).toFixed(1);
     }
   });
   
   jaggedScale?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    redraw(); // Only redraw when slider is released
+    redraw();
+  });
+  
+  // Manual input for scale
+  jaggedScaleVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedScaleVal.value);
+    if (!isNaN(val) && val >= 0.1 && val <= 10) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.scale = val;
+        jaggedScale.value = val;
+      }
+    }
+  });
+  
+  jaggedScaleVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
   });
   
   jaggedFrequency?.addEventListener('input', () => {
@@ -734,14 +768,31 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.frequency = parseFloat(jaggedFrequency.value);
-      jaggedFrequencyVal.textContent = parseFloat(jaggedFrequency.value).toFixed(1);
-      // Don't redraw on input - wait for change event
+      jaggedFrequencyVal.value = parseFloat(jaggedFrequency.value).toFixed(1);
     }
   });
   
   jaggedFrequency?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    redraw(); // Only redraw when slider is released
+    redraw();
+  });
+  
+  // Manual input for frequency
+  jaggedFrequencyVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedFrequencyVal.value);
+    if (!isNaN(val) && val >= 0.1 && val <= 5) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.frequency = val;
+        jaggedFrequency.value = val;
+      }
+    }
+  });
+  
+  jaggedFrequencyVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
   });
 
   // ── Open ───────────────────────────────────────────────────────────────────
