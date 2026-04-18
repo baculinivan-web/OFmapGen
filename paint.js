@@ -104,17 +104,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     console.log(`[paint] loaded brush ${id} from fallback`);
   }
 
-  // Create built-in brush buttons
+  // Create built-in MyPaint brush buttons (skip 'solid' as it's in HTML)
   const brushBtnsContainer = document.getElementById('paintBrushBtns');
-  BRUSH_PRESETS.forEach((preset, idx) => {
+  BRUSH_PRESETS.slice(1).forEach((preset) => {
     const btn = document.createElement('button');
     btn.className = 'paint-brush-btn';
-    if (idx === 0) btn.classList.add('active'); // First brush is active by default
     btn.dataset.brush = preset.id;
     
     // SVG icons for each brush type
     const icons = {
-      'solid': '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>',
       'soft-round': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>',
       'hard-round': '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>',
       'dunes': '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(-30 12 12)"/></svg>',
@@ -133,13 +131,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // Auto-load default .abr brush pack on init
   (async () => {
     try {
+      console.log('[paint] attempting to load brushes-map-free.abr...');
       const resp = await fetch('./brushes-map-free.abr');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const buffer = await resp.arrayBuffer();
+      console.log('[paint] .abr file loaded, size:', buffer.byteLength, 'bytes');
       const brushes = await loadAbrFromArrayBuffer(buffer, 'brushes-map-free.abr');
+      console.log('[paint] parsed brushes:', brushes);
       if (brushes && brushes.length > 0) {
         for (const abrBrush of brushes) {
-          if (!abrBrush.valid) continue;
+          if (!abrBrush.valid) {
+            console.warn('[paint] skipping invalid brush:', abrBrush.name);
+            continue;
+          }
           const id = `default-${++customBrushCounter}`;
           const label = abrBrush.name.length > 20 ? abrBrush.name.slice(0, 20) + '…' : abrBrush.name;
           brushCache[id] = { type: 'abr', abrBrush };
@@ -158,11 +162,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             updateSpacingVisibility();
           });
           brushBtnsContainer.appendChild(btn);
+          console.log('[paint] added brush button:', label);
         }
         console.log(`[paint] auto-loaded ${brushes.length} default brushes from brushes-map-free.abr`);
+      } else {
+        console.warn('[paint] no valid brushes found in .abr file');
       }
     } catch (err) {
-      console.warn('[paint] failed to auto-load default .abr brushes:', err);
+      console.error('[paint] failed to auto-load default .abr brushes:', err);
     }
   })();
 
@@ -525,7 +532,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Brush buttons ──────────────────────────────────────────────────────────
-  // Brush buttons are now created dynamically, event listeners are attached during creation
+  // Attach listener to the static "Solid" brush button in HTML
+  const solidBtn = document.querySelector('[data-brush="solid"]');
+  if (solidBtn) {
+    solidBtn.addEventListener('click', () => {
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.classList.remove('active'));
+      solidBtn.classList.add('active');
+      currentBrushId = 'solid';
+      updateSpacingVisibility();
+    });
+  }
+  // Other brush buttons are created dynamically with listeners attached during creation
 
   function updateSpacingVisibility() {
     const brush = brushCache[currentBrushId];
