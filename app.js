@@ -1043,16 +1043,21 @@ function countLandTiles() {
 
 
 // ── Paint tool ────────────────────────────────────────────────────────────────
-const painter = initPaint({
-  outCanvas,
-  onPaintApplied: () => {
-    // Refresh preview after paint applied
-    preview.src = outCanvas.toDataURL('image/png');
-    downloadBtn.disabled = false;
-    downloadSrcBtn.disabled = false;
-    enableNationBtn();
-  },
-});
+let painter;
+try {
+  painter = initPaint({
+    outCanvas,
+    onPaintApplied: () => {
+      // Refresh preview after paint applied
+      preview.src = outCanvas.toDataURL('image/png');
+      downloadBtn.disabled = false;
+      downloadSrcBtn.disabled = false;
+      enableNationBtn();
+    },
+  });
+} catch(e) {
+  console.error('[app] initPaint failed:', e);
+}
 
 const paintTerrainBtn = document.getElementById('paintTerrainBtn');
 paintTerrainBtn.addEventListener('click', () => painter.open());
