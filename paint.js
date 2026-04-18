@@ -49,6 +49,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const loadBrushBtn = document.getElementById('paintLoadBrushBtn');
   const loadBrushInput = document.getElementById('paintLoadBrushInput');
   const riverModeBtn = document.getElementById('paintRiverModeBtn');
+  const fillModeBtn = document.getElementById('paintFillModeBtn');
   const riverWindinessSlider = document.getElementById('paintRiverWindinessSlider');
   const riverWindinessVal = document.getElementById('paintRiverWindinessVal');
   const riverWidthSlider = document.getElementById('paintRiverWidthSlider');
@@ -78,6 +79,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   // River mode state
   let riverMode = false;
+  let fillMode = false;
   let riverLayer = new RiverLayer();
   let riverCanvas = null; // Separate canvas for river layer
   let riverWindiness = 0.5;
@@ -360,11 +362,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       }
     }
     
-    // Draw rivers on top
+    // Draw rivers on top with selected river control points
     if (riverCanvas) {
       const rCtx = riverCanvas.getContext('2d');
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
-      riverLayer.render(rCtx, WATER_COLOR);
+      riverLayer.render(rCtx, WATER_COLOR, selectedRiverId);
       ctx.drawImage(riverCanvas, 0, 0);
     }
   }
@@ -400,7 +402,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     undoStack = []; redoStack = [];
     hasChanges = false;
     riverMode = false;
+    fillMode = false;
     riverModeBtn.classList.remove('active');
+    fillModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
     updateUndoRedoBtns();
@@ -470,6 +474,75 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
   }
 
+  // ── Flood fill algorithm ───────────────────────────────────────────────────
+  function floodFill(px, py) {
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer || layer.locked) return;
+    
+    const pc = layer.canvas.getContext('2d');
+    const w = layer.canvas.width;
+    const h = layer.canvas.height;
+    
+    // Get target color at click position
+    const imageData = pc.getImageData(0, 0, w, h);
+    const data = imageData.data;
+    
+    const idx = (py * w + px) * 4;
+    const targetR = data[idx];
+    const targetG = data[idx + 1];
+    const targetB = data[idx + 2];
+    const targetA = data[idx + 3];
+    
+    // Get fill color
+    const rgb = TERRAIN_COLORS[currentTerrain];
+    const fillR = rgb[0];
+    const fillG = rgb[1];
+    const fillB = rgb[2];
+    
+    // If target color is same as fill color, nothing to do
+    if (targetR === fillR && targetG === fillG && targetB === fillB) return;
+    
+    // Stack-based flood fill to avoid recursion depth issues
+    const stack = [[px, py]];
+    const visited = new Set();
+    
+    function colorMatch(x, y) {
+      if (x < 0 || x >= w || y < 0 || y >= h) return false;
+      const i = (y * w + x) * 4;
+      return data[i] === targetR && 
+             data[i + 1] === targetG && 
+             data[i + 2] === targetB &&
+             data[i + 3] === targetA;
+    }
+    
+    function setPixel(x, y) {
+      const i = (y * w + x) * 4;
+      data[i] = fillR;
+      data[i + 1] = fillG;
+      data[i + 2] = fillB;
+      data[i + 3] = 255;
+    }
+    
+    while (stack.length > 0) {
+      const [x, y] = stack.pop();
+      const key = `${x},${y}`;
+      
+      if (visited.has(key)) continue;
+      if (!colorMatch(x, y)) continue;
+      
+      visited.add(key);
+      setPixel(x, y);
+      
+      // Add neighbors
+      stack.push([x + 1, y]);
+      stack.push([x - 1, y]);
+      stack.push([x, y + 1]);
+      stack.push([x, y - 1]);
+    }
+    
+    pc.putImageData(imageData, 0, 0);
+  }
+
   // ABR stamp-based rendering
   function abrPaintDot(ctx, abrBrush, px, py, size, rgb) {
     const img = abrBrush.brushTipImage;
@@ -536,10 +609,41 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   // ── River mode controls ────────────────────────────────────────────────────
+  function toggleFillMode() {
+    fillMode = !fillMode;
+    fillModeBtn.classList.toggle('active', fillMode);
+    
+    // Disable river mode if fill mode is enabled
+    if (fillMode && riverMode) {
+      toggleRiverMode();
+    }
+    
+    if (fillMode) {
+      // Disable brush selection
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.style.opacity = '0.3');
+      document.getElementById('paintBrushSlider').disabled = true;
+      document.getElementById('paintBrushSlider').style.opacity = '0.3';
+      spacingRow.style.display = 'none';
+    } else {
+      // Re-enable brush selection
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.style.opacity = '');
+      document.getElementById('paintBrushSlider').disabled = false;
+      document.getElementById('paintBrushSlider').style.opacity = '';
+      updateSpacingVisibility();
+    }
+  }
+  
+  fillModeBtn.addEventListener('click', toggleFillMode);
+  
   function toggleRiverMode() {
     riverMode = !riverMode;
     riverModeBtn.classList.toggle('active', riverMode);
     riverControlsRow.style.display = riverMode ? 'block' : 'none';
+    
+    // Disable fill mode if river mode is enabled
+    if (riverMode && fillMode) {
+      toggleFillMode();
+    }
     
     if (riverMode) {
       // Disable terrain/brush selection
@@ -626,6 +730,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     e.preventDefault();
     
     const [x, y] = toCanvasCoords(e);
+    
+    // Fill mode: flood fill on click
+    if (fillMode) {
+      saveHistory();
+      floodFill(x, y);
+      hasChanges = true;
+      redraw();
+      return;
+    }
     
     // River mode: check if clicking on control point first
     if (riverMode) {
@@ -774,6 +887,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     e.preventDefault();
     
     const [x, y] = toCanvasCoords(e);
+    
+    // Fill mode: flood fill on tap
+    if (fillMode) {
+      saveHistory();
+      floodFill(x, y);
+      hasChanges = true;
+      redraw();
+      return;
+    }
     
     // River mode: place control points
     if (riverMode) {
@@ -1154,7 +1276,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     hasChanges = false;
     riverMode = false;
+    fillMode = false;
     riverModeBtn.classList.remove('active');
+    fillModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
     selectedRiverId = null;
@@ -1191,7 +1315,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     hasChanges = false;
     riverMode = false;
+    fillMode = false;
     riverModeBtn.classList.remove('active');
+    fillModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
     selectedRiverId = null;
