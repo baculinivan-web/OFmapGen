@@ -50,6 +50,7 @@ let srcImageData = null;
 let rafId        = null;
 let isGisSource  = false;
 let eyedropperMode = false;
+let brightnessData = null; // Stores brightness values for nation placement validation
 
 // ── Advanced threshold toggle ─────────────────────────────────────────────────
 const advThreshBtn   = document.getElementById('advThreshBtn');
@@ -225,6 +226,7 @@ function loadFile(file) {
     fileNameEl.textContent = file.name;
     fileNameEl.style.display = 'block';
     aiMask = null;
+    brightnessData = null; // Reset brightness data on new file load
     segStatus.textContent = '';
     setGisMode(false);
     eyedropperBtn.style.opacity = '';
@@ -240,7 +242,8 @@ const worker = new Worker('./worker.js');
 let pendingRender = null;
 
 worker.onmessage = ({ data }) => {
-  const { pixels, width, height } = data;
+  const { pixels, width, height, brightness } = data;
+  brightnessData = brightness; // Store brightness data for nation placement
   outCanvas.width = width; outCanvas.height = height;
   outCanvas.getContext('2d').putImageData(new ImageData(pixels, width, height), 0, 0);
   preview.src = outCanvas.toDataURL('image/png');
@@ -604,11 +607,15 @@ nationMapArea.addEventListener('click', (e) => {
 });
 
 function isWaterPixel(x, y) {
-  if (!outCanvas.width) return false;
-  const ctx = outCanvas.getContext('2d');
-  const d = ctx.getImageData(Math.max(0, Math.min(outCanvas.width - 1, x)),
-                              Math.max(0, Math.min(outCanvas.height - 1, y)), 1, 1).data;
-  return (d[0] < 40 && d[1] < 30 && d[2] < 60);
+  if (!brightnessData || !outCanvas.width) return false;
+  const width = outCanvas.width;
+  const height = outCanvas.height;
+  const clampedX = Math.max(0, Math.min(width - 1, Math.round(x)));
+  const clampedY = Math.max(0, Math.min(height - 1, Math.round(y)));
+  const idx = clampedY * width + clampedX;
+  const brightness = brightnessData[idx];
+  const waterThresh = parseFloat(sliders.water.value);
+  return brightness <= waterThresh;
 }
 
 let waterToastTimer = null;
