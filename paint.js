@@ -46,6 +46,20 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const loadBrushBtn = document.getElementById('paintLoadBrushBtn');
   const loadBrushInput = document.getElementById('paintLoadBrushInput');
 
+  // Naturalization UI elements
+  const naturalizeBtn = document.getElementById('paintNaturalizeBtn');
+  const naturalizePanel = document.getElementById('paintNaturalizePanel');
+  const transitionWidthSlider = document.getElementById('paintTransitionWidth');
+  const transitionWidthVal = document.getElementById('paintTransitionWidthVal');
+  const noiseFrequencySlider = document.getElementById('paintNoiseFrequency');
+  const noiseFrequencyVal = document.getElementById('paintNoiseFrequencyVal');
+  const islandDensitySlider = document.getElementById('paintIslandDensity');
+  const islandDensityVal = document.getElementById('paintIslandDensityVal');
+  const naturalizePreviewBtn = document.getElementById('paintNaturalizePreview');
+  const naturalizeApplyBtn = document.getElementById('paintNaturalizeApply');
+  const naturalizeCancelBtn = document.getElementById('paintNaturalizeCancel');
+  const naturalizeStatus = document.getElementById('paintNaturalizeStatus');
+
   let currentTerrain = 'water';
   let brushSize = 16;
   let brushSpacing = 25; // % of brush size for custom brushes
@@ -53,6 +67,18 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let lastX = null, lastY = null;
   let lastAngle = 0;
   let cancelSnapshot = null;
+
+  // ── Naturalization state ───────────────────────────────────────────────────
+  let naturalizationActive = false;
+  let maskCanvas = null;
+  let maskData = null;
+  let previewCanvas = null;
+  let naturalizationWorker = null;
+  let naturalizationParams = {
+    transitionWidth: 10,
+    noiseFrequency: 0.05,
+    islandDensity: 0.3
+  };
 
   // ── Brush state ────────────────────────────────────────────────────────────
   let currentBrushId = 'solid';
@@ -282,6 +308,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!outCanvas.width) return;
     ctx.drawImage(outCanvas, 0, 0);
     if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
+    if (previewCanvas) {
+      ctx.globalAlpha = 0.7;
+      ctx.drawImage(previewCanvas, 0, 0);
+      ctx.globalAlpha = 1.0;
+    }
+    if (maskCanvas && naturalizationActive && !previewCanvas) {
+      ctx.drawImage(maskCanvas, 0, 0);
+    }
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
@@ -320,6 +354,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function getPaintCtx() { return paintCanvas.getContext('2d'); }
 
   function paintDot(px, py) {
+    // If naturalization mode is active, paint mask instead
+    if (naturalizationActive) {
+      paintMaskDot(px, py);
+      drawMaskOverlay();
+      return;
+    }
+    
     const rgb = TERRAIN_COLORS[currentTerrain];
     const brush = brushCache[currentBrushId];
     
@@ -337,6 +378,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function paintSegment(x0, y0, x1, y1) {
+    // If naturalization mode is active, paint mask instead
+    if (naturalizationActive) {
+      paintMaskSegment(x0, y0, x1, y1);
+      drawMaskOverlay();
+      return;
+    }
+    
     const rgb = TERRAIN_COLORS[currentTerrain];
     const brush = brushCache[currentBrushId];
     
@@ -454,8 +502,16 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   });
 
-  canvas.addEventListener('mouseup',    () => { painting = false; mybState = null; });
-  canvas.addEventListener('mouseleave', () => { painting = false; mybState = null; });
+  canvas.addEventListener('mouseup',    () => { 
+    painting = false; 
+    mybState = null; 
+    if (naturalizationActive) updateNaturalizeButtons();
+  });
+  canvas.addEventListener('mouseleave', () => { 
+    painting = false; 
+    mybState = null; 
+    if (naturalizationActive) updateNaturalizeButtons();
+  });
 
   canvas.addEventListener('touchstart', e => {
     e.preventDefault();
@@ -484,7 +540,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   }, { passive: false });
 
-  canvas.addEventListener('touchend', () => { painting = false; mybState = null; });
+  canvas.addEventListener('touchend', () => { 
+    painting = false; 
+    mybState = null; 
+    if (naturalizationActive) updateNaturalizeButtons();
+  });
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
   document.addEventListener('keydown', e => {
@@ -501,6 +561,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       terrainBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentTerrain = btn.dataset.terrain;
+      // Deactivate naturalization when switching to terrain painting
+      if (naturalizationActive) {
+        deactivateNaturalization();
+      }
     });
   });
 
@@ -565,6 +629,283 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   doneBtn.addEventListener('click',   applyAndClose);
   cancelBtn.addEventListener('click', cancelAndClose);
   closeBtn.addEventListener('click',  cancelAndClose);
+
+  // ── Naturalization ─────────────────────────────────────────────────────────
+  
+  // Load parameters from localStorage
+  function loadNaturalizationParams() {
+    try {
+      const saved = localStorage.getItem('naturalizationParams');
+      if (saved) {
+        const params = JSON.parse(saved);
+        naturalizationParams = { ...naturalizationParams, ...params };
+        transitionWidthSlider.value = naturalizationParams.transitionWidth;
+        transitionWidthVal.textContent = naturalizationParams.transitionWidth + 'px';
+        noiseFrequencySlider.value = naturalizationParams.noiseFrequency;
+        noiseFrequencyVal.textContent = naturalizationParams.noiseFrequency.toFixed(2);
+        islandDensitySlider.value = naturalizationParams.islandDensity;
+        islandDensityVal.textContent = naturalizationParams.islandDensity.toFixed(1);
+      }
+    } catch (err) {
+      console.error('[paint] failed to load naturalization params:', err);
+    }
+  }
+
+  // Save parameters to localStorage
+  function saveNaturalizationParams() {
+    try {
+      localStorage.setItem('naturalizationParams', JSON.stringify(naturalizationParams));
+    } catch (err) {
+      console.error('[paint] failed to save naturalization params:', err);
+    }
+  }
+
+  // Initialize mask canvas
+  function ensureMaskCanvas() {
+    if (maskCanvas && maskCanvas.width === paintCanvas.width && maskCanvas.height === paintCanvas.height) return;
+    maskCanvas = document.createElement('canvas');
+    maskCanvas.width = paintCanvas.width;
+    maskCanvas.height = paintCanvas.height;
+    maskData = new Uint8Array(maskCanvas.width * maskCanvas.height);
+  }
+
+  // Draw mask overlay
+  function drawMaskOverlay() {
+    if (!maskCanvas || !naturalizationActive) return;
+    const mctx = maskCanvas.getContext('2d');
+    const imageData = mctx.createImageData(maskCanvas.width, maskCanvas.height);
+    const data = imageData.data;
+    
+    // Draw semi-transparent red overlay where mask is non-zero
+    for (let i = 0; i < maskData.length; i++) {
+      if (maskData[i] > 0) {
+        data[i * 4] = 255;     // R
+        data[i * 4 + 1] = 0;   // G
+        data[i * 4 + 2] = 0;   // B
+        data[i * 4 + 3] = Math.floor(maskData[i] * 0.3); // A (30% opacity)
+      }
+    }
+    
+    mctx.putImageData(imageData, 0, 0);
+  }
+
+  // Paint mask dot
+  function paintMaskDot(px, py) {
+    const mx = Math.floor(px);
+    const my = Math.floor(py);
+    const radius = brushSize;
+    
+    for (let y = Math.max(0, my - radius); y <= Math.min(maskCanvas.height - 1, my + radius); y++) {
+      for (let x = Math.max(0, mx - radius); x <= Math.min(maskCanvas.width - 1, mx + radius); x++) {
+        const dx = x - mx;
+        const dy = y - my;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= radius) {
+          const index = y * maskCanvas.width + x;
+          maskData[index] = 255;
+        }
+      }
+    }
+  }
+
+  // Paint mask segment
+  function paintMaskSegment(x0, y0, x1, y1) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const steps = Math.max(1, Math.ceil(dist / (brushSize * 0.4)));
+    
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = x0 + dx * t;
+      const y = y0 + dy * t;
+      paintMaskDot(x, y);
+    }
+  }
+
+  // Check if mask is empty
+  function isMaskEmpty() {
+    if (!maskData) return true;
+    for (let i = 0; i < maskData.length; i++) {
+      if (maskData[i] > 0) return false;
+    }
+    return true;
+  }
+
+  // Activate naturalization mode
+  function activateNaturalization() {
+    naturalizationActive = true;
+    ensureMaskCanvas();
+    naturalizeBtn.classList.add('active');
+    naturalizePanel.style.display = 'block';
+    terrainBtns.forEach(btn => btn.classList.remove('active'));
+    canvas.style.cursor = 'crosshair';
+    updateNaturalizeButtons();
+  }
+
+  // Deactivate naturalization mode
+  function deactivateNaturalization() {
+    naturalizationActive = false;
+    naturalizeBtn.classList.remove('active');
+    naturalizePanel.style.display = 'none';
+    if (maskCanvas) {
+      maskCanvas.getContext('2d').clearRect(0, 0, maskCanvas.width, maskCanvas.height);
+      maskData.fill(0);
+    }
+    if (previewCanvas) {
+      previewCanvas = null;
+    }
+    naturalizePreviewBtn.style.display = 'block';
+    naturalizeApplyBtn.style.display = 'none';
+    naturalizeCancelBtn.style.display = 'none';
+    naturalizeStatus.style.display = 'none';
+    redraw();
+  }
+
+  // Update naturalize buttons state
+  function updateNaturalizeButtons() {
+    const maskEmpty = isMaskEmpty();
+    naturalizePreviewBtn.disabled = maskEmpty;
+    if (maskEmpty) {
+      naturalizeStatus.style.display = 'block';
+      naturalizeStatus.textContent = 'Draw mask to enable preview';
+      naturalizeStatus.style.color = 'var(--muted)';
+    } else {
+      naturalizeStatus.style.display = 'none';
+    }
+  }
+
+  // Generate preview
+  function generatePreview() {
+    if (!paintCanvas || !maskCanvas || isMaskEmpty()) return;
+    
+    naturalizeStatus.style.display = 'block';
+    naturalizeStatus.textContent = 'Processing...';
+    naturalizeStatus.style.color = 'var(--muted)';
+    naturalizePreviewBtn.disabled = true;
+
+    // Get paint canvas data
+    const pc = paintCanvas.getContext('2d');
+    const imageData = pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height);
+    
+    // Create worker if not exists
+    if (!naturalizationWorker) {
+      naturalizationWorker = new Worker('./naturalization-worker.js');
+      
+      naturalizationWorker.onmessage = ({ data }) => {
+        if (data.type === 'naturalize-result') {
+          // Create preview canvas
+          previewCanvas = document.createElement('canvas');
+          previewCanvas.width = data.width;
+          previewCanvas.height = data.height;
+          const pctx = previewCanvas.getContext('2d');
+          pctx.putImageData(new ImageData(data.imageData, data.width, data.height), 0, 0);
+          
+          // Show apply/cancel buttons
+          naturalizePreviewBtn.style.display = 'none';
+          naturalizeApplyBtn.style.display = 'block';
+          naturalizeCancelBtn.style.display = 'block';
+          naturalizeStatus.textContent = 'Preview ready';
+          naturalizeStatus.style.color = 'var(--accent)';
+          
+          redraw();
+        } else if (data.type === 'naturalize-error') {
+          naturalizeStatus.textContent = 'Error: ' + data.error;
+          naturalizeStatus.style.color = '#ff6b6b';
+          naturalizePreviewBtn.disabled = false;
+        }
+      };
+      
+      naturalizationWorker.onerror = (error) => {
+        console.error('[paint] naturalization worker error:', error);
+        naturalizeStatus.textContent = 'Worker error';
+        naturalizeStatus.style.color = '#ff6b6b';
+        naturalizePreviewBtn.disabled = false;
+      };
+    }
+    
+    // Send to worker
+    naturalizationWorker.postMessage({
+      type: 'naturalize',
+      imageData: imageData.data,
+      maskData: maskData,
+      width: paintCanvas.width,
+      height: paintCanvas.height,
+      params: naturalizationParams
+    });
+  }
+
+  // Apply naturalization
+  function applyNaturalization() {
+    if (!previewCanvas) return;
+    
+    saveHistory();
+    const pc = paintCanvas.getContext('2d');
+    pc.drawImage(previewCanvas, 0, 0);
+    
+    // Clear mask and preview
+    maskData.fill(0);
+    previewCanvas = null;
+    
+    // Reset UI
+    naturalizePreviewBtn.style.display = 'block';
+    naturalizeApplyBtn.style.display = 'none';
+    naturalizeCancelBtn.style.display = 'none';
+    naturalizeStatus.style.display = 'none';
+    
+    redraw();
+    updateNaturalizeButtons();
+  }
+
+  // Cancel naturalization
+  function cancelNaturalization() {
+    previewCanvas = null;
+    
+    // Reset UI
+    naturalizePreviewBtn.style.display = 'block';
+    naturalizeApplyBtn.style.display = 'none';
+    naturalizeCancelBtn.style.display = 'none';
+    naturalizeStatus.style.display = 'none';
+    naturalizePreviewBtn.disabled = false;
+    
+    redraw();
+  }
+
+  // Naturalization button click
+  naturalizeBtn.addEventListener('click', () => {
+    if (naturalizationActive) {
+      deactivateNaturalization();
+    } else {
+      activateNaturalization();
+    }
+  });
+
+  // Parameter sliders
+  transitionWidthSlider.addEventListener('input', () => {
+    naturalizationParams.transitionWidth = parseInt(transitionWidthSlider.value);
+    transitionWidthVal.textContent = naturalizationParams.transitionWidth + 'px';
+    saveNaturalizationParams();
+  });
+
+  noiseFrequencySlider.addEventListener('input', () => {
+    naturalizationParams.noiseFrequency = parseFloat(noiseFrequencySlider.value);
+    noiseFrequencyVal.textContent = naturalizationParams.noiseFrequency.toFixed(2);
+    saveNaturalizationParams();
+  });
+
+  islandDensitySlider.addEventListener('input', () => {
+    naturalizationParams.islandDensity = parseFloat(islandDensitySlider.value);
+    islandDensityVal.textContent = naturalizationParams.islandDensity.toFixed(1);
+    saveNaturalizationParams();
+  });
+
+  // Preview/Apply/Cancel buttons
+  naturalizePreviewBtn.addEventListener('click', generatePreview);
+  naturalizeApplyBtn.addEventListener('click', applyNaturalization);
+  naturalizeCancelBtn.addEventListener('click', cancelNaturalization);
+
+  // Load saved parameters on init
+  loadNaturalizationParams();
 
   return { open };
 }
