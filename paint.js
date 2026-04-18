@@ -12,13 +12,55 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     mountain: [190, 190, 190],
   };
 
-  // Built-in brush presets (loaded from ./brushes/)
+  // Built-in brush presets — params are inlined as fallback if fetch fails
   const BRUSH_PRESETS = [
     { id: 'solid',      label: 'Solid',       file: null },
     { id: 'soft-round', label: 'Soft Round',  file: './brushes/soft-round.myb' },
     { id: 'hard-round', label: 'Hard Round',  file: './brushes/hard-round.myb' },
     { id: 'dunes',      label: 'Dunes',       file: './brushes/dunes.myb' },
   ];
+
+  // Inline fallback params in case fetch is unavailable (file:// protocol etc.)
+  const BRUSH_FALLBACKS = {
+    'soft-round': { version: 3, settings: {
+      radius_logarithmic:     { base_value: 2.0, inputs: {} },
+      hardness:               { base_value: 0.5, inputs: {} },
+      opaque:                 { base_value: 0.9, inputs: {} },
+      opaque_linearize:       { base_value: 0.9, inputs: {} },
+      dabs_per_actual_radius: { base_value: 2.0, inputs: {} },
+      offset_by_random:       { base_value: 0.0, inputs: {} },
+      elliptical_dab_ratio:   { base_value: 1.0, inputs: {} },
+      elliptical_dab_angle:   { base_value: 90.0, inputs: {} },
+      direction_filter:       { base_value: 2.0, inputs: {} },
+      radius_by_random:       { base_value: 0.0, inputs: {} },
+    }},
+    'hard-round': { version: 3, settings: {
+      radius_logarithmic:     { base_value: 2.0, inputs: {} },
+      hardness:               { base_value: 1.0, inputs: {} },
+      opaque:                 { base_value: 1.0, inputs: {} },
+      opaque_linearize:       { base_value: 0.9, inputs: {} },
+      dabs_per_actual_radius: { base_value: 3.0, inputs: {} },
+      offset_by_random:       { base_value: 0.0, inputs: {} },
+      elliptical_dab_ratio:   { base_value: 1.0, inputs: {} },
+      elliptical_dab_angle:   { base_value: 90.0, inputs: {} },
+      direction_filter:       { base_value: 2.0, inputs: {} },
+      radius_by_random:       { base_value: 0.0, inputs: {} },
+    }},
+    'dunes': { version: 3, settings: {
+      radius_logarithmic:     { base_value: 2.3, inputs: {} },
+      hardness:               { base_value: 0.35, inputs: {} },
+      opaque:                 { base_value: 0.7, inputs: {} },
+      opaque_linearize:       { base_value: 0.5, inputs: {} },
+      dabs_per_actual_radius: { base_value: 1.2, inputs: {} },
+      offset_by_random:       { base_value: 1.5, inputs: {} },
+      elliptical_dab_ratio:   { base_value: 3.5, inputs: {} },
+      elliptical_dab_angle:   { base_value: 90.0, inputs: {
+        direction: [[0.0, 0.0], [180.0, 1.0]]
+      }},
+      direction_filter:       { base_value: 3.0, inputs: {} },
+      radius_by_random:       { base_value: 0.4, inputs: {} },
+    }},
+  };
 
   // ── DOM refs ───────────────────────────────────────────────────────────────
   const modal       = document.getElementById('paintModal');
@@ -50,18 +92,26 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // Active MybBrushState for current stroke
   let mybState = null;
 
-  // Pre-load all MYB presets
+  // Pre-load all MYB presets, fall back to inline params if fetch fails
   async function loadBrushPresets() {
     for (const preset of BRUSH_PRESETS) {
       if (!preset.file) continue;
       try {
         const res = await fetch(preset.file);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const myb = await res.json();
         brushCache[preset.id] = parseMybBrush(myb);
       } catch (e) {
-        console.warn(`[paint] Failed to load brush ${preset.id}:`, e);
+        console.warn(`[paint] fetch failed for ${preset.id}, using fallback:`, e);
+        if (BRUSH_FALLBACKS[preset.id]) {
+          brushCache[preset.id] = parseMybBrush(BRUSH_FALLBACKS[preset.id]);
+        }
       }
     }
+  }
+  // Load async but also seed cache immediately from fallbacks so brushes work right away
+  for (const [id, myb] of Object.entries(BRUSH_FALLBACKS)) {
+    brushCache[id] = parseMybBrush(myb);
   }
   loadBrushPresets();
 
