@@ -33,6 +33,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const modal       = document.getElementById('paintModal');
   const mapArea     = document.getElementById('paintMapArea');
   const canvas      = document.getElementById('paintCanvas');
+  if (!canvas) { console.error('[paint] paintCanvas not found in DOM'); return { open: () => {} }; }
   const ctx         = canvas.getContext('2d');
   const brushSlider = document.getElementById('paintBrushSlider');
   const brushVal    = document.getElementById('paintBrushVal');

@@ -1048,7 +1048,6 @@ try {
   painter = initPaint({
     outCanvas,
     onPaintApplied: () => {
-      // Refresh preview after paint applied
       preview.src = outCanvas.toDataURL('image/png');
       downloadBtn.disabled = false;
       downloadSrcBtn.disabled = false;
@@ -1057,6 +1056,7 @@ try {
   });
 } catch(e) {
   console.error('[app] initPaint failed:', e);
+  painter = { open: () => {} };
 }
 
 const paintTerrainBtn = document.getElementById('paintTerrainBtn');
