@@ -323,7 +323,21 @@ self.onmessage = function({ data }) {
     // Step 1: Build distance fields - distance from each terrain type
     const distanceFields = buildDistanceFields(zones, maskData, width, height);
     
+    // Step 1.5: Detect which terrain types exist in the masked region
+    const existingTerrains = new Set();
+    for (let i = 0; i < width * height; i++) {
+      if (maskData[i] > 0) {
+        existingTerrains.add(zones[i]);
+      }
+    }
+    
+    // Convert to sorted array for min/max calculations
+    const terrainRange = Array.from(existingTerrains).sort((a, b) => a - b);
+    const minTerrain = terrainRange[0];
+    const maxTerrain = terrainRange[terrainRange.length - 1];
+    
     // Step 2: For each pixel, determine terrain based on distances + noise
+    // Only generate terrain types that exist in the selection
     const naturalizedZones = new Uint8Array(zones);
     
     for (let y = 0; y < height; y++) {
@@ -350,34 +364,56 @@ self.onmessage = function({ data }) {
         // Normalize noise from [-1.75, 1.75] to [-1, 1]
         const normalizedNoise = fractalNoise / 1.75;
         
-        // KEY FIX: Calculate elevation based on INVERSE distance from mountains
-        // Elevation DECREASES as we move away from mountains
-        // This creates natural slopes from peaks down to water
+        // Calculate elevation based on distance from highest terrain in selection
+        const distances = [distToWater, distToPlain, distToHighland, distToMountain];
         const maxDist = transitionWidth * 3;
-        let elevation = 3 - (distToMountain / maxDist) * 3; // 3 at mountain, 0 far away
         
-        // Clamp elevation to valid range
-        elevation = Math.max(0, Math.min(3, elevation));
+        // Use distance from the highest terrain type that exists
+        let distFromHighest = distances[maxTerrain];
+        let elevation = maxTerrain - (distFromHighest / maxDist) * (maxTerrain - minTerrain);
+        
+        // Clamp elevation to the range of existing terrains
+        elevation = Math.max(minTerrain, Math.min(maxTerrain, elevation));
         
         // Add noise to create organic boundaries
         // Stronger noise near boundaries between zones
-        const minDist = Math.min(distToWater, distToPlain, distToHighland, distToMountain);
+        const minDist = Math.min(...terrainRange.map(t => distances[t]));
         const noiseStrength = Math.min(1, (transitionWidth - minDist) / transitionWidth);
         elevation += normalizedNoise * noiseStrength * 1.2;
         
-        // Determine terrain type based on elevation thresholds
-        if (elevation > 2.5) {
-          naturalizedZones[index] = 3; // Mountain
-        } else if (elevation > 1.5) {
-          naturalizedZones[index] = 2; // Highland
-        } else if (elevation > 0.5) {
-          naturalizedZones[index] = 1; // Plain
+        // Clamp again after adding noise
+        elevation = Math.max(minTerrain, Math.min(maxTerrain, elevation));
+        
+        // Map elevation to terrain type, using only existing terrain types
+        // Create thresholds based on existing terrains
+        if (terrainRange.length === 1) {
+          // Only one terrain type - keep it
+          naturalizedZones[index] = terrainRange[0];
+        } else if (terrainRange.length === 2) {
+          // Two terrain types - simple threshold
+          const threshold = (terrainRange[0] + terrainRange[1]) / 2;
+          naturalizedZones[index] = elevation < threshold ? terrainRange[0] : terrainRange[1];
         } else {
-          // Water zone - add islands based on density
-          if (normalizedNoise > (0.85 - islandDensity * 0.4) && elevation > 0.2) {
-            naturalizedZones[index] = 1; // Small island
-          } else {
-            naturalizedZones[index] = 0; // Water
+          // Multiple terrain types - distribute evenly
+          const step = (maxTerrain - minTerrain) / terrainRange.length;
+          let selectedTerrain = terrainRange[0];
+          for (let i = 0; i < terrainRange.length; i++) {
+            if (elevation >= minTerrain + step * i) {
+              selectedTerrain = terrainRange[i];
+            }
+          }
+          naturalizedZones[index] = selectedTerrain;
+        }
+        
+        // Special case: island generation only if water exists in selection
+        if (existingTerrains.has(0) && naturalizedZones[index] === 0) {
+          // Add islands based on density
+          if (normalizedNoise > (0.85 - islandDensity * 0.4) && elevation > minTerrain + 0.2) {
+            // Create island using the next terrain type above water
+            const nextTerrain = terrainRange.find(t => t > 0);
+            if (nextTerrain !== undefined) {
+              naturalizedZones[index] = nextTerrain;
+            }
           }
         }
       }
