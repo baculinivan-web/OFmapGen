@@ -403,7 +403,7 @@ function showThresholdPicker(brightness, r, g, b) {
           <span class="swatch" style="background:var(--mountain);width:20px;height:20px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,0.1);"></span>
           <div style="flex:1;">
             <div style="font-size:0.88rem;font-weight:500;color:var(--text);">Mountain threshold</div>
-            <div style="font-size:0.72rem;color:var(--muted);">Pixels brighter than this become mountains</div>
+            <div style="font-size:0.72rem;color:var(--muted);">Pixels at this brightness and above become mountains</div>
           </div>
         </button>
       </div>
@@ -414,8 +414,14 @@ function showThresholdPicker(brightness, r, g, b) {
     </div>`;
   document.body.appendChild(overlay);
 
-  const applyThreshold = (slider) => {
-    slider.value = brightness;
+  const applyThreshold = (slider, isMountain = false) => {
+    if (isMountain) {
+      // For mountains: set highland threshold slightly below picked brightness
+      // so pixels at this brightness and above become mountains
+      slider.value = Math.max(0, brightness - 0.01);
+    } else {
+      slider.value = brightness;
+    }
     scheduleRender();
     overlay.remove();
     eyedropperMode = false;
@@ -441,7 +447,7 @@ function showThresholdPicker(brightness, r, g, b) {
   overlay.querySelector('#pickWater').onclick = () => applyThreshold(sliders.water);
   overlay.querySelector('#pickPlain').onclick = () => applyThreshold(sliders.plain);
   overlay.querySelector('#pickHighland').onclick = () => applyThreshold(sliders.highland);
-  overlay.querySelector('#pickMountain').onclick = () => applyThreshold(sliders.highland);
+  overlay.querySelector('#pickMountain').onclick = () => applyThreshold(sliders.highland, true);
   overlay.querySelector('#pickCancel').onclick = () => {
     overlay.remove();
     eyedropperMode = false;
