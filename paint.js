@@ -501,7 +501,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const ctrl = e.ctrlKey || e.metaKey;
     if (ctrl && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
     if (ctrl && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-    if (e.key === 'Escape') cancelAndClose();
+    // ESC disabled - user must explicitly click Done or Cancel
   });
 
   // ── Terrain buttons ────────────────────────────────────────────────────────
@@ -556,6 +556,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Done / Cancel ──────────────────────────────────────────────────────────
+  function hasUnsavedChanges() {
+    // Check if there are any changes in the undo stack
+    return undoStack.length > 0;
+  }
+
   function applyAndClose() {
     if (paintCanvas) outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
     modal.classList.remove('open');
@@ -563,6 +568,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function cancelAndClose() {
+    // Check for unsaved changes
+    if (hasUnsavedChanges()) {
+      const confirmed = confirm('You have unsaved changes. Are you sure you want to discard them?');
+      if (!confirmed) return;
+    }
+    
     if (cancelSnapshot && paintCanvas) {
       const pc = paintCanvas.getContext('2d');
       pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
