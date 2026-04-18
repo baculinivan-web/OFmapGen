@@ -92,28 +92,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // Active MybBrushState for current stroke
   let mybState = null;
 
-  // Pre-load all MYB presets, fall back to inline params if fetch fails
-  async function loadBrushPresets() {
-    for (const preset of BRUSH_PRESETS) {
-      if (!preset.file) continue;
-      try {
-        const res = await fetch(preset.file);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const myb = await res.json();
-        brushCache[preset.id] = parseMybBrush(myb);
-      } catch (e) {
-        console.warn(`[paint] fetch failed for ${preset.id}, using fallback:`, e);
-        if (BRUSH_FALLBACKS[preset.id]) {
-          brushCache[preset.id] = parseMybBrush(BRUSH_FALLBACKS[preset.id]);
-        }
-      }
-    }
-  }
-  // Load async but also seed cache immediately from fallbacks so brushes work right away
+  // Seed cache immediately from inline fallbacks (no async fetch needed for now)
   for (const [id, myb] of Object.entries(BRUSH_FALLBACKS)) {
     brushCache[id] = parseMybBrush(myb);
+    console.log(`[paint] loaded brush ${id} from fallback`);
   }
-  loadBrushPresets();
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
   const MAX_HISTORY = 30;
@@ -253,10 +236,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Init MYB state for this stroke
     if (currentBrushId !== 'solid' && brushCache[currentBrushId]) {
       mybState = new MybBrushState(brushCache[currentBrushId]);
-      console.log('[paint] myb stroke start, brush=', currentBrushId, 'params=', brushCache[currentBrushId]);
     } else {
       mybState = null;
-      console.log('[paint] no myb state, brushId=', currentBrushId, 'cache keys=', Object.keys(brushCache));
     }
     paintDot(x, y);
     redraw();

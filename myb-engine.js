@@ -203,6 +203,5 @@ export function mybPaintDot(ctx, state, x, y, brushSizePx, rgb) {
   const p = state.params;
   const baseRadius = brushSizePx;
   const alpha = Math.min(1, p.opaque);
-  console.log('[myb] dot', x, y, 'r=', baseRadius, 'h=', p.hardness, 'a=', alpha, 'ratio=', p.elliptical_dab_ratio);
   drawDab(ctx, x, y, baseRadius, p.hardness, alpha, p.elliptical_dab_ratio, p.elliptical_dab_angle_base, rgb);
 }
