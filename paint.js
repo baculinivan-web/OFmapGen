@@ -315,28 +315,39 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // ABR stamp-based rendering
   function abrPaintDot(ctx, abrBrush, px, py, size, rgb) {
     const img = abrBrush.brushTipImage;
+    if (!img || !img.width || !img.height) return;
+    
     const scale = size / Math.max(img.width, img.height);
     const w = img.width * scale;
     const h = img.height * scale;
     
-    ctx.save();
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.globalAlpha = 1;
+    // Create offscreen canvas for tinting
+    const temp = document.createElement('canvas');
+    temp.width = w;
+    temp.height = h;
+    const tempCtx = temp.getContext('2d');
     
-    // Tint the brush with terrain color
-    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-    ctx.fillRect(px - w/2, py - h/2, w, h);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(img, px - w/2, py - h/2, w, h);
+    // Draw brush texture
+    tempCtx.drawImage(img, 0, 0, w, h);
     
-    ctx.restore();
+    // Tint with terrain color using multiply blend
+    tempCtx.globalCompositeOperation = 'multiply';
+    tempCtx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    tempCtx.fillRect(0, 0, w, h);
+    
+    // Restore alpha from original
+    tempCtx.globalCompositeOperation = 'destination-in';
+    tempCtx.drawImage(img, 0, 0, w, h);
+    
+    // Draw to main canvas
+    ctx.drawImage(temp, px - w/2, py - h/2);
   }
 
   function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const spacing = abrBrush.spacing || 25; // % of brush size
-    const step = (size * spacing / 100);
+    const step = Math.max(1, size * spacing / 100);
     const steps = Math.max(1, Math.ceil(dist / step));
     
     for (let i = 0; i <= steps; i++) {
