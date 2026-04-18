@@ -240,6 +240,7 @@ function loadFile(file) {
 // ── Worker ────────────────────────────────────────────────────────────────────
 const worker = new Worker('./worker.js');
 let pendingRender = null;
+let openEditorAfterRender = false;
 
 worker.onmessage = ({ data }) => {
   const { pixels, width, height, brightness } = data;
@@ -254,6 +255,14 @@ worker.onmessage = ({ data }) => {
   downloadSrcBtn.disabled = false;
   enableNationBtn();
   if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
+  
+  // Open editor if requested (after blank map creation)
+  if (openEditorAfterRender) {
+    openEditorAfterRender = false;
+    if (painter && painter.open) {
+      painter.open();
+    }
+  }
 };
 
 function scheduleRender(overrideImageData) {
@@ -1098,15 +1107,11 @@ function createBlankMap() {
   eyedropperBtn.style.opacity = '';
   eyedropperBtn.style.pointerEvents = '';
   
+  // Set flag to open editor after render completes
+  openEditorAfterRender = true;
+  
   scheduleRender();
   closeBlankMapModal();
-  
-  // Open paint editor immediately
-  setTimeout(() => {
-    if (painter && painter.open) {
-      painter.open();
-    }
-  }, 100);
 }
 
 // Aspect ratio button selection
