@@ -127,9 +127,10 @@ function drawDab(ctx, cx, cy, radius, hardness, alpha, ratio, angleDeg, rgb) {
  * @param {number} x0, y0  — start (canvas pixels)
  * @param {number} x1, y1  — end (canvas pixels)
  * @param {number} brushSizePx  — user brush size slider value (base radius override)
+ * @param {number} spacingPercent — user spacing override (% of brush size)
  * @param {number[]} rgb   — [r,g,b] terrain color
  */
-export function mybPaintSegment(ctx, state, x0, y0, x1, y1, brushSizePx, rgb) {
+export function mybPaintSegment(ctx, state, x0, y0, x1, y1, brushSizePx, spacingPercent, rgb) {
   const p = state.params;
 
   // Base radius from slider (overrides radius_logarithmic for user control)
@@ -150,8 +151,8 @@ export function mybPaintSegment(ctx, state, x0, y0, x1, y1, brushSizePx, rgb) {
   // Normalize to 0..180 (MyPaint direction input range)
   const dirInput = ((dirAngleDeg % 180) + 180) % 180;
 
-  // Dab spacing: move dabs_per_actual_radius dabs per radius distance
-  const dabSpacing = Math.max(1, baseRadius / Math.max(0.1, p.dabs_per_actual_radius));
+  // Dab spacing: use user override if provided, otherwise use brush params
+  const dabSpacing = Math.max(1, baseRadius * spacingPercent / 100);
 
   // Ellipse angle: base + direction curve contribution (computed once per segment)
   let ellipseAngle = p.elliptical_dab_angle_base;

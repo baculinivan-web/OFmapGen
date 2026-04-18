@@ -70,6 +70,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const ctx         = canvas.getContext('2d');
   const brushSlider = document.getElementById('paintBrushSlider');
   const brushVal    = document.getElementById('paintBrushVal');
+  const spacingSlider = document.getElementById('paintSpacingSlider');
+  const spacingVal    = document.getElementById('paintSpacingVal');
+  const spacingRow    = document.getElementById('paintSpacingRow');
   const clearBtn    = document.getElementById('paintClearBtn');
   const doneBtn     = document.getElementById('paintDoneBtn');
   const cancelBtn   = document.getElementById('paintCancelBtn');
@@ -83,6 +86,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   let currentTerrain = 'water';
   let brushSize = 16;
+  let brushSpacing = 25; // % of brush size for custom brushes
   let painting = false;
   let lastX = null, lastY = null;
   let lastAngle = 0;
@@ -107,7 +111,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function addCustomBrush(brushData, fileName, type) {
     const id = `custom-${++customBrushCounter}`;
-    const label = (type === 'abr' ? brushData.name : fileName.replace(/\.myb$/i, '')).slice(0, 20);
+    const fullName = type === 'abr' ? brushData.name : fileName.replace(/\.myb$/i, '');
+    const label = fullName.length > 20 ? fullName.slice(0, 20) + '…' : fullName;
     
     if (type === 'myb') {
       const params = parseMybBrush(brushData);
@@ -123,11 +128,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const btn = document.createElement('button');
     btn.className = 'paint-brush-btn';
     btn.dataset.brush = id;
+    btn.title = fullName; // Show full name on hover
     btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>${label}`;
     btn.addEventListener('click', () => {
       document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentBrushId = id;
+      updateSpacingVisibility();
     });
     brushBtnsContainer.appendChild(btn);
     
@@ -306,9 +313,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         pc.fill();
       }
     } else if (brush && brush.type === 'myb' && mybState) {
-      mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, rgb);
+      mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
     } else if (brush && brush.type === 'abr') {
-      abrPaintSegment(getPaintCtx(), brush.abrBrush, x0, y0, x1, y1, brushSize, rgb);
+      abrPaintSegment(getPaintCtx(), brush.abrBrush, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
     }
   }
 
@@ -363,11 +370,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     ctx.imageSmoothingEnabled = true;
   }
 
-  function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
+  function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, spacingPercent, rgb) {
     const dx = x1 - x0, dy = y1 - y0;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const spacing = abrBrush.spacing || 25; // % of brush size
-    const step = Math.max(1, size * spacing / 100);
+    const step = Math.max(1, size * spacingPercent / 100);
     const steps = Math.max(1, Math.ceil(dist / step));
     
     for (let i = 0; i <= steps; i++) {
@@ -463,12 +469,28 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       brushBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       currentBrushId = btn.dataset.brush;
+      updateSpacingVisibility();
     });
   });
+
+  function updateSpacingVisibility() {
+    const brush = brushCache[currentBrushId];
+    // Show spacing slider only for custom brushes (myb/abr)
+    if (brush && (brush.type === 'myb' || brush.type === 'abr')) {
+      spacingRow.style.display = 'flex';
+    } else {
+      spacingRow.style.display = 'none';
+    }
+  }
 
   brushSlider.addEventListener('input', () => {
     brushSize = parseInt(brushSlider.value);
     brushVal.textContent = brushSize;
+  });
+
+  spacingSlider.addEventListener('input', () => {
+    brushSpacing = parseInt(spacingSlider.value);
+    spacingVal.textContent = brushSpacing + '%';
   });
 
   undoBtn.addEventListener('click', undo);
