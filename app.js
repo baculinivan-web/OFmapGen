@@ -964,11 +964,19 @@ async function buildAndDownloadArchive(os) {
     zip.file('setup.py', setupText);
 
     if (os === 'win') {
-      zip.file('Click me to install.bat', '@echo off\ncd /d "%~dp0"\npython --version >nul 2>&1\nif errorlevel 1 (\n  echo Python is not installed.\n  echo Download it from: https://www.python.org/downloads/\n  echo Make sure to check "Add Python to PATH" during installation.\n  pause\n  exit /b 1\n)\npython setup.py\npause\n');
+      // Fetch run.bat with auto-install
+      const batRes = await fetch('map-test-kit/run.bat');
+      const batText = await batRes.text();
+      zip.file('Click me to install.bat', batText);
+    } else if (os === 'mac') {
+      // Fetch run.command with auto-install
+      const cmdRes = await fetch('map-test-kit/run.command');
+      const cmdText = await cmdRes.text();
+      zip.file('Click me to install.command', cmdText, { unixPermissions: '755' });
     } else {
+      // Linux - simple bash script
       const launcher = '#!/bin/bash\ncd "$(dirname "$0")"\nif ! command -v python3 &> /dev/null; then\n  echo "Python 3 is not installed."\n  echo "Download it from: https://www.python.org/downloads/"\n  read -p "Press Enter to exit..."\n  exit 1\nfi\npython3 setup.py\n';
-      const fname = os === 'mac' ? 'Click me to install.command' : 'Click me to install.sh';
-      zip.file(fname, launcher, { unixPermissions: '755' });
+      zip.file('Click me to install.sh', launcher, { unixPermissions: '755' });
     }
   }
 
