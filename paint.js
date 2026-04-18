@@ -380,7 +380,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           canvas: document.createElement('canvas'),
           visible: true,
           locked: false,
-          jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0, scale: 1.0 }
+          jaggedEdges: { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 }
         };
         layer.canvas.width = paintCanvas.width;
         layer.canvas.height = paintCanvas.height;
@@ -402,7 +402,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0, scale: 1.0 }
+      jaggedEdges: { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -491,57 +491,59 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     temp.height = layer.canvas.height;
     const tempCtx = temp.getContext('2d');
     
-    // Start with original layer
-    tempCtx.drawImage(layer.canvas, 0, 0);
-    
     const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
-    const dstData = tempCtx.getImageData(0, 0, temp.width, temp.height);
+    const dstData = tempCtx.createImageData(temp.width, temp.height);
     
     const noise = new SimplexNoise(layer.id); // Use layer ID as seed for consistency
     
     // Scale affects the search radius for edges
-    const edgeRadius = Math.max(1, Math.round(scale));
+    const edgeRadius = Math.max(2, Math.round(scale * 2));
     
-    // First pass: identify edge pixels
-    const edges = new Uint8Array(temp.width * temp.height);
-    for (let y = edgeRadius; y < temp.height - edgeRadius; y++) {
-      for (let x = edgeRadius; x < temp.width - edgeRadius; x++) {
-        const idx = (y * temp.width + x) * 4;
-        const alpha = srcData.data[idx + 3];
-        
-        if (alpha === 0 || alpha === 255) continue; // Skip fully transparent or opaque
-        
-        // Check if this is an edge pixel (has different alpha neighbors)
-        let isEdge = false;
-        for (let dy = -edgeRadius; dy <= edgeRadius; dy++) {
-          for (let dx = -edgeRadius; dx <= edgeRadius; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            const nIdx = ((y + dy) * temp.width + (x + dx)) * 4;
-            const nAlpha = srcData.data[nIdx + 3];
-            if (Math.abs(nAlpha - alpha) > 50) {
-              isEdge = true;
-              break;
-            }
-          }
-          if (isEdge) break;
-        }
-        
-        if (isEdge) {
-          edges[y * temp.width + x] = 1;
-        }
-      }
-    }
-    
-    // Second pass: apply displacement to edge pixels
+    // Process each pixel with displacement
     for (let y = 0; y < temp.height; y++) {
       for (let x = 0; x < temp.width; x++) {
         const idx = (y * temp.width + x) * 4;
         
-        if (edges[y * temp.width + x]) {
-          // Apply noise displacement (scale affects noise sampling)
-          const noiseVal = noise.noise(x * frequency * 0.05 / scale, y * frequency * 0.05 / scale);
-          const offsetX = Math.round(noiseVal * intensity * scale);
-          const offsetY = Math.round(noise.noise(x * frequency * 0.05 / scale + 100, y * frequency * 0.05 / scale + 100) * intensity * scale);
+        // Check if pixel is near an edge
+        const alpha = srcData.data[idx + 3];
+        
+        if (alpha === 0) {
+          // Fully transparent - keep transparent
+          dstData.data[idx + 3] = 0;
+          continue;
+        }
+        
+        // Check neighbors for edge detection
+        let isNearEdge = false;
+        let minAlpha = 255;
+        let maxAlpha = 0;
+        
+        for (let dy = -edgeRadius; dy <= edgeRadius; dy++) {
+          for (let dx = -edgeRadius; dx <= edgeRadius; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= temp.width || ny < 0 || ny >= temp.height) continue;
+            const nIdx = (ny * temp.width + nx) * 4;
+            const nAlpha = srcData.data[nIdx + 3];
+            minAlpha = Math.min(minAlpha, nAlpha);
+            maxAlpha = Math.max(maxAlpha, nAlpha);
+          }
+        }
+        
+        // If there's significant alpha variation, we're near an edge
+        isNearEdge = (maxAlpha - minAlpha) > 30;
+        
+        if (isNearEdge) {
+          // Apply strong noise displacement
+          const noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale);
+          const noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100);
+          
+          // Multi-octave noise for more natural look
+          const noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50);
+          const noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
+          
+          const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale);
+          const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale);
           
           const srcX = Math.max(0, Math.min(temp.width - 1, x + offsetX));
           const srcY = Math.max(0, Math.min(temp.height - 1, y + offsetY));
@@ -551,6 +553,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           dstData.data[idx + 1] = srcData.data[srcIdx + 1];
           dstData.data[idx + 2] = srcData.data[srcIdx + 2];
           dstData.data[idx + 3] = srcData.data[srcIdx + 3];
+        } else {
+          // Copy pixel as-is
+          dstData.data[idx]     = srcData.data[idx];
+          dstData.data[idx + 1] = srcData.data[idx + 1];
+          dstData.data[idx + 2] = srcData.data[idx + 2];
+          dstData.data[idx + 3] = srcData.data[idx + 3];
         }
       }
     }
@@ -654,7 +662,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Load current settings
     if (!layer.jaggedEdges) {
-      layer.jaggedEdges = { enabled: false, intensity: 3, frequency: 1.0, scale: 1.0 };
+      layer.jaggedEdges = { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 };
     }
     
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
@@ -726,7 +734,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
-      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 3, frequency: 1.0, scale: 1.0 },
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -1666,7 +1674,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0, scale: 1.0 }
+      jaggedEdges: { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -1732,7 +1740,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
-        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 3, frequency: 1.0, scale: 1.0 },
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: true, intensity: 8, frequency: 1.2, scale: 1.5 },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;
