@@ -1033,32 +1033,32 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       const isSelected = currentLayerId === layer.id;
       html += `
         <div class="layer-item ${isSelected ? 'selected' : ''}" data-layer-id="${layer.id}" data-layer-type="paint">
-          <button class="layer-btn" onclick="toggleLayerVisibility(${layer.id})" title="${layer.visible ? 'Hide' : 'Show'}">
+          <button class="layer-btn layer-visibility-btn" data-layer-id="${layer.id}" title="${layer.visible ? 'Hide' : 'Show'}">
             ${layer.visible ? 
               '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' :
               '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
             }
           </button>
-          <div style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="selectLayer(${layer.id})">
+          <div style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;" class="layer-select" data-layer-id="${layer.id}">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2"/>
             </svg>
             <span style="font-size:0.78rem;" id="layerName${layer.id}">${escapeHtml(layer.name)}</span>
             ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
-          <button class="layer-btn" onclick="renameLayer(${layer.id})" title="Rename">
+          <button class="layer-btn layer-rename-btn" data-layer-id="${layer.id}" title="Rename">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </button>
-          <button class="layer-btn" onclick="toggleLayerLock(${layer.id})" title="${layer.locked ? 'Unlock' : 'Lock'}">
+          <button class="layer-btn layer-lock-btn" data-layer-id="${layer.id}" title="${layer.locked ? 'Unlock' : 'Lock'}">
             ${layer.locked ?
               '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' :
               '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>'
             }
           </button>
-          <button class="layer-btn" onclick="deleteLayer(${layer.id})" title="Delete" ${paintLayers.length === 1 ? 'disabled style="opacity:0.3"' : ''}>
+          <button class="layer-btn layer-delete-btn" data-layer-id="${layer.id}" title="Delete" ${paintLayers.length === 1 ? 'disabled style="opacity:0.3"' : ''}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -1087,13 +1087,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               <span style="font-size:0.78rem;">River ${idx + 1}</span>
               <span style="font-size:0.7rem;color:var(--muted);">(${river.controlPoints.length} pts)</span>
             </div>
-            <button class="layer-btn" onclick="editRiver(${idx})" title="Edit">
+            <button class="layer-btn river-edit-btn" data-river-id="${idx}" title="Edit">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
               </svg>
             </button>
-            <button class="layer-btn" onclick="deleteRiver(${idx})" title="Delete">
+            <button class="layer-btn river-delete-btn" data-river-id="${idx}" title="Delete">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -1123,80 +1123,125 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     layersList.innerHTML = html;
+    
+    // Attach event listeners using event delegation
+    attachLayerEventListeners();
   }
   
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-  
-  window.selectLayer = function(layerId) {
-    currentLayerId = layerId;
-    updateLayersList();
-  };
-  
-  window.toggleLayerVisibility = function(layerId) {
-    const layer = paintLayers.find(l => l.id === layerId);
-    if (layer) {
-      layer.visible = !layer.visible;
-      updateLayersList();
-      redraw();
-    }
-  };
-  
-  window.toggleLayerLock = function(layerId) {
-    const layer = paintLayers.find(l => l.id === layerId);
-    if (layer) {
-      layer.locked = !layer.locked;
-      updateLayersList();
-    }
-  };
-  
-  window.renameLayer = function(layerId) {
-    const layer = paintLayers.find(l => l.id === layerId);
-    if (!layer) return;
-    const newName = prompt('Enter new layer name:', layer.name);
-    if (newName && newName.trim()) {
-      layer.name = newName.trim();
-      updateLayersList();
-    }
-  };
-  
-  window.deleteLayer = function(layerId) {
-    if (paintLayers.length === 1) return;
-    if (!confirm('Delete this layer?')) return;
-    saveHistory();
-    const idx = paintLayers.findIndex(l => l.id === layerId);
-    if (idx !== -1) {
-      paintLayers.splice(idx, 1);
-      if (currentLayerId === layerId) {
-        currentLayerId = paintLayers[Math.max(0, idx - 1)].id;
+  function attachLayerEventListeners() {
+    const list = document.getElementById('paintLayersList');
+    if (!list) return;
+    
+    // Layer selection
+    list.querySelectorAll('.layer-select').forEach(el => {
+      el.addEventListener('click', () => {
+        const layerId = parseInt(el.dataset.layerId);
+        currentLayerId = layerId;
+        updateLayersList();
+      });
+    });
+    
+    // Layer visibility toggle
+    list.querySelectorAll('.layer-visibility-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const layerId = parseInt(el.dataset.layerId);
+        const layer = paintLayers.find(l => l.id === layerId);
+        if (layer) {
+          layer.visible = !layer.visible;
+          updateLayersList();
+          redraw();
+        }
+      });
+    });
+    
+    // Layer lock toggle
+    list.querySelectorAll('.layer-lock-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const layerId = parseInt(el.dataset.layerId);
+        const layer = paintLayers.find(l => l.id === layerId);
+        if (layer) {
+          layer.locked = !layer.locked;
+          updateLayersList();
+        }
+      });
+    });
+    
+    // Layer rename
+    list.querySelectorAll('.layer-rename-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const layerId = parseInt(el.dataset.layerId);
+        const layer = paintLayers.find(l => l.id === layerId);
+        if (!layer) return;
+        const newName = prompt('Enter new layer name:', layer.name);
+        if (newName && newName.trim()) {
+          layer.name = newName.trim();
+          updateLayersList();
+        }
+      });
+    });
+    
+    // Layer delete
+    list.querySelectorAll('.layer-delete-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (paintLayers.length === 1) return;
+        const layerId = parseInt(el.dataset.layerId);
+        if (!confirm('Delete this layer?')) return;
+        saveHistory();
+        const idx = paintLayers.findIndex(l => l.id === layerId);
+        if (idx !== -1) {
+          paintLayers.splice(idx, 1);
+          if (currentLayerId === layerId) {
+            currentLayerId = paintLayers[Math.max(0, idx - 1)].id;
+          }
+          hasChanges = true;
+          updateLayersList();
+          redraw();
+        }
+      });
+    });
+    
+    // River edit
+    list.querySelectorAll('.river-edit-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const riverId = parseInt(el.dataset.riverId);
+        editRiverFunc(riverId);
+      });
+    });
+    
+    // River delete
+    list.querySelectorAll('.river-delete-btn').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const riverId = parseInt(el.dataset.riverId);
+        if (!confirm('Delete this river?')) return;
+        saveHistory();
+        riverLayer.removeRiver(riverId);
+        if (selectedRiverId === riverId) selectedRiverId = null;
+        hasChanges = true;
+        updateLayersList();
+        redraw();
+      });
+    });
+    
+    // River selection
+    list.querySelectorAll('[data-river-id]').forEach(el => {
+      if (!el.classList.contains('river-edit-btn') && !el.classList.contains('river-delete-btn')) {
+        el.addEventListener('click', () => {
+          const riverId = parseInt(el.dataset.riverId);
+          if (!isNaN(riverId)) {
+            editRiverFunc(riverId);
+          }
+        });
       }
-      hasChanges = true;
-      updateLayersList();
-      redraw();
-    }
-  };
+    });
+  }
   
-  window.addNewLayer = function() {
-    saveHistory();
-    const layer = {
-      id: layerIdCounter++,
-      name: `Layer ${layerIdCounter}`,
-      canvas: document.createElement('canvas'),
-      visible: true,
-      locked: false
-    };
-    layer.canvas.width = outCanvas.width;
-    layer.canvas.height = outCanvas.height;
-    paintLayers.push(layer);
-    currentLayerId = layer.id;
-    hasChanges = true;
-    updateLayersList();
-  };
-  
-  window.editRiver = function(riverId) {
+  function editRiverFunc(riverId) {
     selectedRiverId = riverId;
     const river = riverLayer.rivers[riverId];
     if (!river) return;
@@ -1222,29 +1267,27 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     updateLayersList();
     redraw();
-  };
+  }
   
-  window.deleteRiver = function(riverId) {
-    if (!confirm('Delete this river?')) return;
+  function addNewLayerFunc() {
     saveHistory();
-    riverLayer.removeRiver(riverId);
-    if (selectedRiverId === riverId) selectedRiverId = null;
+    const layer = {
+      id: layerIdCounter++,
+      name: `Layer ${layerIdCounter}`,
+      canvas: document.createElement('canvas'),
+      visible: true,
+      locked: false
+    };
+    layer.canvas.width = outCanvas.width;
+    layer.canvas.height = outCanvas.height;
+    paintLayers.push(layer);
+    currentLayerId = layer.id;
     hasChanges = true;
     updateLayersList();
-    redraw();
-  };
-  
-  // Click on layer to select
-  if (layersList) {
-    layersList.addEventListener('click', (e) => {
-      const item = e.target.closest('.layer-item');
-      if (!item || item.classList.contains('editing')) return;
-      const riverId = parseInt(item.dataset.riverId);
-      if (!isNaN(riverId)) {
-        editRiver(riverId);
-      }
-    });
   }
+  
+  // Expose addNewLayer globally for the + button
+  window.addNewLayer = addNewLayerFunc;
 
   // ── Done / Cancel ──────────────────────────────────────────────────────────
   function hasUnsavedChanges() {
