@@ -98,6 +98,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // Active MybBrushState for current stroke
   let mybState = null;
 
+  // Custom brush loading
+  const customBrushes = []; // { id, label, params }
+  let customBrushCounter = 0;
+  let defaultBrushesLoaded = false; // Flag to load default brushes only once
+
   // Seed cache immediately from inline fallbacks (no async fetch needed for now)
   for (const [id, myb] of Object.entries(BRUSH_FALLBACKS)) {
     brushCache[id] = { type: 'myb', params: parseMybBrush(myb) };
@@ -128,8 +133,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     brushBtnsContainer.appendChild(btn);
   });
 
-  // Auto-load default .abr brush pack on init
-  (async () => {
+  // Function to load default .abr brushes (called on first modal open)
+  async function loadDefaultBrushes() {
+    if (defaultBrushesLoaded) return;
+    defaultBrushesLoaded = true;
+    
     try {
       console.log('[paint] attempting to load brushes-map-free.abr...');
       const resp = await fetch('./brushes-map-free.abr');
@@ -171,11 +179,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     } catch (err) {
       console.error('[paint] failed to auto-load default .abr brushes:', err);
     }
-  })();
-
-  // Custom brush loading
-  const customBrushes = []; // { id, label, params }
-  let customBrushCounter = 0;
+  }
 
   function addCustomBrush(brushData, fileName, type) {
     const id = `custom-${++customBrushCounter}`;
@@ -330,6 +334,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     updateUndoRedoBtns();
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
+    
+    // Load default brushes on first open
+    loadDefaultBrushes();
   }
 
   // ── Coords ─────────────────────────────────────────────────────────────────
