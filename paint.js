@@ -53,6 +53,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let lastX = null, lastY = null;
   let lastAngle = 0;
   let cancelSnapshot = null;
+  let hasChanges = false; // Track if any changes were made
 
   // ── Brush state ────────────────────────────────────────────────────────────
   let currentBrushId = 'solid';
@@ -229,6 +230,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack = [];
+    hasChanges = true; // Mark that changes were made
     updateUndoRedoBtns();
   }
 
@@ -296,6 +298,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     cancelSnapshot.height = paintCanvas.height;
     cancelSnapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
     undoStack = []; redoStack = [];
+    hasChanges = false; // Reset changes flag on open
     updateUndoRedoBtns();
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
@@ -557,12 +560,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   // ── Done / Cancel ──────────────────────────────────────────────────────────
   function hasUnsavedChanges() {
-    // Check if there are any changes in the undo stack
-    return undoStack.length > 0;
+    // Check if any changes were made during this session
+    return hasChanges;
   }
 
   function applyAndClose() {
     if (paintCanvas) outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
+    hasChanges = false; // Reset after applying
     modal.classList.remove('open');
     onPaintApplied();
   }
@@ -579,6 +583,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
       pc.drawImage(cancelSnapshot, 0, 0);
     }
+    hasChanges = false; // Reset after canceling
     modal.classList.remove('open');
   }
 
