@@ -317,15 +317,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const img = abrBrush.brushTipImage;
     if (!img || !img.width || !img.height) return;
     
+    // Use higher resolution if brush is small relative to desired size
     const scale = size / Math.max(img.width, img.height);
-    const w = Math.ceil(img.width * scale);
-    const h = Math.ceil(img.height * scale);
+    const useHighRes = scale > 2; // If scaling up more than 2x, use original resolution
+    
+    const w = useHighRes ? img.width : Math.ceil(img.width * scale);
+    const h = useHighRes ? img.height : Math.ceil(img.height * scale);
     
     // Create offscreen canvas for compositing
     const temp = document.createElement('canvas');
     temp.width = w;
     temp.height = h;
     const tempCtx = temp.getContext('2d');
+    
+    // Disable smoothing for crisp edges
+    tempCtx.imageSmoothingEnabled = false;
     
     // Draw scaled brush texture
     tempCtx.drawImage(img, 0, 0, w, h);
@@ -347,8 +353,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     tempCtx.putImageData(imageData, 0, 0);
     
-    // Draw to main canvas
-    ctx.drawImage(temp, Math.round(px - w/2), Math.round(py - h/2));
+    // Draw to main canvas with final scaling if needed
+    ctx.imageSmoothingEnabled = false;
+    if (useHighRes) {
+      ctx.drawImage(temp, Math.round(px - size/2), Math.round(py - size/2), size, size);
+    } else {
+      ctx.drawImage(temp, Math.round(px - w/2), Math.round(py - h/2));
+    }
+    ctx.imageSmoothingEnabled = true;
   }
 
   function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
