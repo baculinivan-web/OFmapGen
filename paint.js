@@ -483,61 +483,72 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const w = layer.canvas.width;
     const h = layer.canvas.height;
     
-    // Get target color at click position
-    const imageData = pc.getImageData(0, 0, w, h);
-    const data = imageData.data;
+    // Clamp coords
+    px = Math.max(0, Math.min(w - 1, Math.round(px)));
+    py = Math.max(0, Math.min(h - 1, Math.round(py)));
+    
+    // Get target color at click position — sample from composited view (outCanvas + all layers)
+    // so fill respects what user sees, not just current layer
+    const compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = w;
+    compositeCanvas.height = h;
+    const cc = compositeCanvas.getContext('2d');
+    cc.drawImage(outCanvas, 0, 0);
+    for (const l of paintLayers) {
+      if (l.visible) cc.drawImage(l.canvas, 0, 0);
+    }
+    const compositeData = cc.getImageData(0, 0, w, h).data;
     
     const idx = (py * w + px) * 4;
-    const targetR = data[idx];
-    const targetG = data[idx + 1];
-    const targetB = data[idx + 2];
-    const targetA = data[idx + 3];
+    const targetR = compositeData[idx];
+    const targetG = compositeData[idx + 1];
+    const targetB = compositeData[idx + 2];
     
     // Get fill color
     const rgb = TERRAIN_COLORS[currentTerrain];
-    const fillR = rgb[0];
-    const fillG = rgb[1];
-    const fillB = rgb[2];
+    const fillR = rgb[0], fillG = rgb[1], fillB = rgb[2];
     
     // If target color is same as fill color, nothing to do
     if (targetR === fillR && targetG === fillG && targetB === fillB) return;
     
-    // Stack-based flood fill to avoid recursion depth issues
-    const stack = [[px, py]];
-    const visited = new Set();
+    // Work on current layer's imageData
+    const imageData = pc.getImageData(0, 0, w, h);
+    const data = imageData.data;
     
-    function colorMatch(x, y) {
-      if (x < 0 || x >= w || y < 0 || y >= h) return false;
-      const i = (y * w + x) * 4;
-      return data[i] === targetR && 
-             data[i + 1] === targetG && 
-             data[i + 2] === targetB &&
-             data[i + 3] === targetA;
-    }
+    // Use typed array for visited — much faster than Set
+    const visited = new Uint8Array(w * h);
     
-    function setPixel(x, y) {
-      const i = (y * w + x) * 4;
-      data[i] = fillR;
-      data[i + 1] = fillG;
-      data[i + 2] = fillB;
-      data[i + 3] = 255;
+    // Stack-based flood fill
+    const stack = [py * w + px];
+    
+    const colorTolerance = 30; // Allow slight color variation
+    function colorMatch(i4) {
+      const dr = compositeData[i4]     - targetR;
+      const dg = compositeData[i4 + 1] - targetG;
+      const db = compositeData[i4 + 2] - targetB;
+      return (dr * dr + dg * dg + db * db) <= colorTolerance * colorTolerance;
     }
     
     while (stack.length > 0) {
-      const [x, y] = stack.pop();
-      const key = `${x},${y}`;
+      const pos = stack.pop();
+      if (visited[pos]) continue;
       
-      if (visited.has(key)) continue;
-      if (!colorMatch(x, y)) continue;
+      const x = pos % w;
+      const y = (pos - x) / w;
+      const i4 = pos * 4;
       
-      visited.add(key);
-      setPixel(x, y);
+      if (!colorMatch(i4)) continue;
       
-      // Add neighbors
-      stack.push([x + 1, y]);
-      stack.push([x - 1, y]);
-      stack.push([x, y + 1]);
-      stack.push([x, y - 1]);
+      visited[pos] = 1;
+      data[i4]     = fillR;
+      data[i4 + 1] = fillG;
+      data[i4 + 2] = fillB;
+      data[i4 + 3] = 255;
+      
+      if (x + 1 < w)  stack.push(pos + 1);
+      if (x - 1 >= 0) stack.push(pos - 1);
+      if (y + 1 < h)  stack.push(pos + w);
+      if (y - 1 >= 0) stack.push(pos - w);
     }
     
     pc.putImageData(imageData, 0, 0);
