@@ -68,7 +68,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let cancelSnapshot = null;
   let cancelRiverSnapshot = null;
   let cancelRiversData = null;
+  let cancelLayersData = null;
   let hasChanges = false; // Track if any changes were made
+  
+  // Layer system
+  let paintLayers = []; // Array of {name, canvas, visible, locked}
+  let currentLayerId = 0;
+  let layerIdCounter = 1;
   
   // River mode state
   let riverMode = false;
@@ -283,10 +289,42 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   // ── Ensure paint canvas ────────────────────────────────────────────────────
   function ensurePaintCanvas() {
-    if (paintCanvas && paintCanvas.width === outCanvas.width && paintCanvas.height === outCanvas.height) return;
+    if (paintCanvas && paintCanvas.width === outCanvas.width && paintCanvas.height === outCanvas.height) {
+      // Canvas exists, restore layers from it
+      if (paintLayers.length === 0) {
+        // Create initial layer from existing paintCanvas
+        const layer = {
+          id: layerIdCounter++,
+          name: 'Layer 1',
+          canvas: document.createElement('canvas'),
+          visible: true,
+          locked: false
+        };
+        layer.canvas.width = paintCanvas.width;
+        layer.canvas.height = paintCanvas.height;
+        layer.canvas.getContext('2d').drawImage(paintCanvas, 0, 0);
+        paintLayers.push(layer);
+        currentLayerId = layer.id;
+      }
+      return;
+    }
+    
     paintCanvas = document.createElement('canvas');
     paintCanvas.width  = outCanvas.width;
     paintCanvas.height = outCanvas.height;
+    
+    // Create initial layer
+    const layer = {
+      id: layerIdCounter++,
+      name: 'Layer 1',
+      canvas: document.createElement('canvas'),
+      visible: true,
+      locked: false
+    };
+    layer.canvas.width = outCanvas.width;
+    layer.canvas.height = outCanvas.height;
+    paintLayers.push(layer);
+    currentLayerId = layer.id;
     
     // Create river canvas
     riverCanvas = document.createElement('canvas');
@@ -312,16 +350,23 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function redraw() {
     if (!outCanvas.width) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(outCanvas, 0, 0);
-    // First draw rivers (bottom layer)
+    
+    // Composite all visible paint layers
+    for (const layer of paintLayers) {
+      if (layer.visible) {
+        ctx.drawImage(layer.canvas, 0, 0);
+      }
+    }
+    
+    // Draw rivers on top
     if (riverCanvas) {
       const rCtx = riverCanvas.getContext('2d');
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
       riverLayer.render(rCtx, WATER_COLOR);
       ctx.drawImage(riverCanvas, 0, 0);
     }
-    // Then draw paint on top
-    if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
@@ -332,19 +377,23 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!outCanvas.width) return;
     ensurePaintCanvas();
     
-    // Save snapshot for cancel
-    cancelSnapshot = document.createElement('canvas');
-    cancelSnapshot.width  = paintCanvas.width;
-    cancelSnapshot.height = paintCanvas.height;
-    cancelSnapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
+    // Save snapshot for cancel - deep copy layers
+    cancelLayersData = paintLayers.map(l => ({
+      id: l.id,
+      name: l.name,
+      visible: l.visible,
+      locked: l.locked,
+      canvas: (() => {
+        const c = document.createElement('canvas');
+        c.width = l.canvas.width;
+        c.height = l.canvas.height;
+        c.getContext('2d').drawImage(l.canvas, 0, 0);
+        return c;
+      })()
+    }));
     
     // Save river snapshot for cancel
     if (riverCanvas) {
-      cancelRiverSnapshot = document.createElement('canvas');
-      cancelRiverSnapshot.width = riverCanvas.width;
-      cancelRiverSnapshot.height = riverCanvas.height;
-      cancelRiverSnapshot.getContext('2d').drawImage(riverCanvas, 0, 0);
-      // Export current rivers state
       cancelRiversData = JSON.parse(JSON.stringify(riverLayer.export()));
     }
     
@@ -374,32 +423,35 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     ];
   }
 
-  // ── Paint dispatch ─────────────────────────────────────────────────────────
-  function getPaintCtx() { return paintCanvas.getContext('2d'); }
-
   function paintDot(px, py) {
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer || layer.locked) return;
+    
     const rgb = TERRAIN_COLORS[currentTerrain];
     const brush = brushCache[currentBrushId];
+    const pc = layer.canvas.getContext('2d');
     
     if (currentBrushId === 'solid') {
-      const pc = getPaintCtx();
       pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
       pc.beginPath();
       pc.arc(px, py, brushSize, 0, Math.PI * 2);
       pc.fill();
     } else if (brush && brush.type === 'myb' && mybState) {
-      mybPaintDot(getPaintCtx(), mybState, px, py, brushSize, rgb);
+      mybPaintDot(pc, mybState, px, py, brushSize, rgb);
     } else if (brush && brush.type === 'abr') {
-      abrPaintDot(getPaintCtx(), brush.abrBrush, px, py, brushSize, rgb);
+      abrPaintDot(pc, brush.abrBrush, px, py, brushSize, rgb);
     }
   }
 
   function paintSegment(x0, y0, x1, y1) {
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer || layer.locked) return;
+    
     const rgb = TERRAIN_COLORS[currentTerrain];
     const brush = brushCache[currentBrushId];
+    const pc = layer.canvas.getContext('2d');
     
     if (currentBrushId === 'solid') {
-      const pc = getPaintCtx();
       pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
       const dx = x1 - x0, dy = y1 - y0;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -412,9 +464,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         pc.fill();
       }
     } else if (brush && brush.type === 'myb' && mybState) {
-      mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
+      mybPaintSegment(pc, mybState, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
     } else if (brush && brush.type === 'abr') {
-      abrPaintSegment(getPaintCtx(), brush.abrBrush, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
+      abrPaintSegment(pc, brush.abrBrush, x0, y0, x1, y1, brushSize, brushSpacing, rgb);
     }
   }
 
@@ -837,9 +889,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   redoBtn.addEventListener('click', redo);
 
   clearBtn.addEventListener('click', () => {
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer) return;
+    if (!confirm(`Clear layer "${layer.name}"?`)) return;
     saveHistory();
-    paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-    riverLayer.clearAll();
+    layer.canvas.getContext('2d').clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+    hasChanges = true;
     updateLayersList();
     redraw();
   });
@@ -848,61 +903,176 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function updateLayersList() {
     if (!layersList) return;
     
-    const rivers = riverLayer.rivers;
-    const currentRiver = riverLayer.currentRiver;
-    
-    if (rivers.length === 0 && !currentRiver) {
-      layersList.innerHTML = '<div style="font-size:0.75rem;color:var(--muted);padding:8px;text-align:center;">No rivers yet</div>';
-      return;
-    }
-    
     let html = '';
     
-    // Show completed rivers
-    rivers.forEach((river, idx) => {
-      const isSelected = selectedRiverId === idx;
+    // Paint layers (in reverse order - top to bottom)
+    for (let i = paintLayers.length - 1; i >= 0; i--) {
+      const layer = paintLayers[i];
+      const isSelected = currentLayerId === layer.id;
       html += `
-        <div class="layer-item ${isSelected ? 'selected' : ''}" data-river-id="${idx}">
-          <div style="flex:1;display:flex;align-items:center;gap:6px;">
+        <div class="layer-item ${isSelected ? 'selected' : ''}" data-layer-id="${layer.id}" data-layer-type="paint">
+          <button class="layer-btn" onclick="toggleLayerVisibility(${layer.id})" title="${layer.visible ? 'Hide' : 'Show'}">
+            ${layer.visible ? 
+              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' :
+              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+            }
+          </button>
+          <div style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;" onclick="selectLayer(${layer.id})">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
-              <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
             </svg>
-            <span style="font-size:0.78rem;">River ${idx + 1}</span>
-            <span style="font-size:0.7rem;color:var(--muted);">(${river.controlPoints.length} pts)</span>
+            <span style="font-size:0.78rem;" id="layerName${layer.id}">${escapeHtml(layer.name)}</span>
+            ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
-          <button class="layer-btn" onclick="editRiver(${idx})" title="Edit">
+          <button class="layer-btn" onclick="renameLayer(${layer.id})" title="Rename">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
             </svg>
           </button>
-          <button class="layer-btn" onclick="deleteRiver(${idx})" title="Delete">
+          <button class="layer-btn" onclick="toggleLayerLock(${layer.id})" title="${layer.locked ? 'Unlock' : 'Lock'}">
+            ${layer.locked ?
+              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' :
+              '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>'
+            }
+          </button>
+          <button class="layer-btn" onclick="deleteLayer(${layer.id})" title="Delete" ${paintLayers.length === 1 ? 'disabled style="opacity:0.3"' : ''}>
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <polyline points="3 6 5 6 21 6"/>
               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
             </svg>
           </button>
         </div>`;
-    });
+    }
     
-    // Show current river being edited
-    if (currentRiver) {
-      html += `
-        <div class="layer-item editing">
-          <div style="flex:1;display:flex;align-items:center;gap:6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
-              <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
-            </svg>
-            <span style="font-size:0.78rem;color:var(--accent);">Editing...</span>
-            <span style="font-size:0.7rem;color:var(--muted);">(${currentRiver.controlPoints.length} pts)</span>
-          </div>
-        </div>`;
+    // Rivers section
+    const rivers = riverLayer.rivers;
+    const currentRiver = riverLayer.currentRiver;
+    
+    if (rivers.length > 0 || currentRiver) {
+      html += '<div style="border-top:1px solid var(--border);margin:4px 0;padding-top:4px;"></div>';
+      
+      // Show completed rivers
+      rivers.forEach((river, idx) => {
+        const isSelected = selectedRiverId === idx;
+        html += `
+          <div class="layer-item ${isSelected ? 'selected' : ''}" data-river-id="${idx}">
+            <div style="flex:1;display:flex;align-items:center;gap:6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+                <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+              </svg>
+              <span style="font-size:0.78rem;">River ${idx + 1}</span>
+              <span style="font-size:0.7rem;color:var(--muted);">(${river.controlPoints.length} pts)</span>
+            </div>
+            <button class="layer-btn" onclick="editRiver(${idx})" title="Edit">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+            <button class="layer-btn" onclick="deleteRiver(${idx})" title="Delete">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+            </button>
+          </div>`;
+      });
+      
+      // Show current river being edited
+      if (currentRiver) {
+        html += `
+          <div class="layer-item editing">
+            <div style="flex:1;display:flex;align-items:center;gap:6px;">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+                <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+              </svg>
+              <span style="font-size:0.78rem;color:var(--accent);">Editing...</span>
+              <span style="font-size:0.7rem;color:var(--muted);">(${currentRiver.controlPoints.length} pts)</span>
+            </div>
+          </div>`;
+      }
+    }
+    
+    if (!html) {
+      html = '<div style="font-size:0.75rem;color:var(--muted);padding:8px;text-align:center;">No layers yet</div>';
     }
     
     layersList.innerHTML = html;
   }
+  
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+  
+  window.selectLayer = function(layerId) {
+    currentLayerId = layerId;
+    updateLayersList();
+  };
+  
+  window.toggleLayerVisibility = function(layerId) {
+    const layer = paintLayers.find(l => l.id === layerId);
+    if (layer) {
+      layer.visible = !layer.visible;
+      updateLayersList();
+      redraw();
+    }
+  };
+  
+  window.toggleLayerLock = function(layerId) {
+    const layer = paintLayers.find(l => l.id === layerId);
+    if (layer) {
+      layer.locked = !layer.locked;
+      updateLayersList();
+    }
+  };
+  
+  window.renameLayer = function(layerId) {
+    const layer = paintLayers.find(l => l.id === layerId);
+    if (!layer) return;
+    const newName = prompt('Enter new layer name:', layer.name);
+    if (newName && newName.trim()) {
+      layer.name = newName.trim();
+      updateLayersList();
+    }
+  };
+  
+  window.deleteLayer = function(layerId) {
+    if (paintLayers.length === 1) return;
+    if (!confirm('Delete this layer?')) return;
+    saveHistory();
+    const idx = paintLayers.findIndex(l => l.id === layerId);
+    if (idx !== -1) {
+      paintLayers.splice(idx, 1);
+      if (currentLayerId === layerId) {
+        currentLayerId = paintLayers[Math.max(0, idx - 1)].id;
+      }
+      hasChanges = true;
+      updateLayersList();
+      redraw();
+    }
+  };
+  
+  window.addNewLayer = function() {
+    saveHistory();
+    const layer = {
+      id: layerIdCounter++,
+      name: `Layer ${layerIdCounter}`,
+      canvas: document.createElement('canvas'),
+      visible: true,
+      locked: false
+    };
+    layer.canvas.width = outCanvas.width;
+    layer.canvas.height = outCanvas.height;
+    paintLayers.push(layer);
+    currentLayerId = layer.id;
+    hasChanges = true;
+    updateLayersList();
+  };
   
   window.editRiver = function(riverId) {
     selectedRiverId = riverId;
@@ -961,17 +1131,27 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function applyAndClose() {
-    if (paintCanvas) outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
-    // Apply rivers to outCanvas
+    // Composite all layers to paintCanvas
+    const pc = paintCanvas.getContext('2d');
+    pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
+    for (const layer of paintLayers) {
+      if (layer.visible) {
+        pc.drawImage(layer.canvas, 0, 0);
+      }
+    }
+    
+    // Apply to outCanvas
+    outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
+    
+    // Apply rivers
     if (riverCanvas) {
       const rCtx = riverCanvas.getContext('2d');
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
       riverLayer.render(rCtx, WATER_COLOR);
       outCanvas.getContext('2d').drawImage(riverCanvas, 0, 0);
-      
-      // Also apply to paintCanvas so rivers persist on next open
       paintCanvas.getContext('2d').drawImage(riverCanvas, 0, 0);
     }
+    
     hasChanges = false;
     riverMode = false;
     riverModeBtn.classList.remove('active');
@@ -989,19 +1169,22 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       if (!confirmed) return;
     }
     
-    // Restore paint canvas
-    if (cancelSnapshot && paintCanvas) {
-      const pc = paintCanvas.getContext('2d');
-      pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
-      pc.drawImage(cancelSnapshot, 0, 0);
+    // Restore layers
+    if (cancelLayersData) {
+      paintLayers = cancelLayersData.map(l => ({
+        ...l,
+        canvas: (() => {
+          const c = document.createElement('canvas');
+          c.width = l.canvas.width;
+          c.height = l.canvas.height;
+          c.getContext('2d').drawImage(l.canvas, 0, 0);
+          return c;
+        })()
+      }));
+      currentLayerId = cancelLayersData.find(l => l.id === currentLayerId)?.id || paintLayers[0]?.id;
     }
     
-    // Restore river canvas and data
-    if (cancelRiverSnapshot && riverCanvas) {
-      const rc = riverCanvas.getContext('2d');
-      rc.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
-      rc.drawImage(cancelRiverSnapshot, 0, 0);
-    }
+    // Restore rivers
     if (cancelRiversData) {
       riverLayer.import(cancelRiversData);
     }
@@ -1012,6 +1195,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
     selectedRiverId = null;
+    updateLayersList();
     modal.classList.remove('open');
   }
 

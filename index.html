@@ -389,8 +389,11 @@
             </div>
           </div>
           
-          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);">Layers</div>
-          <div id="paintLayersPanel" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px;max-height:150px;overflow-y:auto;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);display:flex;align-items:center;justify-content:space-between;">
+            <span>Layers</span>
+            <button onclick="addNewLayer()" style="background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;font-weight:600;" title="Add new layer">+</button>
+          </div>
+          <div id="paintLayersPanel" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px;max-height:200px;overflow-y:auto;">
             <div id="paintLayersList"></div>
           </div>
           
