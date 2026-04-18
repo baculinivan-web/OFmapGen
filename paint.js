@@ -2,7 +2,7 @@
 // Version: 2024-01-19-v3 (with rivers)
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
 import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
-import { RiverLayer } from './rivers.js';
+import { RiverLayer, generateRiverPath } from './rivers.js';
 
 console.log('[paint.js] Module loading - Version 2024-01-19-v3 (with rivers)');
 
@@ -56,6 +56,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const riverFinishBtn = document.getElementById('paintRiverFinishBtn');
   const riverCancelBtn = document.getElementById('paintRiverCancelBtn');
   const riverControlsRow = document.getElementById('paintRiverControls');
+  const layersPanel = document.getElementById('paintLayersPanel');
+  const layersList = document.getElementById('paintLayersList');
 
   let currentTerrain = 'water';
   let brushSize = 16;
@@ -64,6 +66,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let lastX = null, lastY = null;
   let lastAngle = 0;
   let cancelSnapshot = null;
+  let cancelRiverSnapshot = null;
+  let cancelRiversData = null;
   let hasChanges = false; // Track if any changes were made
   
   // River mode state
@@ -72,6 +76,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let riverCanvas = null; // Separate canvas for river layer
   let riverWindiness = 0.5;
   let riverWidth = 3;
+  let selectedRiverId = null; // Currently selected river for editing
+  let draggingPointId = null; // {riverId, pointIndex} for dragging control points
 
   // ── Brush state ────────────────────────────────────────────────────────────
   let currentBrushId = 'solid';
@@ -307,14 +313,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function redraw() {
     if (!outCanvas.width) return;
     ctx.drawImage(outCanvas, 0, 0);
-    if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
+    // First draw rivers (bottom layer)
     if (riverCanvas) {
-      // Render rivers to river canvas
       const rCtx = riverCanvas.getContext('2d');
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
       riverLayer.render(rCtx, WATER_COLOR);
       ctx.drawImage(riverCanvas, 0, 0);
     }
+    // Then draw paint on top
+    if (paintCanvas) ctx.drawImage(paintCanvas, 0, 0);
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
@@ -324,22 +331,34 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     console.log('[paint] modal opening...');
     if (!outCanvas.width) return;
     ensurePaintCanvas();
+    
+    // Save snapshot for cancel
     cancelSnapshot = document.createElement('canvas');
     cancelSnapshot.width  = paintCanvas.width;
     cancelSnapshot.height = paintCanvas.height;
     cancelSnapshot.getContext('2d').drawImage(paintCanvas, 0, 0);
+    
+    // Save river snapshot for cancel
+    if (riverCanvas) {
+      cancelRiverSnapshot = document.createElement('canvas');
+      cancelRiverSnapshot.width = riverCanvas.width;
+      cancelRiverSnapshot.height = riverCanvas.height;
+      cancelRiverSnapshot.getContext('2d').drawImage(riverCanvas, 0, 0);
+      // Export current rivers state
+      cancelRiversData = JSON.parse(JSON.stringify(riverLayer.export()));
+    }
+    
     undoStack = []; redoStack = [];
-    hasChanges = false; // Reset changes flag on open
+    hasChanges = false;
     riverMode = false;
     riverModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
-    riverLayer.clearAll();
     window.riverStartPoint = null;
     updateUndoRedoBtns();
+    updateLayersList();
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
     
-    // Load default brushes on first open
     console.log('[paint] calling loadDefaultBrushes()...');
     loadDefaultBrushes();
   }
@@ -486,8 +505,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       // Cancel any in-progress river
       if (riverLayer.currentRiver) {
         riverLayer.cancelRiver();
+        updateLayersList();
         redraw();
       }
+      selectedRiverId = null;
     }
   }
   
@@ -496,14 +517,36 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   riverWindinessSlider.addEventListener('input', () => {
     riverWindiness = parseFloat(riverWindinessSlider.value);
     riverWindinessVal.textContent = Math.round(riverWindiness * 100) + '%';
-    riverLayer.setWindiness(riverWindiness);
+    
+    if (riverLayer.currentRiver) {
+      riverLayer.setWindiness(riverWindiness);
+    } else if (selectedRiverId !== null) {
+      // Update selected river
+      const river = riverLayer.rivers[selectedRiverId];
+      if (river) {
+        river.windiness = riverWindiness;
+        riverLayer.rivers[selectedRiverId] = {
+          ...river,
+          path: generateRiverPath(river.controlPoints, riverWindiness, 5)
+        };
+      }
+    }
     redraw();
   });
   
   riverWidthSlider.addEventListener('input', () => {
     riverWidth = parseInt(riverWidthSlider.value);
     riverWidthVal.textContent = riverWidth;
-    riverLayer.setWidth(riverWidth);
+    
+    if (riverLayer.currentRiver) {
+      riverLayer.setWidth(riverWidth);
+    } else if (selectedRiverId !== null) {
+      // Update selected river
+      const river = riverLayer.rivers[selectedRiverId];
+      if (river) {
+        river.width = riverWidth;
+      }
+    }
     redraw();
   });
   
@@ -512,6 +555,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       saveHistory();
       riverLayer.finishRiver();
       hasChanges = true;
+      selectedRiverId = null;
+      updateLayersList();
       redraw();
     }
   });
@@ -519,6 +564,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   riverCancelBtn.addEventListener('click', () => {
     if (riverLayer.currentRiver) {
       riverLayer.cancelRiver();
+      updateLayersList();
       redraw();
     }
   });
@@ -529,33 +575,88 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     const [x, y] = toCanvasCoords(e);
     
-    // River mode: place control points
+    // River mode: check if clicking on control point first
     if (riverMode) {
-      if (!riverLayer.currentRiver) {
-        // Need start and end points first
-        if (!window.riverStartPoint) {
-          window.riverStartPoint = { x, y };
-          // Show temporary marker
-          redraw();
-          const tempCtx = canvas.getContext('2d');
-          tempCtx.fillStyle = 'rgba(88, 166, 255, 0.8)';
-          tempCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-          tempCtx.lineWidth = 2;
-          tempCtx.beginPath();
-          tempCtx.arc(x, y, 5, 0, Math.PI * 2);
-          tempCtx.fill();
-          tempCtx.stroke();
-          return;
-        } else {
-          // Create river with start and end
-          riverLayer.startRiver(window.riverStartPoint, { x, y }, riverWindiness, riverWidth);
-          window.riverStartPoint = null;
+      // Check if editing existing river
+      if (selectedRiverId !== null) {
+        const river = riverLayer.rivers[selectedRiverId];
+        if (river) {
+          // Check if clicking on a control point
+          for (let i = 0; i < river.controlPoints.length; i++) {
+            const p = river.controlPoints[i];
+            const dist = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+            if (dist < 8) {
+              // Right click or Ctrl+click to delete point
+              if (e.button === 2 || e.ctrlKey) {
+                if (river.controlPoints.length > 2) {
+                  saveHistory();
+                  river.controlPoints.splice(i, 1);
+                  river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
+                  hasChanges = true;
+                  redraw();
+                }
+                return;
+              }
+              // Start dragging this point
+              draggingPointId = { riverId: selectedRiverId, pointIndex: i };
+              return;
+            }
+          }
+          // Not clicking on point, add new point
+          saveHistory();
+          river.controlPoints.push({ x, y });
+          river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
+          hasChanges = true;
           redraw();
           return;
         }
-      } else {
-        // Add control point to existing river
+      }
+      
+      // Check if editing current river
+      if (riverLayer.currentRiver) {
+        // Check if clicking on a control point
+        for (let i = 0; i < riverLayer.currentRiver.controlPoints.length; i++) {
+          const p = riverLayer.currentRiver.controlPoints[i];
+          const dist = Math.sqrt((x - p.x) ** 2 + (y - p.y) ** 2);
+          if (dist < 8) {
+            // Right click or Ctrl+click to delete point
+            if (e.button === 2 || e.ctrlKey) {
+              if (riverLayer.currentRiver.controlPoints.length > 2) {
+                riverLayer.currentRiver.controlPoints.splice(i, 1);
+                riverLayer.updateCurrentRiverPath();
+                redraw();
+              }
+              return;
+            }
+            // Start dragging this point
+            draggingPointId = { riverId: 'current', pointIndex: i };
+            return;
+          }
+        }
+        // Not clicking on point, add new point
         riverLayer.addControlPoint({ x, y });
+        updateLayersList();
+        redraw();
+        return;
+      }
+      
+      // No river selected, start new river
+      if (!window.riverStartPoint) {
+        window.riverStartPoint = { x, y };
+        redraw();
+        const tempCtx = canvas.getContext('2d');
+        tempCtx.fillStyle = 'rgba(88, 166, 255, 0.8)';
+        tempCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        tempCtx.lineWidth = 2;
+        tempCtx.beginPath();
+        tempCtx.arc(x, y, 5, 0, Math.PI * 2);
+        tempCtx.fill();
+        tempCtx.stroke();
+        return;
+      } else {
+        riverLayer.startRiver(window.riverStartPoint, { x, y }, riverWindiness, riverWidth);
+        window.riverStartPoint = null;
+        updateLayersList();
         redraw();
         return;
       }
@@ -565,7 +666,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     saveHistory();
     painting = true;
     lastX = x; lastY = y;
-    // Init MYB state for this stroke (only for myb brushes)
     const brush = brushCache[currentBrushId];
     if (brush && brush.type === 'myb') {
       mybState = new MybBrushState(brush.params);
@@ -577,7 +677,26 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   canvas.addEventListener('mousemove', e => {
-    if (riverMode) return; // No drag in river mode
+    if (riverMode) {
+      // Handle dragging control points
+      if (draggingPointId) {
+        const [x, y] = toCanvasCoords(e);
+        if (draggingPointId.riverId === 'current' && riverLayer.currentRiver) {
+          riverLayer.currentRiver.controlPoints[draggingPointId.pointIndex] = { x, y };
+          riverLayer.updateCurrentRiverPath();
+          redraw();
+        } else if (draggingPointId.riverId !== 'current') {
+          const river = riverLayer.rivers[draggingPointId.riverId];
+          if (river) {
+            river.controlPoints[draggingPointId.pointIndex] = { x, y };
+            river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
+            redraw();
+          }
+        }
+      }
+      return;
+    }
+    
     if (!painting) return;
     e.preventDefault();
     const [x, y] = toCanvasCoords(e);
@@ -590,11 +709,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   canvas.addEventListener('mouseup',    () => { 
     painting = false; 
-    mybState = null; 
+    mybState = null;
+    draggingPointId = null;
   });
   canvas.addEventListener('mouseleave', () => { 
     painting = false; 
-    mybState = null; 
+    mybState = null;
+    draggingPointId = null;
   });
 
   canvas.addEventListener('touchstart', e => {
@@ -656,9 +777,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   }, { passive: false });
 
-  canvas.addEventListener('touchend', () => { 
-    painting = false; 
-    mybState = null; 
+  // Disable context menu on canvas for right-click delete
+  canvas.addEventListener('contextmenu', e => {
+    if (riverMode) e.preventDefault();
   });
 
   // ── Keyboard shortcuts ─────────────────────────────────────────────────────
@@ -719,8 +840,119 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     saveHistory();
     paintCanvas.getContext('2d').clearRect(0, 0, paintCanvas.width, paintCanvas.height);
     riverLayer.clearAll();
+    updateLayersList();
     redraw();
   });
+
+  // ── Layers management ──────────────────────────────────────────────────────
+  function updateLayersList() {
+    if (!layersList) return;
+    
+    const rivers = riverLayer.rivers;
+    const currentRiver = riverLayer.currentRiver;
+    
+    if (rivers.length === 0 && !currentRiver) {
+      layersList.innerHTML = '<div style="font-size:0.75rem;color:var(--muted);padding:8px;text-align:center;">No rivers yet</div>';
+      return;
+    }
+    
+    let html = '';
+    
+    // Show completed rivers
+    rivers.forEach((river, idx) => {
+      const isSelected = selectedRiverId === idx;
+      html += `
+        <div class="layer-item ${isSelected ? 'selected' : ''}" data-river-id="${idx}">
+          <div style="flex:1;display:flex;align-items:center;gap:6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+              <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+            </svg>
+            <span style="font-size:0.78rem;">River ${idx + 1}</span>
+            <span style="font-size:0.7rem;color:var(--muted);">(${river.controlPoints.length} pts)</span>
+          </div>
+          <button class="layer-btn" onclick="editRiver(${idx})" title="Edit">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          </button>
+          <button class="layer-btn" onclick="deleteRiver(${idx})" title="Delete">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+        </div>`;
+    });
+    
+    // Show current river being edited
+    if (currentRiver) {
+      html += `
+        <div class="layer-item editing">
+          <div style="flex:1;display:flex;align-items:center;gap:6px;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+              <path d="M11 12c0-2.5 2-4 4-4s4 1.5 4 4-2 4-4 4-4-1.5-4-4z"/>
+            </svg>
+            <span style="font-size:0.78rem;color:var(--accent);">Editing...</span>
+            <span style="font-size:0.7rem;color:var(--muted);">(${currentRiver.controlPoints.length} pts)</span>
+          </div>
+        </div>`;
+    }
+    
+    layersList.innerHTML = html;
+  }
+  
+  window.editRiver = function(riverId) {
+    selectedRiverId = riverId;
+    const river = riverLayer.rivers[riverId];
+    if (!river) return;
+    
+    // Enter river mode if not already
+    if (!riverMode) {
+      riverMode = true;
+      riverModeBtn.classList.add('active');
+      riverControlsRow.style.display = 'block';
+      document.querySelectorAll('#paintTerrainBtns .paint-btn').forEach(b => b.style.opacity = '0.3');
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.style.opacity = '0.3');
+      document.getElementById('paintBrushSlider').disabled = true;
+      document.getElementById('paintBrushSlider').style.opacity = '0.3';
+    }
+    
+    // Load river settings
+    riverWindinessSlider.value = river.windiness;
+    riverWindinessVal.textContent = Math.round(river.windiness * 100) + '%';
+    riverWidthSlider.value = river.width;
+    riverWidthVal.textContent = river.width;
+    riverWindiness = river.windiness;
+    riverWidth = river.width;
+    
+    updateLayersList();
+    redraw();
+  };
+  
+  window.deleteRiver = function(riverId) {
+    if (!confirm('Delete this river?')) return;
+    saveHistory();
+    riverLayer.removeRiver(riverId);
+    if (selectedRiverId === riverId) selectedRiverId = null;
+    hasChanges = true;
+    updateLayersList();
+    redraw();
+  };
+  
+  // Click on layer to select
+  if (layersList) {
+    layersList.addEventListener('click', (e) => {
+      const item = e.target.closest('.layer-item');
+      if (!item || item.classList.contains('editing')) return;
+      const riverId = parseInt(item.dataset.riverId);
+      if (!isNaN(riverId)) {
+        editRiver(riverId);
+      }
+    });
+  }
 
   // ── Done / Cancel ──────────────────────────────────────────────────────────
   function hasUnsavedChanges() {
@@ -736,12 +968,16 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
       riverLayer.render(rCtx, WATER_COLOR);
       outCanvas.getContext('2d').drawImage(riverCanvas, 0, 0);
+      
+      // Also apply to paintCanvas so rivers persist on next open
+      paintCanvas.getContext('2d').drawImage(riverCanvas, 0, 0);
     }
-    hasChanges = false; // Reset after applying
+    hasChanges = false;
     riverMode = false;
     riverModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
     window.riverStartPoint = null;
+    selectedRiverId = null;
     modal.classList.remove('open');
     onPaintApplied();
   }
@@ -753,17 +989,29 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       if (!confirmed) return;
     }
     
+    // Restore paint canvas
     if (cancelSnapshot && paintCanvas) {
       const pc = paintCanvas.getContext('2d');
       pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
       pc.drawImage(cancelSnapshot, 0, 0);
     }
-    hasChanges = false; // Reset after canceling
+    
+    // Restore river canvas and data
+    if (cancelRiverSnapshot && riverCanvas) {
+      const rc = riverCanvas.getContext('2d');
+      rc.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
+      rc.drawImage(cancelRiverSnapshot, 0, 0);
+    }
+    if (cancelRiversData) {
+      riverLayer.import(cancelRiversData);
+    }
+    
+    hasChanges = false;
     riverMode = false;
     riverModeBtn.classList.remove('active');
     riverControlsRow.style.display = 'none';
-    riverLayer.clearAll();
     window.riverStartPoint = null;
+    selectedRiverId = null;
     modal.classList.remove('open');
   }
 
