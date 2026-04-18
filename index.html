@@ -365,6 +365,11 @@
             Dunes
           </button>
         </div>
+        <button class="btn btn-ghost" id="paintLoadBrushBtn" style="font-size:0.75rem;padding:6px 10px;margin-top:6px;">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Load custom brush (.myb)
+        </button>
+        <input type="file" id="paintLoadBrushInput" accept=".myb" style="display:none;" />
         <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush size</div>
         <div style="display:flex;align-items:center;gap:8px;">
           <input type="range" id="paintBrushSlider" min="1" max="120" step="1" value="16" style="flex:1;" />

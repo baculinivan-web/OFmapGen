@@ -77,6 +77,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const redoBtn     = document.getElementById('paintRedoBtn');
   const terrainBtns = document.querySelectorAll('#paintTerrainBtns .paint-btn');
   const brushBtns   = document.querySelectorAll('#paintBrushBtns .paint-brush-btn');
+  const loadBrushBtn = document.getElementById('paintLoadBrushBtn');
+  const loadBrushInput = document.getElementById('paintLoadBrushInput');
 
   let currentTerrain = 'water';
   let brushSize = 16;
@@ -97,6 +99,55 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     brushCache[id] = parseMybBrush(myb);
     console.log(`[paint] loaded brush ${id} from fallback`);
   }
+
+  // Custom brush loading
+  const customBrushes = []; // { id, label, params }
+  let customBrushCounter = 0;
+
+  function addCustomBrush(myb, fileName) {
+    const id = `custom-${++customBrushCounter}`;
+    const label = fileName.replace(/\.myb$/i, '').slice(0, 20);
+    const params = parseMybBrush(myb);
+    brushCache[id] = params;
+    customBrushes.push({ id, label });
+    
+    // Add button to UI
+    const brushBtnsContainer = document.getElementById('paintBrushBtns');
+    const btn = document.createElement('button');
+    btn.className = 'paint-brush-btn';
+    btn.dataset.brush = id;
+    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>${label}`;
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#paintBrushBtns .paint-brush-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentBrushId = id;
+    });
+    brushBtnsContainer.appendChild(btn);
+    
+    // Auto-select new brush
+    btn.click();
+    console.log(`[paint] loaded custom brush ${id}: ${label}`);
+  }
+
+  loadBrushBtn.addEventListener('click', () => loadBrushInput.click());
+  
+  loadBrushInput.addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.myb')) {
+      alert('Please select a .myb file');
+      return;
+    }
+    try {
+      const text = await file.text();
+      const myb = JSON.parse(text);
+      addCustomBrush(myb, file.name);
+    } catch (err) {
+      console.error('[paint] failed to load custom brush:', err);
+      alert(`Failed to load brush: ${err.message}`);
+    }
+    e.target.value = ''; // reset input
+  });
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
   const MAX_HISTORY = 30;
