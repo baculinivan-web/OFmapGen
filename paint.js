@@ -1,5 +1,6 @@
 // paint.js — Fullscreen terrain paint modal
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
+import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
 
 export function initPaint({ outCanvas, onPaintApplied }) {
 
@@ -96,7 +97,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   // Seed cache immediately from inline fallbacks (no async fetch needed for now)
   for (const [id, myb] of Object.entries(BRUSH_FALLBACKS)) {
-    brushCache[id] = parseMybBrush(myb);
+    brushCache[id] = { type: 'myb', params: parseMybBrush(myb) };
     console.log(`[paint] loaded brush ${id} from fallback`);
   }
 
@@ -104,12 +105,18 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const customBrushes = []; // { id, label, params }
   let customBrushCounter = 0;
 
-  function addCustomBrush(myb, fileName) {
+  function addCustomBrush(brushData, fileName, type) {
     const id = `custom-${++customBrushCounter}`;
-    const label = fileName.replace(/\.myb$/i, '').slice(0, 20);
-    const params = parseMybBrush(myb);
-    brushCache[id] = params;
-    customBrushes.push({ id, label });
+    const label = (type === 'abr' ? brushData.name : fileName.replace(/\.myb$/i, '')).slice(0, 20);
+    
+    if (type === 'myb') {
+      const params = parseMybBrush(brushData);
+      brushCache[id] = { type: 'myb', params };
+    } else if (type === 'abr') {
+      brushCache[id] = { type: 'abr', abrBrush: brushData };
+    }
+    
+    customBrushes.push({ id, label, type });
     
     // Add button to UI
     const brushBtnsContainer = document.getElementById('paintBrushBtns');
@@ -126,7 +133,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Auto-select new brush
     btn.click();
-    console.log(`[paint] loaded custom brush ${id}: ${label}`);
+    console.log(`[paint] loaded custom brush ${id}: ${label} (${type})`);
   }
 
   loadBrushBtn.addEventListener('click', () => loadBrushInput.click());
@@ -134,17 +141,37 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   loadBrushInput.addEventListener('change', async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.myb')) {
-      alert('Please select a .myb file');
-      return;
-    }
-    try {
-      const text = await file.text();
-      const myb = JSON.parse(text);
-      addCustomBrush(myb, file.name);
-    } catch (err) {
-      console.error('[paint] failed to load custom brush:', err);
-      alert(`Failed to load brush: ${err.message}`);
+    const fileName = file.name.toLowerCase();
+    
+    if (fileName.endsWith('.myb')) {
+      try {
+        const text = await file.text();
+        const myb = JSON.parse(text);
+        addCustomBrush(myb, file.name, 'myb');
+      } catch (err) {
+        console.error('[paint] failed to load .myb:', err);
+        alert(`Failed to load brush: ${err.message}`);
+      }
+    } else if (fileName.endsWith('.abr')) {
+      try {
+        const buffer = await file.arrayBuffer();
+        const brushes = await loadAbrFromArrayBuffer(buffer, file.name);
+        if (!brushes || brushes.length === 0) {
+          alert('No brushes found in .abr file');
+          return;
+        }
+        // Add each brush from the .abr pack
+        for (const abrBrush of brushes) {
+          if (!abrBrush.valid) continue;
+          addCustomBrush(abrBrush, abrBrush.name, 'abr');
+        }
+        console.log(`[paint] loaded ${brushes.length} brushes from ${file.name}`);
+      } catch (err) {
+        console.error('[paint] failed to load .abr:', err);
+        alert(`Failed to load .abr file: ${err.message}`);
+      }
+    } else {
+      alert('Please select a .myb or .abr file');
     }
     e.target.value = ''; // reset input
   });
@@ -246,19 +273,25 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function paintDot(px, py) {
     const rgb = TERRAIN_COLORS[currentTerrain];
+    const brush = brushCache[currentBrushId];
+    
     if (currentBrushId === 'solid') {
       const pc = getPaintCtx();
       pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
       pc.beginPath();
       pc.arc(px, py, brushSize, 0, Math.PI * 2);
       pc.fill();
-    } else if (mybState) {
+    } else if (brush && brush.type === 'myb' && mybState) {
       mybPaintDot(getPaintCtx(), mybState, px, py, brushSize, rgb);
+    } else if (brush && brush.type === 'abr') {
+      abrPaintDot(getPaintCtx(), brush.abrBrush, px, py, brushSize, rgb);
     }
   }
 
   function paintSegment(x0, y0, x1, y1) {
     const rgb = TERRAIN_COLORS[currentTerrain];
+    const brush = brushCache[currentBrushId];
+    
     if (currentBrushId === 'solid') {
       const pc = getPaintCtx();
       pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
@@ -272,8 +305,45 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         pc.arc(x, y, brushSize, 0, Math.PI * 2);
         pc.fill();
       }
-    } else if (mybState) {
+    } else if (brush && brush.type === 'myb' && mybState) {
       mybPaintSegment(getPaintCtx(), mybState, x0, y0, x1, y1, brushSize, rgb);
+    } else if (brush && brush.type === 'abr') {
+      abrPaintSegment(getPaintCtx(), brush.abrBrush, x0, y0, x1, y1, brushSize, rgb);
+    }
+  }
+
+  // ABR stamp-based rendering
+  function abrPaintDot(ctx, abrBrush, px, py, size, rgb) {
+    const img = abrBrush.brushTipImage;
+    const scale = size / Math.max(img.width, img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    
+    // Tint the brush with terrain color
+    ctx.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+    ctx.fillRect(px - w/2, py - h/2, w, h);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(img, px - w/2, py - h/2, w, h);
+    
+    ctx.restore();
+  }
+
+  function abrPaintSegment(ctx, abrBrush, x0, y0, x1, y1, size, rgb) {
+    const dx = x1 - x0, dy = y1 - y0;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const spacing = abrBrush.spacing || 25; // % of brush size
+    const step = (size * spacing / 100);
+    const steps = Math.max(1, Math.ceil(dist / step));
+    
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = x0 + dx * t;
+      const y = y0 + dy * t;
+      abrPaintDot(ctx, abrBrush, x, y, size, rgb);
     }
   }
 
@@ -284,9 +354,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
-    // Init MYB state for this stroke
-    if (currentBrushId !== 'solid' && brushCache[currentBrushId]) {
-      mybState = new MybBrushState(brushCache[currentBrushId]);
+    // Init MYB state for this stroke (only for myb brushes)
+    const brush = brushCache[currentBrushId];
+    if (brush && brush.type === 'myb') {
+      mybState = new MybBrushState(brush.params);
     } else {
       mybState = null;
     }
@@ -314,8 +385,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = true;
     const [x, y] = toCanvasCoords(e);
     lastX = x; lastY = y;
-    if (currentBrushId !== 'solid' && brushCache[currentBrushId]) {
-      mybState = new MybBrushState(brushCache[currentBrushId]);
+    const brush = brushCache[currentBrushId];
+    if (brush && brush.type === 'myb') {
+      mybState = new MybBrushState(brush.params);
     } else {
       mybState = null;
     }
