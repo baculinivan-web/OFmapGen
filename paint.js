@@ -135,6 +135,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   // Function to load default .abr brushes (called on first modal open)
   async function loadDefaultBrushes() {
+    console.log('[paint] loadDefaultBrushes() called, defaultBrushesLoaded:', defaultBrushesLoaded);
     if (defaultBrushesLoaded) return;
     defaultBrushesLoaded = true;
     
@@ -324,6 +325,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   // ── Open ───────────────────────────────────────────────────────────────────
   function open() {
+    console.log('[paint] modal opening...');
     if (!outCanvas.width) return;
     ensurePaintCanvas();
     cancelSnapshot = document.createElement('canvas');
@@ -336,6 +338,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
     
     // Load default brushes on first open
+    console.log('[paint] calling loadDefaultBrushes()...');
     loadDefaultBrushes();
   }
 
