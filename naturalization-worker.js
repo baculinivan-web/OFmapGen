@@ -158,72 +158,125 @@ function getTerrainColor(zone) {
 }
 
 /**
- * Detect terrain boundaries within masked region
- * Identifies adjacent pixels with different terrain zones
+ * Build distance fields for each terrain type
+ * Uses fast sweeping algorithm for distance transform
  * @param {Uint8Array} zones - Terrain zone map (0-3 per pixel)
  * @param {Uint8Array} maskData - Mask values (0-255)
  * @param {number} width - Image width
  * @param {number} height - Image height
- * @returns {Array<Object>} Array of boundary pixel pairs: [{x1, y1, zone1, x2, y2, zone2}, ...]
+ * @returns {Object} Distance fields: { water: Float32Array, plain: Float32Array, highland: Float32Array, mountain: Float32Array }
  */
-function detectTerrainBoundaries(zones, maskData, width, height) {
-  const boundaries = [];
+function buildDistanceFields(zones, maskData, width, height) {
+  const size = width * height;
+  const INF = 999999;
   
-  // Iterate through all pixels in the masked region
+  // Initialize distance fields
+  const distanceFields = {
+    water: new Float32Array(size),
+    plain: new Float32Array(size),
+    highland: new Float32Array(size),
+    mountain: new Float32Array(size)
+  };
+  
+  // Initialize all distances to infinity
+  distanceFields.water.fill(INF);
+  distanceFields.plain.fill(INF);
+  distanceFields.highland.fill(INF);
+  distanceFields.mountain.fill(INF);
+  
+  // Set distance to 0 for pixels of each terrain type within masked region
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const index = y * width + x;
       
-      // Skip pixels outside the mask
+      // Only process masked pixels
       if (maskData[index] === 0) {
         continue;
       }
       
-      const currentZone = zones[index];
+      const zone = zones[index];
       
-      // Check right neighbor (x+1, y)
-      if (x < width - 1) {
-        const rightIndex = index + 1;
-        // Only process if neighbor is also masked
-        if (maskData[rightIndex] > 0) {
-          const rightZone = zones[rightIndex];
-          // If zones differ, this is a boundary
-          if (currentZone !== rightZone) {
-            boundaries.push({
-              x1: x,
-              y1: y,
-              zone1: currentZone,
-              x2: x + 1,
-              y2: y,
-              zone2: rightZone
-            });
+      // Set distance to 0 for this terrain type
+      if (zone === 0) distanceFields.water[index] = 0;
+      else if (zone === 1) distanceFields.plain[index] = 0;
+      else if (zone === 2) distanceFields.highland[index] = 0;
+      else if (zone === 3) distanceFields.mountain[index] = 0;
+    }
+  }
+  
+  // Fast sweeping algorithm - propagate distances
+  // We need multiple passes to ensure accurate distances
+  const terrainTypes = ['water', 'plain', 'highland', 'mountain'];
+  
+  for (const terrainType of terrainTypes) {
+    const field = distanceFields[terrainType];
+    
+    // Forward pass (top-left to bottom-right)
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const index = y * width + x;
+        
+        // Skip unmasked pixels
+        if (maskData[index] === 0) {
+          continue;
+        }
+        
+        let minDist = field[index];
+        
+        // Check left neighbor
+        if (x > 0) {
+          const leftIndex = index - 1;
+          if (maskData[leftIndex] > 0) {
+            minDist = Math.min(minDist, field[leftIndex] + 1);
           }
         }
+        
+        // Check top neighbor
+        if (y > 0) {
+          const topIndex = index - width;
+          if (maskData[topIndex] > 0) {
+            minDist = Math.min(minDist, field[topIndex] + 1);
+          }
+        }
+        
+        field[index] = minDist;
       }
-      
-      // Check bottom neighbor (x, y+1)
-      if (y < height - 1) {
-        const bottomIndex = index + width;
-        // Only process if neighbor is also masked
-        if (maskData[bottomIndex] > 0) {
-          const bottomZone = zones[bottomIndex];
-          // If zones differ, this is a boundary
-          if (currentZone !== bottomZone) {
-            boundaries.push({
-              x1: x,
-              y1: y,
-              zone1: currentZone,
-              x2: x,
-              y2: y + 1,
-              zone2: bottomZone
-            });
+    }
+    
+    // Backward pass (bottom-right to top-left)
+    for (let y = height - 1; y >= 0; y--) {
+      for (let x = width - 1; x >= 0; x--) {
+        const index = y * width + x;
+        
+        // Skip unmasked pixels
+        if (maskData[index] === 0) {
+          continue;
+        }
+        
+        let minDist = field[index];
+        
+        // Check right neighbor
+        if (x < width - 1) {
+          const rightIndex = index + 1;
+          if (maskData[rightIndex] > 0) {
+            minDist = Math.min(minDist, field[rightIndex] + 1);
           }
         }
+        
+        // Check bottom neighbor
+        if (y < height - 1) {
+          const bottomIndex = index + width;
+          if (maskData[bottomIndex] > 0) {
+            minDist = Math.min(minDist, field[bottomIndex] + 1);
+          }
+        }
+        
+        field[index] = minDist;
       }
     }
   }
   
-  return boundaries;
+  return distanceFields;
 }
 
 // Message handler
@@ -260,288 +313,88 @@ self.onmessage = function({ data }) {
       zones[i] = detectTerrainZone(r, g, b);
     }
     
-    // Task 2.2: Detect terrain boundaries within masked region
-    const boundaries = detectTerrainBoundaries(zones, maskData, width, height);
-    
-    // Task 2.3: Highland insertion logic
     // Initialize Perlin noise generator
     const noise = new PerlinNoise(12345); // Fixed seed for consistency
     
-    // Create a copy of zones for modification
+    // NEW APPROACH: Distance-field based naturalization
+    // Instead of detecting boundaries, we create smooth transitions FROM each terrain type OUTWARD
+    
+    // Step 1: Build distance fields for each terrain type within masked region
+    const distanceFields = buildDistanceFields(zones, maskData, width, height);
+    
+    // Step 2: For each masked pixel, calculate terrain based on distance fields and noise
     const naturalizedZones = new Uint8Array(zones);
-    
-    // Process Mountain-Plain boundaries
-    const mountainPlainBoundaries = boundaries.filter(b => 
-      (b.zone1 === 3 && b.zone2 === 1) || (b.zone1 === 1 && b.zone2 === 3)
-    );
-    
-    // For each Mountain-Plain boundary, apply highland insertion
-    for (const boundary of mountainPlainBoundaries) {
-      // Determine which side is mountain and which is plain
-      const mountainX = boundary.zone1 === 3 ? boundary.x1 : boundary.x2;
-      const mountainY = boundary.zone1 === 3 ? boundary.y1 : boundary.y2;
-      
-      // Process pixels in the transition zone around this boundary
-      // We'll check all pixels within transitionWidth distance
-      const minX = Math.max(0, Math.min(boundary.x1, boundary.x2) - transitionWidth);
-      const maxX = Math.min(width - 1, Math.max(boundary.x1, boundary.x2) + transitionWidth);
-      const minY = Math.max(0, Math.min(boundary.y1, boundary.y2) - transitionWidth);
-      const maxY = Math.min(height - 1, Math.max(boundary.y1, boundary.y2) + transitionWidth);
-      
-      for (let y = minY; y <= maxY; y++) {
-        for (let x = minX; x <= maxX; x++) {
-          const index = y * width + x;
-          
-          // Only process masked pixels that are currently Plain
-          if (maskData[index] === 0 || naturalizedZones[index] !== 1) {
-            continue;
-          }
-          
-          // Calculate distance from this pixel to the mountain pixel
-          const distance = Math.hypot(x - mountainX, y - mountainY);
-          
-          // Skip if outside transition zone
-          if (distance > transitionWidth) {
-            continue;
-          }
-          
-          // Calculate noise value at this position
-          const noiseValue = noise.noise2D(x * noiseFrequency, y * noiseFrequency);
-          
-          // Apply probability formula: P = noise(x,y) * (1 - distance/transitionWidth)
-          // Normalize noise from [-1, 1] to [0, 1]
-          const normalizedNoise = (noiseValue + 1) / 2;
-          const probability = normalizedNoise * (1 - distance / transitionWidth);
-          
-          // Insert Highland pixel where P > 0.5
-          if (probability > 0.5) {
-            naturalizedZones[index] = 2; // Highland
-          }
-        }
-      }
-    }
-    
-    // Task 2.4: Fractal coastline generation
-    // Process Plain-Water boundaries
-    const plainWaterBoundaries = boundaries.filter(b => 
-      (b.zone1 === 1 && b.zone2 === 0) || (b.zone1 === 0 && b.zone2 === 1)
-    );
-    
-    // For each Plain-Water boundary, apply noise-based displacement
-    for (const boundary of plainWaterBoundaries) {
-      // Determine which side is plain and which is water
-      const plainX = boundary.zone1 === 1 ? boundary.x1 : boundary.x2;
-      const plainY = boundary.zone1 === 1 ? boundary.y1 : boundary.y2;
-      const waterX = boundary.zone1 === 0 ? boundary.x1 : boundary.x2;
-      const waterY = boundary.zone1 === 0 ? boundary.y1 : boundary.y2;
-      
-      // Process pixels in the transition zone around this boundary
-      const minX = Math.max(0, Math.min(boundary.x1, boundary.x2) - transitionWidth);
-      const maxX = Math.min(width - 1, Math.max(boundary.x1, boundary.x2) + transitionWidth);
-      const minY = Math.max(0, Math.min(boundary.y1, boundary.y2) - transitionWidth);
-      const maxY = Math.min(height - 1, Math.max(boundary.y1, boundary.y2) + transitionWidth);
-      
-      for (let y = minY; y <= maxY; y++) {
-        for (let x = minX; x <= maxX; x++) {
-          const index = y * width + x;
-          
-          // Only process masked pixels
-          if (maskData[index] === 0) {
-            continue;
-          }
-          
-          const currentZone = naturalizedZones[index];
-          
-          // Only process water or plain pixels near the boundary
-          if (currentZone !== 0 && currentZone !== 1) {
-            continue;
-          }
-          
-          // Calculate distance from this pixel to the boundary
-          const distanceToBoundary = Math.min(
-            Math.hypot(x - plainX, y - plainY),
-            Math.hypot(x - waterX, y - waterY)
-          );
-          
-          // Skip if outside transition zone
-          if (distanceToBoundary > transitionWidth) {
-            continue;
-          }
-          
-          // Calculate noise value at this position
-          const noiseValue = noise.noise2D(x * noiseFrequency, y * noiseFrequency);
-          
-          // Apply fractal displacement using noise threshold
-          // Normalize noise from [-1, 1] to [0, 1]
-          const normalizedNoise = (noiseValue + 1) / 2;
-          
-          // Create jagged edges by using noise to determine terrain type
-          // The threshold varies with distance from boundary
-          const distanceFactor = 1 - (distanceToBoundary / transitionWidth);
-          const threshold = 0.5 + (distanceFactor * 0.3); // Range: 0.5 to 0.8
-          
-          // If pixel is currently water and noise is high, convert to plain (land expansion)
-          if (currentZone === 0 && normalizedNoise > threshold) {
-            naturalizedZones[index] = 1; // Plain
-          }
-          // If pixel is currently plain and noise is low, convert to water (erosion)
-          else if (currentZone === 1 && normalizedNoise < (1 - threshold)) {
-            naturalizedZones[index] = 0; // Water
-          }
-        }
-      }
-    }
-    
-    // Task 2.5: Island generation
-    // Find water zones adjacent to land within the masked region
-    const waterAdjacentToLand = new Set();
     
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const index = y * width + x;
         
-        // Skip if not masked or not water
-        if (maskData[index] === 0 || naturalizedZones[index] !== 0) {
+        // Only process masked pixels
+        if (maskData[index] === 0) {
           continue;
         }
         
-        // Check if adjacent to land (Plain, Highland, or Mountain)
-        let adjacentToLand = false;
+        // Get distances to each terrain type
+        const distToMountain = distanceFields.mountain[index];
+        const distToHighland = distanceFields.highland[index];
+        const distToPlain = distanceFields.plain[index];
+        const distToWater = distanceFields.water[index];
         
-        // Check 4-connected neighbors
-        const neighbors = [
-          { dx: -1, dy: 0 },  // left
-          { dx: 1, dy: 0 },   // right
-          { dx: 0, dy: -1 },  // top
-          { dx: 0, dy: 1 }    // bottom
-        ];
-        
-        for (const { dx, dy } of neighbors) {
-          const nx = x + dx;
-          const ny = y + dy;
-          
-          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-            const neighborIndex = ny * width + nx;
-            const neighborZone = naturalizedZones[neighborIndex];
-            
-            // Check if neighbor is land (Plain=1, Highland=2, Mountain=3)
-            if (neighborZone >= 1 && neighborZone <= 3) {
-              adjacentToLand = true;
-              break;
-            }
-          }
-        }
-        
-        if (adjacentToLand) {
-          waterAdjacentToLand.add(index);
-        }
-      }
-    }
-    
-    // Generate island candidates using noise thresholding
-    // Island density controls the threshold: higher density = lower threshold = more islands
-    // Density 0.0 = threshold 0.9 (almost no islands)
-    // Density 1.0 = threshold 0.1 (maximum islands)
-    const noiseThreshold = 0.9 - (islandDensity * 0.8);
-    
-    const islandCandidates = new Set();
-    
-    for (const index of waterAdjacentToLand) {
-      const x = index % width;
-      const y = Math.floor(index / width);
-      
-      // Calculate noise value at this position
-      const noiseValue = noise.noise2D(x * noiseFrequency, y * noiseFrequency);
-      
-      // Normalize noise from [-1, 1] to [0, 1]
-      const normalizedNoise = (noiseValue + 1) / 2;
-      
-      // If noise exceeds threshold, mark as island candidate
-      if (normalizedNoise > noiseThreshold) {
-        islandCandidates.add(index);
-      }
-    }
-    
-    // Detect connected components (islands) using flood fill
-    const visited = new Set();
-    const islands = [];
-    
-    function floodFill(startIndex) {
-      const island = [];
-      const queue = [startIndex];
-      visited.add(startIndex);
-      
-      while (queue.length > 0) {
-        const currentIndex = queue.shift();
-        island.push(currentIndex);
-        
-        const x = currentIndex % width;
-        const y = Math.floor(currentIndex / width);
-        
-        // Check 4-connected neighbors
-        const neighbors = [
-          { dx: -1, dy: 0 },
-          { dx: 1, dy: 0 },
-          { dx: 0, dy: -1 },
-          { dx: 0, dy: 1 }
-        ];
-        
-        for (const { dx, dy } of neighbors) {
-          const nx = x + dx;
-          const ny = y + dy;
-          
-          if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
-            const neighborIndex = ny * width + nx;
-            
-            if (islandCandidates.has(neighborIndex) && !visited.has(neighborIndex)) {
-              visited.add(neighborIndex);
-              queue.push(neighborIndex);
-            }
-          }
-        }
-      }
-      
-      return island;
-    }
-    
-    // Find all islands
-    for (const index of islandCandidates) {
-      if (!visited.has(index)) {
-        const island = floodFill(index);
-        islands.push(island);
-      }
-    }
-    
-    // Filter islands by size (5-200 pixels) and assign terrain type
-    for (const island of islands) {
-      const size = island.length;
-      
-      // Skip islands outside the valid size range
-      if (size < 5 || size > 200) {
-        continue;
-      }
-      
-      // Calculate average noise amplitude for the island to determine terrain type
-      let totalNoiseAmplitude = 0;
-      
-      for (const index of island) {
-        const x = index % width;
-        const y = Math.floor(index / width);
-        
+        // Calculate noise value at this position
         const noiseValue = noise.noise2D(x * noiseFrequency, y * noiseFrequency);
-        // Use absolute value as amplitude
-        totalNoiseAmplitude += Math.abs(noiseValue);
-      }
-      
-      const avgNoiseAmplitude = totalNoiseAmplitude / size;
-      
-      // Assign terrain type based on noise amplitude
-      // Higher amplitude (> 0.6) = Highland, lower amplitude = Plain
-      const terrainType = avgNoiseAmplitude > 0.6 ? 2 : 1; // 2=Highland, 1=Plain
-      
-      // Apply the island to naturalizedZones
-      for (const index of island) {
-        naturalizedZones[index] = terrainType;
+        // Normalize noise from [-1, 1] to [0, 1]
+        const normalizedNoise = (noiseValue + 1) / 2;
+        
+        // Determine terrain based on elevation hierarchy and distance fields
+        // Elevation hierarchy: Mountain (3) > Highland (2) > Plain (1) > Water (0)
+        
+        // If close to mountain, create mountain-to-highland-to-plain transition
+        if (distToMountain < transitionWidth * 3) {
+          // Calculate elevation based on distance from mountain with noise
+          const distFactor = distToMountain / (transitionWidth * 3);
+          const noisyDistFactor = distFactor + (normalizedNoise - 0.5) * 0.3;
+          
+          if (noisyDistFactor < 0.33) {
+            naturalizedZones[index] = 3; // Mountain
+          } else if (noisyDistFactor < 0.66) {
+            naturalizedZones[index] = 2; // Highland
+          } else {
+            naturalizedZones[index] = 1; // Plain
+          }
+        }
+        // If close to highland (but not mountain), create highland-to-plain transition
+        else if (distToHighland < transitionWidth * 2) {
+          const distFactor = distToHighland / (transitionWidth * 2);
+          const noisyDistFactor = distFactor + (normalizedNoise - 0.5) * 0.3;
+          
+          if (noisyDistFactor < 0.5) {
+            naturalizedZones[index] = 2; // Highland
+          } else {
+            naturalizedZones[index] = 1; // Plain
+          }
+        }
+        // If close to plain (but not highland/mountain), create plain-to-water transition with jagged coastline
+        else if (distToPlain < transitionWidth * 2) {
+          const distFactor = distToPlain / (transitionWidth * 2);
+          // Add more noise variation for coastlines to make them jagged
+          const noisyDistFactor = distFactor + (normalizedNoise - 0.5) * 0.6;
+          
+          if (noisyDistFactor < 0.5) {
+            naturalizedZones[index] = 1; // Plain
+          } else {
+            // Add small islands based on island density
+            const islandThreshold = 0.9 - (islandDensity * 0.5);
+            if (normalizedNoise > islandThreshold && distFactor < 0.7) {
+              naturalizedZones[index] = 1; // Small island
+            } else {
+              naturalizedZones[index] = 0; // Water
+            }
+          }
+        }
+        // Far from any drawn terrain - default to water
+        else {
+          naturalizedZones[index] = 0; // Water
+        }
       }
     }
     
