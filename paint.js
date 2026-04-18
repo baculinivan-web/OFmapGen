@@ -1040,6 +1040,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Layers management ──────────────────────────────────────────────────────
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
   function updateLayersList() {
     if (!layersList) return;
     
