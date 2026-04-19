@@ -649,20 +649,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const w = temp.width;
     const h = temp.height;
     
-    // Define terrain colors in order from highest to lowest
+    // Define terrain colors in order from lowest to highest
     const terrainLayers = [
-      { name: 'mountain', rgb: [190, 190, 190], level: 3 },
-      { name: 'highland', rgb: [176, 159, 114], level: 2 },
+      { name: 'water', rgb: [18, 15, 34], level: 0 },
       { name: 'plain', rgb: [140, 170, 88], level: 1 },
-      { name: 'water', rgb: [18, 15, 34], level: 0 }
+      { name: 'highland', rgb: [176, 159, 114], level: 2 },
+      { name: 'mountain', rgb: [190, 190, 190], level: 3 }
     ];
     
-    // Start with the original image
-    tempCtx.drawImage(layer.canvas, 0, 0);
+    // Start with water as base (fill entire canvas with water)
+    tempCtx.fillStyle = `rgb(${terrainLayers[0].rgb[0]}, ${terrainLayers[0].rgb[1]}, ${terrainLayers[0].rgb[2]})`;
+    tempCtx.fillRect(0, 0, w, h);
     
-    // Process each terrain level from highest to lowest
-    // This ensures proper layering: mountains on top, then highlands, then plains, then water
-    for (let i = 0; i < terrainLayers.length; i++) {
+    // Process each terrain level from lowest to highest
+    // Each level will be drawn on top with jagged edges
+    for (let i = 1; i < terrainLayers.length; i++) {
       const currentTerrain = terrainLayers[i];
       
       // Create mask for current terrain and all higher terrains
@@ -707,11 +708,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       maskCtx.putImageData(maskData, 0, 0);
       
       // Apply jagged edges to this terrain mask
-      // This will create natural edges between this level and the level below
       const processedMask = applyJaggedEdgesToCanvas(maskCanvas, intensity, frequency, scale, algorithm, seed, depth);
       
-      // Draw this processed layer on top of the result
-      // Use 'source-over' to layer properly
+      // Draw this processed layer on top
       tempCtx.drawImage(processedMask, 0, 0);
     }
     
