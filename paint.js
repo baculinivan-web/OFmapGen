@@ -657,12 +657,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       { name: 'mountain', rgb: [190, 190, 190], level: 3 }
     ];
     
-    // Start with water as base (fill entire canvas with water)
+    // Start with water as base
     tempCtx.fillStyle = `rgb(${terrainLayers[0].rgb[0]}, ${terrainLayers[0].rgb[1]}, ${terrainLayers[0].rgb[2]})`;
     tempCtx.fillRect(0, 0, w, h);
     
     // Process each terrain level from lowest to highest
-    // Each level will be drawn on top with jagged edges
     for (let i = 1; i < terrainLayers.length; i++) {
       const currentTerrain = terrainLayers[i];
       
@@ -697,7 +696,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         }
         
         if (belongsToThisOrHigher) {
-          // Keep this pixel in the mask
           maskData.data[j] = r;
           maskData.data[j + 1] = g;
           maskData.data[j + 2] = b;
@@ -707,8 +705,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       
       maskCtx.putImageData(maskData, 0, 0);
       
-      // Apply jagged edges to this terrain mask
-      const processedMask = applyJaggedEdgesToCanvas(maskCanvas, intensity, frequency, scale, algorithm, seed, depth);
+      // Expand the mask slightly before applying jagged edges
+      // This prevents gaps from appearing
+      const expandedMask = expandMask(maskCanvas, Math.ceil(intensity * scale * 1.5));
+      
+      // Apply jagged edges to the expanded mask
+      const processedMask = applyJaggedEdgesToCanvas(expandedMask, intensity, frequency, scale, algorithm, seed, depth);
       
       // Draw this processed layer on top
       tempCtx.drawImage(processedMask, 0, 0);
@@ -721,6 +723,56 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     jaggedCache.set(cacheKey, temp);
     
+    return temp;
+  }
+  
+  function expandMask(canvas, expandPixels) {
+    // Expand the mask by dilating it
+    const temp = document.createElement('canvas');
+    temp.width = canvas.width;
+    temp.height = canvas.height;
+    const tempCtx = temp.getContext('2d');
+    
+    const srcData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    const dstData = tempCtx.createImageData(canvas.width, canvas.height);
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    // Dilate: for each pixel, if any neighbor is opaque, make this pixel opaque
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const idx = (y * w + x) * 4;
+        
+        // Check if this pixel or any neighbor is opaque
+        let maxAlpha = srcData.data[idx + 3];
+        let maxR = srcData.data[idx];
+        let maxG = srcData.data[idx + 1];
+        let maxB = srcData.data[idx + 2];
+        
+        for (let dy = -expandPixels; dy <= expandPixels; dy++) {
+          for (let dx = -expandPixels; dx <= expandPixels; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nIdx = (ny * w + nx) * 4;
+            const nAlpha = srcData.data[nIdx + 3];
+            if (nAlpha > maxAlpha) {
+              maxAlpha = nAlpha;
+              maxR = srcData.data[nIdx];
+              maxG = srcData.data[nIdx + 1];
+              maxB = srcData.data[nIdx + 2];
+            }
+          }
+        }
+        
+        dstData.data[idx] = maxR;
+        dstData.data[idx + 1] = maxG;
+        dstData.data[idx + 2] = maxB;
+        dstData.data[idx + 3] = maxAlpha;
+      }
+    }
+    
+    tempCtx.putImageData(dstData, 0, 0);
     return temp;
   }
   
