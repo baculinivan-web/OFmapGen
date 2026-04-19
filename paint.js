@@ -472,19 +472,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let redoStack = [];
 
   function saveHistory() {
-    const pc = paintCanvas.getContext('2d');
-    undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer) return;
+    
+    const lc = layer.canvas.getContext('2d');
+    undoStack.push(lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height));
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack = [];
     hasChanges = true; // Mark that changes were made
     
     // Clear jagged edges cache for current layer since content changed
-    const layer = paintLayers.find(l => l.id === currentLayerId);
-    if (layer) {
-      for (const key of jaggedCache.keys()) {
-        if (key.startsWith(`${layer.id}-`)) {
-          jaggedCache.delete(key);
-        }
+    for (const key of jaggedCache.keys()) {
+      if (key.startsWith(`${layer.id}-`)) {
+        jaggedCache.delete(key);
       }
     }
     
@@ -493,9 +493,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function undo() {
     if (!undoStack.length) return;
-    const pc = paintCanvas.getContext('2d');
-    redoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
-    pc.putImageData(undoStack.pop(), 0, 0);
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer) return;
+    
+    const lc = layer.canvas.getContext('2d');
+    redoStack.push(lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height));
+    lc.putImageData(undoStack.pop(), 0, 0);
     redraw(); 
     updateUndoRedoBtns();
     updateLayerThumbnail(currentLayerId);
@@ -503,9 +506,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
 
   function redo() {
     if (!redoStack.length) return;
-    const pc = paintCanvas.getContext('2d');
-    undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
-    pc.putImageData(redoStack.pop(), 0, 0);
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (!layer) return;
+    
+    const lc = layer.canvas.getContext('2d');
+    undoStack.push(lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height));
+    lc.putImageData(redoStack.pop(), 0, 0);
     redraw(); 
     updateUndoRedoBtns();
     updateLayerThumbnail(currentLayerId);
@@ -530,6 +536,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     fillMode = false;
     selectedRiverId = null;
     currentJaggedLayerId = null;
+    window.riverStartPoint = null; // Clear river start anchor
     undoStack = []; redoStack = [];
     cancelSnapshot = null;
     cancelRiverSnapshot = null;
@@ -1822,8 +1829,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   canvas.addEventListener('touchend', () => {
     painting = false;
     mybState = null;
+    draggingPointId = null;
     if (isPaintingActive) {
       isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId);
+      redraw(); // Redraw with jagged edges applied
+    }
+  });
+  
+  canvas.addEventListener('touchcancel', () => {
+    painting = false;
+    mybState = null;
+    draggingPointId = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId);
       redraw(); // Redraw with jagged edges applied
     }
   });
@@ -2199,9 +2219,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     layerItems.forEach(item => {
       item.addEventListener('dragstart', (e) => {
-        const displayedIndex = parseInt(item.dataset.layerIndex);
-        // Convert displayed index to model index (layers are rendered in reverse)
-        draggedLayerIndex = paintLayers.length - 1 - displayedIndex;
+        // data-layer-index already holds the model index
+        draggedLayerIndex = parseInt(item.dataset.layerIndex);
         item.style.opacity = '0.4';
         e.dataTransfer.effectAllowed = 'move';
       });
@@ -2219,8 +2238,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         if (draggedLayerIndex === null) return;
         
-        const displayedTargetIndex = parseInt(item.dataset.layerIndex);
-        const targetIndex = paintLayers.length - 1 - displayedTargetIndex;
+        const targetIndex = parseInt(item.dataset.layerIndex);
         if (draggedLayerIndex === targetIndex) return;
         
         // Visual feedback
@@ -2238,9 +2256,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         if (draggedLayerIndex === null) return;
         
-        const displayedTargetIndex = parseInt(item.dataset.layerIndex);
-        // Convert displayed index to model index
-        const targetIndex = paintLayers.length - 1 - displayedTargetIndex;
+        const targetIndex = parseInt(item.dataset.layerIndex);
         if (draggedLayerIndex === targetIndex) return;
         
         // Reorder layers array using model indices
