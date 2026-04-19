@@ -481,6 +481,24 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redoBtn.style.opacity = redoStack.length ? '1' : '0.35';
   }
 
+  // ── Reset all paint state (call when a new map is loaded) ─────────────────
+  function reset() {
+    paintCanvas = null;
+    paintLayers = [];
+    currentLayerId = 0;
+    layerIdCounter = 1;
+    riverLayer = new RiverLayer();
+    riverCanvas = null;
+    riverMode = false;
+    fillMode = false;
+    undoStack = []; redoStack = [];
+    cancelSnapshot = null;
+    cancelRiverSnapshot = null;
+    cancelRiversData = null;
+    cancelLayersData = null;
+    hasChanges = false;
+  }
+
   // ── Ensure paint canvas ────────────────────────────────────────────────────
   function ensurePaintCanvas() {
     if (paintCanvas && paintCanvas.width === outCanvas.width && paintCanvas.height === outCanvas.height) {
@@ -507,6 +525,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     paintCanvas = document.createElement('canvas');
     paintCanvas.width  = outCanvas.width;
     paintCanvas.height = outCanvas.height;
+    
+    // Clear any leftover layers from previous map
+    paintLayers = [];
     
     // Create initial layer
     const layer = {
@@ -2079,6 +2100,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function applyAndClose() {
+    // Finish any river being edited
+    if (riverLayer.currentRiver) {
+      riverLayer.finishRiver();
+    }
+    
     // Composite all layers to paintCanvas (with jagged edges applied)
     const pc = paintCanvas.getContext('2d');
     pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
@@ -2092,7 +2118,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Apply to outCanvas
     outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
     
-    // Apply rivers
+    // Apply rivers (without control points since selectedRiverId is not passed)
     if (riverCanvas) {
       const rCtx = riverCanvas.getContext('2d');
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
@@ -2158,5 +2184,5 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   cancelBtn.addEventListener('click', cancelAndClose);
   closeBtn.addEventListener('click',  cancelAndClose);
 
-  return { open };
+  return { open, reset };
 }

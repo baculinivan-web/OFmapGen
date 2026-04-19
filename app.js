@@ -231,6 +231,7 @@ function loadFile(file) {
     setGisMode(false);
     eyedropperBtn.style.opacity = '';
     eyedropperBtn.style.pointerEvents = '';
+    if (painter && painter.reset) painter.reset();
     URL.revokeObjectURL(url);
     scheduleRender();
   };
@@ -1111,6 +1112,7 @@ function createBlankMap() {
   setGisMode(false);
   eyedropperBtn.style.opacity = '';
   eyedropperBtn.style.pointerEvents = '';
+  if (painter && painter.reset) painter.reset();
   
   // Set flag to open editor after render completes
   openEditorAfterRender = true;
