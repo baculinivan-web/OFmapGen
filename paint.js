@@ -2068,6 +2068,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       el.addEventListener('click', () => {
         const layerId = parseInt(el.dataset.layerId);
         currentLayerId = layerId;
+        
+        // If jagged edges panel is open, switch to new layer's settings
+        if (jaggedPanel && jaggedPanel.style.display !== 'none' && currentJaggedLayerId !== null) {
+          openJaggedEdgesPanel(layerId);
+        }
+        
         updateLayersList();
       });
     });
@@ -2104,7 +2110,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const layerId = parseInt(el.dataset.layerId);
+        currentLayerId = layerId; // Switch to this layer
         openJaggedEdgesPanel(layerId);
+        updateLayersList(); // Update selection highlight
       });
     });
     

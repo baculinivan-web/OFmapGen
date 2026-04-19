@@ -479,18 +479,17 @@
             <button class="paint-btn" data-terrain="highland"><span class="legend-swatch" style="background:var(--highland)"></span>Highland</button>
             <button class="paint-btn" data-terrain="mountain"><span class="legend-swatch" style="background:var(--mountain)"></span>Mountain</button>
           </div>
-          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush</div>
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;display:flex;align-items:center;justify-content:space-between;">
+            <span>Brush</span>
+            <button id="paintLoadBrushBtn" style="background:var(--accent-dim);border:1px solid var(--accent);color:var(--accent);border-radius:4px;padding:2px 6px;cursor:pointer;font-size:0.7rem;font-weight:600;" title="Load custom brush (.myb/.abr)">+</button>
+          </div>
+          <input type="file" id="paintLoadBrushInput" accept=".myb,.abr" style="display:none;" />
           <div style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:5px;padding-right:4px;" id="paintBrushBtns">
             <button class="paint-brush-btn active" data-brush="solid">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
               Solid
             </button>
           </div>
-          <button class="btn btn-ghost" id="paintLoadBrushBtn" style="font-size:0.75rem;padding:6px 10px;margin-top:6px;">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Load custom brush (.myb/.abr)
-          </button>
-          <input type="file" id="paintLoadBrushInput" accept=".myb,.abr" style="display:none;" />
           <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-top:4px;">Brush size</div>
           <div style="display:flex;align-items:center;gap:8px;">
             <input type="range" id="paintBrushSlider" min="1" max="120" step="1" value="16" style="flex:1;" />
