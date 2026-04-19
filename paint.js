@@ -1786,7 +1786,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
-    saveHistory();
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1833,6 +1832,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   canvas.addEventListener('mouseup',    () => { 
+    if (painting) {
+      saveHistory(); // Save state AFTER painting
+    }
     painting = false; 
     mybState = null;
     draggingPointId = null;
@@ -1897,7 +1899,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
-    saveHistory();
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1924,6 +1925,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }, { passive: false });
   
   canvas.addEventListener('touchend', () => {
+    if (painting) {
+      saveHistory(); // Save state AFTER painting
+    }
     painting = false;
     mybState = null;
     draggingPointId = null;
@@ -1935,6 +1939,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
   
   canvas.addEventListener('touchcancel', () => {
+    if (painting) {
+      saveHistory(); // Save state AFTER painting
+    }
     painting = false;
     mybState = null;
     draggingPointId = null;
