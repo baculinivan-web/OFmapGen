@@ -639,82 +639,186 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function applyJaggedEdgesToAllTerrains(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey) {
-    // Create temporary canvas for result
+    // Apply jagged edges to the entire layer at once, but constrain displacement
+    // to only affect transitions between adjacent terrain types
+    
     const temp = document.createElement('canvas');
     temp.width = layer.canvas.width;
     temp.height = layer.canvas.height;
     const tempCtx = temp.getContext('2d');
     
     const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
+    const dstData = tempCtx.createImageData(temp.width, temp.height);
+    
     const w = temp.width;
     const h = temp.height;
     
-    // Define terrain colors in order from lowest to highest
-    const terrainLayers = [
-      { name: 'water', rgb: [18, 15, 34], level: 0 },
-      { name: 'plain', rgb: [140, 170, 88], level: 1 },
-      { name: 'highland', rgb: [176, 159, 114], level: 2 },
-      { name: 'mountain', rgb: [190, 190, 190], level: 3 }
-    ];
+    // Define terrain hierarchy
+    const terrainLevels = {
+      water: { rgb: [18, 15, 34], level: 0 },
+      plain: { rgb: [140, 170, 88], level: 1 },
+      highland: { rgb: [176, 159, 114], level: 2 },
+      mountain: { rgb: [190, 190, 190], level: 3 }
+    };
     
-    // Start with water as base
-    tempCtx.fillStyle = `rgb(${terrainLayers[0].rgb[0]}, ${terrainLayers[0].rgb[1]}, ${terrainLayers[0].rgb[2]})`;
-    tempCtx.fillRect(0, 0, w, h);
+    // Helper function to identify terrain type
+    function getTerrainLevel(r, g, b) {
+      for (const [name, terrain] of Object.entries(terrainLevels)) {
+        const dr = Math.abs(r - terrain.rgb[0]);
+        const dg = Math.abs(g - terrain.rgb[1]);
+        const db = Math.abs(b - terrain.rgb[2]);
+        if (dr < 5 && dg < 5 && db < 5) {
+          return terrain.level;
+        }
+      }
+      return -1; // Unknown
+    }
     
-    // Process each terrain level from lowest to highest
-    for (let i = 1; i < terrainLayers.length; i++) {
-      const currentTerrain = terrainLayers[i];
-      
-      // Create mask for current terrain and all higher terrains
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = w;
-      maskCanvas.height = h;
-      const maskCtx = maskCanvas.getContext('2d');
-      const maskData = maskCtx.createImageData(w, h);
-      
-      // Extract pixels of current terrain level and above
-      for (let j = 0; j < srcData.data.length; j += 4) {
-        const r = srcData.data[j];
-        const g = srcData.data[j + 1];
-        const b = srcData.data[j + 2];
-        const a = srcData.data[j + 3];
+    // First pass: copy all pixels
+    for (let i = 0; i < srcData.data.length; i++) {
+      dstData.data[i] = srcData.data[i];
+    }
+    
+    // Select noise generator
+    let noise;
+    switch (algorithm) {
+      case 'perlin':
+        noise = new PerlinNoise(seed);
+        break;
+      case 'simplex':
+        noise = new SimplexNoise(seed);
+        break;
+      case 'voronoi':
+        noise = new VoronoiNoise(seed);
+        break;
+      case 'fractal':
+      default:
+        noise = new FractalNoise(seed);
+        break;
+    }
+    
+    const totalPixels = w * h;
+    const step = totalPixels > 1000000 ? 2 : 1;
+    const edgeRadius = Math.max(2, Math.round(scale * 2));
+    const effectDepth = depth || 20;
+    
+    // Second pass: apply displacement only at terrain boundaries
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const idx = (y * w + x) * 4;
+        const alpha = srcData.data[idx + 3];
         
-        if (a === 0) continue;
+        if (alpha === 0) continue;
         
-        // Check if pixel belongs to current terrain or any higher terrain
-        let belongsToThisOrHigher = false;
-        for (let k = i; k < terrainLayers.length; k++) {
-          const terrain = terrainLayers[k];
-          const dr = Math.abs(r - terrain.rgb[0]);
-          const dg = Math.abs(g - terrain.rgb[1]);
-          const db = Math.abs(b - terrain.rgb[2]);
-          
-          if (dr < 5 && dg < 5 && db < 5) {
-            belongsToThisOrHigher = true;
-            break;
+        const currentR = srcData.data[idx];
+        const currentG = srcData.data[idx + 1];
+        const currentB = srcData.data[idx + 2];
+        const currentLevel = getTerrainLevel(currentR, currentG, currentB);
+        
+        if (currentLevel === -1) continue;
+        
+        // Check if we're at a terrain boundary
+        let isAtBoundary = false;
+        let neighborLevel = -1;
+        
+        for (let dy = -edgeRadius; dy <= edgeRadius; dy++) {
+          for (let dx = -edgeRadius; dx <= edgeRadius; dx++) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nIdx = (ny * w + nx) * 4;
+            const nR = srcData.data[nIdx];
+            const nG = srcData.data[nIdx + 1];
+            const nB = srcData.data[nIdx + 2];
+            const nLevel = getTerrainLevel(nR, nG, nB);
+            
+            // Check if neighbor is adjacent terrain level (one level different)
+            if (nLevel !== -1 && Math.abs(nLevel - currentLevel) === 1) {
+              isAtBoundary = true;
+              neighborLevel = nLevel;
+              break;
+            }
+          }
+          if (isAtBoundary) break;
+        }
+        
+        if (!isAtBoundary) continue;
+        
+        // Calculate distance from boundary
+        let distanceFromEdge = effectDepth + 1;
+        const maxSearchRadius = Math.min(effectDepth, 50);
+        
+        outerLoop: for (let radius = 1; radius <= maxSearchRadius; radius += 2) {
+          for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / (4 * radius)) {
+            const dx = Math.round(Math.cos(angle) * radius);
+            const dy = Math.round(Math.sin(angle) * radius);
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nIdx = (ny * w + nx) * 4;
+            const nR = srcData.data[nIdx];
+            const nG = srcData.data[nIdx + 1];
+            const nB = srcData.data[nIdx + 2];
+            const nLevel = getTerrainLevel(nR, nG, nB);
+            
+            if (nLevel !== -1 && Math.abs(nLevel - currentLevel) === 1) {
+              distanceFromEdge = radius;
+              break outerLoop;
+            }
           }
         }
         
-        if (belongsToThisOrHigher) {
-          maskData.data[j] = r;
-          maskData.data[j + 1] = g;
-          maskData.data[j + 2] = b;
-          maskData.data[j + 3] = a;
+        if (distanceFromEdge > effectDepth) continue;
+        
+        const fadeFactor = 1 - (distanceFromEdge / effectDepth);
+        
+        // Calculate noise displacement
+        let noiseX, noiseY, noiseX2, noiseY2;
+        
+        if (algorithm === 'fractal') {
+          noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale, 4);
+          noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100, 4);
+          noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50, 2);
+          noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150, 2);
+        } else {
+          noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale);
+          noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100);
+          noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50);
+          noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
+        }
+        
+        const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale * fadeFactor);
+        const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale * fadeFactor);
+        
+        // Write current pixel to displaced position
+        const dstX = Math.max(0, Math.min(w - 1, x + offsetX));
+        const dstY = Math.max(0, Math.min(h - 1, y + offsetY));
+        const dstIdx = (dstY * w + dstX) * 4;
+        
+        dstData.data[dstIdx]     = currentR;
+        dstData.data[dstIdx + 1] = currentG;
+        dstData.data[dstIdx + 2] = currentB;
+        dstData.data[dstIdx + 3] = alpha;
+        
+        // Fill skipped pixels
+        if (step > 1) {
+          for (let dy = 0; dy < step && y + dy < h; dy++) {
+            for (let dx = 0; dx < step && x + dx < w; dx++) {
+              const srcI = ((y + dy) * w + (x + dx)) * 4;
+              const dstI = ((dstY + dy) * w + (dstX + dx)) * 4;
+              if (dstI >= 0 && dstI < dstData.data.length) {
+                dstData.data[dstI]     = srcData.data[srcI];
+                dstData.data[dstI + 1] = srcData.data[srcI + 1];
+                dstData.data[dstI + 2] = srcData.data[srcI + 2];
+                dstData.data[dstI + 3] = srcData.data[srcI + 3];
+              }
+            }
+          }
         }
       }
-      
-      maskCtx.putImageData(maskData, 0, 0);
-      
-      // Expand the mask slightly before applying jagged edges
-      // This prevents gaps from appearing
-      const expandedMask = expandMask(maskCanvas, Math.ceil(intensity * scale * 1.5));
-      
-      // Apply jagged edges to the expanded mask
-      const processedMask = applyJaggedEdgesToCanvas(expandedMask, intensity, frequency, scale, algorithm, seed, depth);
-      
-      // Draw this processed layer on top
-      tempCtx.drawImage(processedMask, 0, 0);
     }
+    
+    tempCtx.putImageData(dstData, 0, 0);
     
     // Cache result
     if (jaggedCache.size > 10) {
@@ -723,56 +827,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     jaggedCache.set(cacheKey, temp);
     
-    return temp;
-  }
-  
-  function expandMask(canvas, expandPixels) {
-    // Expand the mask by dilating it
-    const temp = document.createElement('canvas');
-    temp.width = canvas.width;
-    temp.height = canvas.height;
-    const tempCtx = temp.getContext('2d');
-    
-    const srcData = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
-    const dstData = tempCtx.createImageData(canvas.width, canvas.height);
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    // Dilate: for each pixel, if any neighbor is opaque, make this pixel opaque
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = (y * w + x) * 4;
-        
-        // Check if this pixel or any neighbor is opaque
-        let maxAlpha = srcData.data[idx + 3];
-        let maxR = srcData.data[idx];
-        let maxG = srcData.data[idx + 1];
-        let maxB = srcData.data[idx + 2];
-        
-        for (let dy = -expandPixels; dy <= expandPixels; dy++) {
-          for (let dx = -expandPixels; dx <= expandPixels; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-            const nIdx = (ny * w + nx) * 4;
-            const nAlpha = srcData.data[nIdx + 3];
-            if (nAlpha > maxAlpha) {
-              maxAlpha = nAlpha;
-              maxR = srcData.data[nIdx];
-              maxG = srcData.data[nIdx + 1];
-              maxB = srcData.data[nIdx + 2];
-            }
-          }
-        }
-        
-        dstData.data[idx] = maxR;
-        dstData.data[idx + 1] = maxG;
-        dstData.data[idx + 2] = maxB;
-        dstData.data[idx + 3] = maxAlpha;
-      }
-    }
-    
-    tempCtx.putImageData(dstData, 0, 0);
     return temp;
   }
   
