@@ -1,17 +1,16 @@
 // paint.js — Fullscreen terrain paint modal
-// Version: 2024-01-19-v5 (jagged edges)
+// Version: 2024-01-19-v6 (improved noise algorithms)
 import { parseMybBrush, MybBrushState, mybPaintSegment, mybPaintDot } from './myb-engine.js';
 import { loadAbrFromArrayBuffer } from 'https://unpkg.com/abr-js@0.1.1/dist/abr.esm.js';
 import { RiverLayer, generateRiverPath } from './rivers.js';
 
-console.log('[paint.js] Module loading - Version 2024-01-19-v5 (jagged edges)');
+console.log('[paint.js] Module loading - Version 2024-01-19-v6 (improved noise)');
 
-// ── Simple Perlin Noise for jagged edges ──────────────────────────────────
-class SimplexNoise {
+// ── Improved Noise Generators ──────────────────────────────────────────────
+class PerlinNoise {
   constructor(seed = Math.random()) {
     this.p = [];
     for (let i = 0; i < 256; i++) this.p[i] = i;
-    // Shuffle using seed
     let n, q;
     for (let i = 255; i > 0; i--) {
       seed = (seed * 9301 + 49297) % 233280;
@@ -20,7 +19,6 @@ class SimplexNoise {
       this.p[i] = this.p[n];
       this.p[n] = q;
     }
-    // Duplicate
     for (let i = 0; i < 256; i++) this.p[256 + i] = this.p[i];
   }
   
@@ -46,6 +44,103 @@ class SimplexNoise {
       this.lerp(u, this.grad(this.p[a], x, y), this.grad(this.p[b], x - 1, y)),
       this.lerp(u, this.grad(this.p[a + 1], x, y - 1), this.grad(this.p[b + 1], x - 1, y - 1))
     );
+  }
+}
+
+class SimplexNoise {
+  constructor(seed = Math.random()) {
+    this.p = [];
+    for (let i = 0; i < 256; i++) this.p[i] = i;
+    let n, q;
+    for (let i = 255; i > 0; i--) {
+      seed = (seed * 9301 + 49297) % 233280;
+      n = Math.floor((seed / 233280) * (i + 1));
+      q = this.p[i];
+      this.p[i] = this.p[n];
+      this.p[n] = q;
+    }
+    for (let i = 0; i < 256; i++) this.p[256 + i] = this.p[i];
+  }
+  
+  fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  lerp(t, a, b) { return a + t * (b - a); }
+  grad(hash, x, y) {
+    const h = hash & 15;
+    const u = h < 8 ? x : y;
+    const v = h < 4 ? y : h === 12 || h === 14 ? x : 0;
+    return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+  }
+  
+  noise(x, y) {
+    const X = Math.floor(x) & 255;
+    const Y = Math.floor(y) & 255;
+    x -= Math.floor(x);
+    y -= Math.floor(y);
+    const u = this.fade(x);
+    const v = this.fade(y);
+    const a = this.p[X] + Y;
+    const b = this.p[X + 1] + Y;
+    return this.lerp(v,
+      this.lerp(u, this.grad(this.p[a], x, y), this.grad(this.p[b], x - 1, y)),
+      this.lerp(u, this.grad(this.p[a + 1], x, y - 1), this.grad(this.p[b + 1], x - 1, y - 1))
+    );
+  }
+}
+
+class FractalNoise {
+  constructor(seed = Math.random()) {
+    this.base = new PerlinNoise(seed);
+  }
+  
+  noise(x, y, octaves = 4) {
+    let value = 0;
+    let amplitude = 1;
+    let frequency = 1;
+    let maxValue = 0;
+    
+    for (let i = 0; i < octaves; i++) {
+      value += this.base.noise(x * frequency, y * frequency) * amplitude;
+      maxValue += amplitude;
+      amplitude *= 0.5;
+      frequency *= 2;
+    }
+    
+    return value / maxValue;
+  }
+}
+
+class VoronoiNoise {
+  constructor(seed = Math.random()) {
+    this.seed = seed;
+  }
+  
+  random2(x, y) {
+    const n = Math.sin(x * 12.9898 + y * 78.233 + this.seed) * 43758.5453;
+    return n - Math.floor(n);
+  }
+  
+  noise(x, y) {
+    const ix = Math.floor(x);
+    const iy = Math.floor(y);
+    const fx = x - ix;
+    const fy = y - iy;
+    
+    let minDist = 999999;
+    
+    for (let j = -1; j <= 1; j++) {
+      for (let i = -1; i <= 1; i++) {
+        const nx = ix + i;
+        const ny = iy + j;
+        const px = this.random2(nx, ny);
+        const py = this.random2(nx + 0.1, ny + 0.1);
+        const dx = (i + px) - fx;
+        const dy = (j + py) - fy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        minDist = Math.min(minDist, dist);
+      }
+    }
+    
+    return 1 - Math.min(1, minDist);
   }
 }
 
@@ -108,10 +203,16 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const zoomResetBtn = document.getElementById('paintZoomResetBtn');
   const jaggedPanel = document.getElementById('paintJaggedPanel');
   const jaggedEnabled = document.getElementById('paintJaggedEnabled');
+  const jaggedAlgorithm = document.getElementById('paintJaggedAlgorithm');
+  const jaggedSeed = document.getElementById('paintJaggedSeed');
   const jaggedIntensity = document.getElementById('paintJaggedIntensity');
   const jaggedIntensityVal = document.getElementById('paintJaggedIntensityVal');
+  const jaggedScale = document.getElementById('paintJaggedScale');
+  const jaggedScaleVal = document.getElementById('paintJaggedScaleVal');
   const jaggedFrequency = document.getElementById('paintJaggedFrequency');
   const jaggedFrequencyVal = document.getElementById('paintJaggedFrequencyVal');
+  const jaggedDepth = document.getElementById('paintJaggedDepth');
+  const jaggedDepthVal = document.getElementById('paintJaggedDepthVal');
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
 
   // Validate all required DOM elements
@@ -150,9 +251,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let spaceDown = false;
   
   // Layer system
-  let paintLayers = []; // Array of {name, canvas, visible, locked, jaggedEdges: {enabled, intensity, frequency}}
+  let paintLayers = []; // Array of {name, canvas, visible, locked, jaggedEdges: {enabled, intensity, frequency, scale, algorithm, seed}}
   let currentLayerId = 0;
   let layerIdCounter = 1;
+  
+  // Flag to disable jagged edges during painting for performance
+  let isPaintingActive = false;
   
   // River mode state
   let riverMode = false;
@@ -340,6 +444,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (undoStack.length > MAX_HISTORY) undoStack.shift();
     redoStack = [];
     hasChanges = true; // Mark that changes were made
+    
+    // Clear jagged edges cache for current layer since content changed
+    const layer = paintLayers.find(l => l.id === currentLayerId);
+    if (layer) {
+      for (const key of jaggedCache.keys()) {
+        if (key.startsWith(`${layer.id}-`)) {
+          jaggedCache.delete(key);
+        }
+      }
+    }
+    
     updateUndoRedoBtns();
   }
 
@@ -378,7 +493,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           canvas: document.createElement('canvas'),
           visible: true,
           locked: false,
-          jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0 }
+          jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
         };
         layer.canvas.width = paintCanvas.width;
         layer.canvas.height = paintCanvas.height;
@@ -400,7 +515,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -477,75 +592,203 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   // ── Jagged edges effect ───────────────────────────────────────────────────
+  // Cache for processed layers
+  const jaggedCache = new Map();
+  
+  function getCacheKey(layer) {
+    const je = layer.jaggedEdges;
+    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}-${je.depth}`;
+  }
+  
   function applyJaggedEdges(layer) {
+    // Skip jagged edges during active painting for performance
+    if (isPaintingActive) return layer.canvas;
+    
     if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
     
-    const { intensity, frequency } = layer.jaggedEdges;
+    const { intensity, frequency, scale, algorithm, seed, depth } = layer.jaggedEdges;
     if (intensity === 0) return layer.canvas;
     
-    // Create temporary canvas for effect
-    const temp = document.createElement('canvas');
-    temp.width = layer.canvas.width;
-    temp.height = layer.canvas.height;
-    const tempCtx = temp.getContext('2d');
-    
-    // Start with original layer
-    tempCtx.drawImage(layer.canvas, 0, 0);
-    
-    const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
-    const dstData = tempCtx.getImageData(0, 0, temp.width, temp.height);
-    
-    const noise = new SimplexNoise(layer.id); // Use layer ID as seed for consistency
-    
-    // First pass: identify edge pixels
-    const edges = new Uint8Array(temp.width * temp.height);
-    for (let y = 1; y < temp.height - 1; y++) {
-      for (let x = 1; x < temp.width - 1; x++) {
-        const idx = (y * temp.width + x) * 4;
-        const alpha = srcData.data[idx + 3];
-        
-        if (alpha === 0 || alpha === 255) continue; // Skip fully transparent or opaque
-        
-        // Check if this is an edge pixel (has different alpha neighbors)
-        let isEdge = false;
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue;
-            const nIdx = ((y + dy) * temp.width + (x + dx)) * 4;
-            const nAlpha = srcData.data[nIdx + 3];
-            if (Math.abs(nAlpha - alpha) > 50) {
-              isEdge = true;
-              break;
-            }
-          }
-          if (isEdge) break;
-        }
-        
-        if (isEdge) {
-          edges[y * temp.width + x] = 1;
-        }
-      }
+    // Check cache
+    const cacheKey = getCacheKey(layer);
+    if (jaggedCache.has(cacheKey)) {
+      return jaggedCache.get(cacheKey);
     }
     
-    // Second pass: apply displacement to edge pixels
-    for (let y = 0; y < temp.height; y++) {
-      for (let x = 0; x < temp.width; x++) {
-        const idx = (y * temp.width + x) * 4;
+    // Original single-layer processing
+    return applyJaggedEdgesToSingleLayer(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey);
+  }
+  
+  function applyJaggedEdgesToSingleLayer(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey) {
+    const temp = applyJaggedEdgesToCanvas(layer.canvas, intensity, frequency, scale, algorithm, seed, depth);
+    
+    // Cache result (limit cache size)
+    if (jaggedCache.size > 10) {
+      const firstKey = jaggedCache.keys().next().value;
+      jaggedCache.delete(firstKey);
+    }
+    jaggedCache.set(cacheKey, temp);
+    
+    return temp;
+  }
+  
+  function applyJaggedEdgesToCanvas(sourceCanvas, intensity, frequency, scale, algorithm, seed, depth) {
+    // This is the core jagged edges algorithm extracted to work on any canvas
+    const temp = document.createElement('canvas');
+    temp.width = sourceCanvas.width;
+    temp.height = sourceCanvas.height;
+    const tempCtx = temp.getContext('2d');
+    
+    const srcData = sourceCanvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
+    const dstData = tempCtx.createImageData(temp.width, temp.height);
+    
+    // Select noise generator based on algorithm
+    let noise;
+    switch (algorithm) {
+      case 'perlin':
+        noise = new PerlinNoise(seed);
+        break;
+      case 'simplex':
+        noise = new SimplexNoise(seed);
+        break;
+      case 'voronoi':
+        noise = new VoronoiNoise(seed);
+        break;
+      case 'fractal':
+      default:
+        noise = new FractalNoise(seed);
+        break;
+    }
+    
+    const w = temp.width;
+    const h = temp.height;
+    const totalPixels = w * h;
+    const step = totalPixels > 1000000 ? 2 : 1;
+    
+    const edgeRadius = Math.max(2, Math.round(scale * 2));
+    const effectDepth = depth || 20;
+    
+    // Process pixels - READ from displaced position, WRITE to current position
+    for (let y = 0; y < h; y += step) {
+      for (let x = 0; x < w; x += step) {
+        const idx = (y * w + x) * 4;
+        const alpha = srcData.data[idx + 3];
         
-        if (edges[y * temp.width + x]) {
-          // Apply noise displacement
-          const noiseVal = noise.noise(x * frequency * 0.05, y * frequency * 0.05);
-          const offsetX = Math.round(noiseVal * intensity);
-          const offsetY = Math.round(noise.noise(x * frequency * 0.05 + 100, y * frequency * 0.05 + 100) * intensity);
+        if (alpha === 0) {
+          dstData.data[idx + 3] = 0;
+          if (step > 1) {
+            for (let dy = 0; dy < step && y + dy < h; dy++) {
+              for (let dx = 0; dx < step && x + dx < w; dx++) {
+                const i = ((y + dy) * w + (x + dx)) * 4;
+                dstData.data[i + 3] = 0;
+              }
+            }
+          }
+          continue;
+        }
+        
+        // Check neighbors for edge detection
+        let isNearEdge = false;
+        let minAlpha = 255;
+        let maxAlpha = 0;
+        let distanceFromEdge = effectDepth + 1;
+        
+        for (let dy = -edgeRadius; dy <= edgeRadius; dy += Math.max(1, Math.floor(edgeRadius / 2))) {
+          for (let dx = -edgeRadius; dx <= edgeRadius; dx += Math.max(1, Math.floor(edgeRadius / 2))) {
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+            const nIdx = (ny * w + nx) * 4;
+            const nAlpha = srcData.data[nIdx + 3];
+            minAlpha = Math.min(minAlpha, nAlpha);
+            maxAlpha = Math.max(maxAlpha, nAlpha);
+          }
+        }
+        
+        isNearEdge = (maxAlpha - minAlpha) > 30;
+        
+        if (isNearEdge) {
+          let minDist = effectDepth + 1;
+          const maxSearchRadius = Math.min(effectDepth, 50);
           
-          const srcX = Math.max(0, Math.min(temp.width - 1, x + offsetX));
-          const srcY = Math.max(0, Math.min(temp.height - 1, y + offsetY));
-          const srcIdx = (srcY * temp.width + srcX) * 4;
+          outerLoop: for (let radius = 1; radius <= maxSearchRadius; radius += 2) {
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / (4 * radius)) {
+              const dx = Math.round(Math.cos(angle) * radius);
+              const dy = Math.round(Math.sin(angle) * radius);
+              const nx = x + dx;
+              const ny = y + dy;
+              if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+              const nIdx = (ny * w + nx) * 4;
+              const nAlpha = srcData.data[nIdx + 3];
+              if (Math.abs(nAlpha - alpha) > 100) {
+                minDist = radius;
+                break outerLoop;
+              }
+            }
+          }
+          distanceFromEdge = minDist;
+        }
+        
+        if (isNearEdge && distanceFromEdge <= effectDepth) {
+          const fadeFactor = 1 - (distanceFromEdge / effectDepth);
           
+          let noiseX, noiseY, noiseX2, noiseY2;
+          
+          if (algorithm === 'fractal') {
+            noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale, 4);
+            noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100, 4);
+            noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50, 2);
+            noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150, 2);
+          } else {
+            noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale);
+            noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100);
+            noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50);
+            noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
+          }
+          
+          const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale * fadeFactor);
+          const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale * fadeFactor);
+          
+          // READ from displaced position (this creates the jagged effect)
+          const srcX = Math.max(0, Math.min(w - 1, x + offsetX));
+          const srcY = Math.max(0, Math.min(h - 1, y + offsetY));
+          const srcIdx = (srcY * w + srcX) * 4;
+          
+          // WRITE to current position
           dstData.data[idx]     = srcData.data[srcIdx];
           dstData.data[idx + 1] = srcData.data[srcIdx + 1];
           dstData.data[idx + 2] = srcData.data[srcIdx + 2];
           dstData.data[idx + 3] = srcData.data[srcIdx + 3];
+          
+          if (step > 1) {
+            for (let dy = 0; dy < step && y + dy < h; dy++) {
+              for (let dx = 0; dx < step && x + dx < w; dx++) {
+                const i = ((y + dy) * w + (x + dx)) * 4;
+                dstData.data[i]     = srcData.data[srcIdx];
+                dstData.data[i + 1] = srcData.data[srcIdx + 1];
+                dstData.data[i + 2] = srcData.data[srcIdx + 2];
+                dstData.data[i + 3] = srcData.data[srcIdx + 3];
+              }
+            }
+          }
+        } else {
+          // Copy pixel as-is
+          dstData.data[idx]     = srcData.data[idx];
+          dstData.data[idx + 1] = srcData.data[idx + 1];
+          dstData.data[idx + 2] = srcData.data[idx + 2];
+          dstData.data[idx + 3] = srcData.data[idx + 3];
+          
+          if (step > 1) {
+            for (let dy = 0; dy < step && y + dy < h; dy++) {
+              for (let dx = 0; dx < step && x + dx < w; dx++) {
+                const i = ((y + dy) * w + (x + dx)) * 4;
+                dstData.data[i]     = srcData.data[idx];
+                dstData.data[i + 1] = srcData.data[idx + 1];
+                dstData.data[i + 2] = srcData.data[idx + 2];
+                dstData.data[i + 3] = srcData.data[idx + 3];
+              }
+            }
+          }
         }
       }
     }
@@ -649,14 +892,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Load current settings
     if (!layer.jaggedEdges) {
-      layer.jaggedEdges = { enabled: false, intensity: 3, frequency: 1.0 };
+      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 };
     }
     
+    // Don't auto-enable - just load current state
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
+    jaggedAlgorithm.value = layer.jaggedEdges.algorithm || 'fractal';
+    jaggedSeed.value = layer.jaggedEdges.seed || 12345;
     jaggedIntensity.value = layer.jaggedEdges.intensity;
-    jaggedIntensityVal.textContent = layer.jaggedEdges.intensity;
+    jaggedIntensityVal.value = layer.jaggedEdges.intensity;
+    jaggedScale.value = layer.jaggedEdges.scale || 1.0;
+    jaggedScaleVal.value = (layer.jaggedEdges.scale || 1.0).toFixed(1);
     jaggedFrequency.value = layer.jaggedEdges.frequency;
-    jaggedFrequencyVal.textContent = layer.jaggedEdges.frequency.toFixed(1);
+    jaggedFrequencyVal.value = layer.jaggedEdges.frequency.toFixed(1);
+    jaggedDepth.value = layer.jaggedEdges.depth || 20;
+    jaggedDepthVal.value = layer.jaggedEdges.depth || 20;
   }
   
   function closeJaggedEdgesPanel() {
@@ -677,14 +927,89 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
   });
   
+  jaggedAlgorithm?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.algorithm = jaggedAlgorithm.value;
+      redraw();
+    }
+  });
+  
+  jaggedSeed?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      const val = parseInt(jaggedSeed.value);
+      if (!isNaN(val) && val >= 1) {
+        layer.jaggedEdges.seed = val;
+        redraw();
+      }
+    }
+  });
+  
   jaggedIntensity?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.intensity = parseFloat(jaggedIntensity.value);
-      jaggedIntensityVal.textContent = jaggedIntensity.value;
-      redraw();
+      jaggedIntensityVal.value = jaggedIntensity.value;
     }
+  });
+  
+  jaggedIntensity?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  // Manual input for intensity
+  jaggedIntensityVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedIntensityVal.value);
+    if (!isNaN(val) && val >= 0) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.intensity = val;
+        jaggedIntensity.value = Math.min(50, val); // Clamp slider only
+      }
+    }
+  });
+  
+  jaggedIntensityVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  jaggedScale?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.scale = parseFloat(jaggedScale.value);
+      jaggedScaleVal.value = parseFloat(jaggedScale.value).toFixed(1);
+    }
+  });
+  
+  jaggedScale?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  // Manual input for scale
+  jaggedScaleVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedScaleVal.value);
+    if (!isNaN(val) && val >= 0.1) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.scale = val;
+        jaggedScale.value = Math.min(10, val); // Clamp slider only
+      }
+    }
+  });
+  
+  jaggedScaleVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
   });
   
   jaggedFrequency?.addEventListener('input', () => {
@@ -692,9 +1017,68 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.frequency = parseFloat(jaggedFrequency.value);
-      jaggedFrequencyVal.textContent = parseFloat(jaggedFrequency.value).toFixed(1);
-      redraw();
+      jaggedFrequencyVal.value = parseFloat(jaggedFrequency.value).toFixed(1);
     }
+  });
+  
+  jaggedFrequency?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  // Manual input for frequency
+  jaggedFrequencyVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedFrequencyVal.value);
+    if (!isNaN(val) && val >= 0.1) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        layer.jaggedEdges.frequency = val;
+        jaggedFrequency.value = Math.min(5, val); // Clamp slider only
+      }
+    }
+  });
+  
+  jaggedFrequencyVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  jaggedDepth?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+    if (layer) {
+      layer.jaggedEdges.depth = parseFloat(jaggedDepth.value);
+      jaggedDepthVal.value = jaggedDepth.value;
+    }
+  });
+  
+  jaggedDepth?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
+  });
+  
+  // Manual input for depth
+  jaggedDepthVal?.addEventListener('input', () => {
+    if (currentJaggedLayerId === null) return;
+    const val = parseFloat(jaggedDepthVal.value);
+    if (!isNaN(val) && val >= 1) {
+      const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
+      if (layer) {
+        // Cap at 200 for performance
+        const cappedVal = Math.min(200, val);
+        layer.jaggedEdges.depth = cappedVal;
+        jaggedDepth.value = Math.min(100, cappedVal); // Clamp slider only
+        if (val !== cappedVal) {
+          jaggedDepthVal.value = cappedVal;
+        }
+      }
+    }
+  });
+  
+  jaggedDepthVal?.addEventListener('change', () => {
+    if (currentJaggedLayerId === null) return;
+    redraw();
   });
 
   // ── Open ───────────────────────────────────────────────────────────────────
@@ -709,7 +1093,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
-      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 3, frequency: 1.0 },
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -1052,6 +1436,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       selectedRiverId = null;
       updateLayersList();
       redraw();
+    } else if (selectedRiverId !== null) {
+      // Finish editing existing river
+      saveHistory();
+      hasChanges = true;
+      selectedRiverId = null;
+      updateLayersList();
+      redraw();
     }
   });
   
@@ -1169,6 +1560,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Normal paint mode
     saveHistory();
     painting = true;
+    isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
     const brush = brushCache[currentBrushId];
     if (brush && brush.type === 'myb') {
@@ -1216,11 +1608,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     painting = false; 
     mybState = null;
     draggingPointId = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      redraw(); // Redraw with jagged edges applied
+    }
   });
   canvas.addEventListener('mouseleave', () => { 
     painting = false; 
     mybState = null;
     draggingPointId = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      redraw(); // Redraw with jagged edges applied
+    }
   });
 
   canvas.addEventListener('touchstart', e => {
@@ -1268,6 +1668,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Normal paint mode
     saveHistory();
     painting = true;
+    isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
     const brush = brushCache[currentBrushId];
     if (brush && brush.type === 'myb') {
@@ -1290,6 +1691,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     lastX = x; lastY = y;
     redraw();
   }, { passive: false });
+  
+  canvas.addEventListener('touchend', () => {
+    painting = false;
+    mybState = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      redraw(); // Redraw with jagged edges applied
+    }
+  });
 
   // Disable context menu on canvas for right-click delete
   canvas.addEventListener('contextmenu', e => {
@@ -1405,8 +1815,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
           <button class="layer-btn layer-jagged-btn ${jaggedActive}" data-layer-id="${layer.id}" title="Jagged edges">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M2 12 L6 8 L10 14 L14 6 L18 10 L22 12"/>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <text x="2" y="18" font-family="serif" font-size="16" font-style="italic" fill="currentColor" stroke="none">fx</text>
             </svg>
           </button>
           <button class="layer-btn layer-rename-btn" data-layer-id="${layer.id}" title="Rename">
@@ -1649,7 +2059,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 3, frequency: 1.0 }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -1715,7 +2125,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
-        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 3, frequency: 1.0 },
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;

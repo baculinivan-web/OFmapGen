@@ -366,23 +366,54 @@
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               </button>
             </div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-              <input type="checkbox" id="paintJaggedEnabled" style="cursor:pointer;" />
-              <label for="paintJaggedEnabled" style="font-size:0.78rem;cursor:pointer;">Enable effect</label>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <label for="paintJaggedEnabled" style="font-size:0.78rem;font-weight:600;">Enable effect</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="paintJaggedEnabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Algorithm</div>
+              <select id="paintJaggedAlgorithm" style="width:100%;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;cursor:pointer;">
+                <option value="fractal">Fractal (Natural coastlines)</option>
+                <option value="perlin">Perlin (Smooth waves)</option>
+                <option value="simplex">Simplex (Classic noise)</option>
+                <option value="voronoi">Voronoi (Cellular/rocky)</option>
+              </select>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Seed</div>
+              <input type="number" id="paintJaggedSeed" min="1" step="1" value="12345" style="width:100%;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 6px;" />
             </div>
             <div style="margin-bottom:8px;">
               <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Intensity</div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <input type="range" id="paintJaggedIntensity" min="0" max="10" step="0.5" value="3" style="flex:1;" />
-                <span id="paintJaggedIntensityVal" style="font-size:0.78rem;color:var(--muted);min-width:28px;text-align:right;">3</span>
+                <input type="range" id="paintJaggedIntensity" min="0" max="50" step="1" value="8" style="flex:1;" />
+                <input type="number" id="paintJaggedIntensityVal" min="0" step="1" value="8" style="width:50px;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;text-align:right;" />
+              </div>
+            </div>
+            <div style="margin-bottom:8px;">
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Scale</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="range" id="paintJaggedScale" min="0.1" max="10" step="0.1" value="1.5" style="flex:1;" />
+                <input type="number" id="paintJaggedScaleVal" min="0.1" step="0.1" value="1.5" style="width:50px;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;text-align:right;" />
               </div>
             </div>
             <div>
               <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Frequency</div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <input type="range" id="paintJaggedFrequency" min="0.1" max="2" step="0.1" value="1" style="flex:1;" />
-                <span id="paintJaggedFrequencyVal" style="font-size:0.78rem;color:var(--muted);min-width:28px;text-align:right;">1.0</span>
+                <input type="range" id="paintJaggedFrequency" min="0.1" max="5" step="0.1" value="1.2" style="flex:1;" />
+                <input type="number" id="paintJaggedFrequencyVal" min="0.1" step="0.1" value="1.2" style="width:50px;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;text-align:right;" />
               </div>
+            </div>
+            <div>
+              <div style="font-size:0.7rem;color:var(--muted);margin-bottom:4px;">Edge depth (px)</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <input type="range" id="paintJaggedDepth" min="1" max="100" step="1" value="20" style="flex:1;" />
+                <input type="number" id="paintJaggedDepthVal" min="1" max="200" step="1" value="20" style="width:50px;font-size:0.78rem;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:2px 4px;text-align:right;" />
+              </div>
+              <div style="font-size:0.68rem;color:var(--muted);margin-top:2px;line-height:1.3;">Values over 50 may slow down rendering</div>
             </div>
           </div>
         </div>
