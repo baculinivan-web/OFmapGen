@@ -649,56 +649,70 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const w = temp.width;
     const h = temp.height;
     
-    // Define terrain colors to process
-    const terrainColors = [
-      { name: 'water', rgb: [18, 15, 34] },
-      { name: 'plain', rgb: [140, 170, 88] },
-      { name: 'highland', rgb: [176, 159, 114] },
-      { name: 'mountain', rgb: [190, 190, 190] }
+    // Define terrain colors in order from highest to lowest
+    const terrainLayers = [
+      { name: 'mountain', rgb: [190, 190, 190], level: 3 },
+      { name: 'highland', rgb: [176, 159, 114], level: 2 },
+      { name: 'plain', rgb: [140, 170, 88], level: 1 },
+      { name: 'water', rgb: [18, 15, 34], level: 0 }
     ];
     
-    // Process each terrain type separately
-    const processedLayers = [];
+    // Start with the original image
+    tempCtx.drawImage(layer.canvas, 0, 0);
     
-    for (const terrain of terrainColors) {
-      // Create mask for this terrain color
+    // Process each terrain level from highest to lowest
+    // This ensures proper layering: mountains on top, then highlands, then plains, then water
+    for (let i = 0; i < terrainLayers.length; i++) {
+      const currentTerrain = terrainLayers[i];
+      
+      // Create mask for current terrain and all higher terrains
       const maskCanvas = document.createElement('canvas');
       maskCanvas.width = w;
       maskCanvas.height = h;
       const maskCtx = maskCanvas.getContext('2d');
       const maskData = maskCtx.createImageData(w, h);
       
-      // Extract pixels of this terrain color
-      for (let i = 0; i < srcData.data.length; i += 4) {
-        const r = srcData.data[i];
-        const g = srcData.data[i + 1];
-        const b = srcData.data[i + 2];
-        const a = srcData.data[i + 3];
+      // Extract pixels of current terrain level and above
+      for (let j = 0; j < srcData.data.length; j += 4) {
+        const r = srcData.data[j];
+        const g = srcData.data[j + 1];
+        const b = srcData.data[j + 2];
+        const a = srcData.data[j + 3];
         
-        // Check if pixel matches terrain color (with small tolerance)
-        const dr = Math.abs(r - terrain.rgb[0]);
-        const dg = Math.abs(g - terrain.rgb[1]);
-        const db = Math.abs(b - terrain.rgb[2]);
+        if (a === 0) continue;
         
-        if (dr < 5 && dg < 5 && db < 5 && a > 0) {
-          // This pixel belongs to this terrain
-          maskData.data[i] = r;
-          maskData.data[i + 1] = g;
-          maskData.data[i + 2] = b;
-          maskData.data[i + 3] = a;
+        // Check if pixel belongs to current terrain or any higher terrain
+        let belongsToThisOrHigher = false;
+        for (let k = i; k < terrainLayers.length; k++) {
+          const terrain = terrainLayers[k];
+          const dr = Math.abs(r - terrain.rgb[0]);
+          const dg = Math.abs(g - terrain.rgb[1]);
+          const db = Math.abs(b - terrain.rgb[2]);
+          
+          if (dr < 5 && dg < 5 && db < 5) {
+            belongsToThisOrHigher = true;
+            break;
+          }
+        }
+        
+        if (belongsToThisOrHigher) {
+          // Keep this pixel in the mask
+          maskData.data[j] = r;
+          maskData.data[j + 1] = g;
+          maskData.data[j + 2] = b;
+          maskData.data[j + 3] = a;
         }
       }
       
       maskCtx.putImageData(maskData, 0, 0);
       
       // Apply jagged edges to this terrain mask
+      // This will create natural edges between this level and the level below
       const processedMask = applyJaggedEdgesToCanvas(maskCanvas, intensity, frequency, scale, algorithm, seed, depth);
-      processedLayers.push(processedMask);
-    }
-    
-    // Composite all processed layers back together
-    for (const processedLayer of processedLayers) {
-      tempCtx.drawImage(processedLayer, 0, 0);
+      
+      // Draw this processed layer on top of the result
+      // Use 'source-over' to layer properly
+      tempCtx.drawImage(processedMask, 0, 0);
     }
     
     // Cache result
