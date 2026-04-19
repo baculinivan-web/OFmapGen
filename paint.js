@@ -786,6 +786,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const srcData = sourceCanvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
     const dstData = tempCtx.createImageData(temp.width, temp.height);
     
+    // First pass: copy all pixels as-is
+    for (let i = 0; i < srcData.data.length; i++) {
+      dstData.data[i] = srcData.data[i];
+    }
+    
     // Select noise generator based on algorithm
     let noise;
     switch (algorithm) {
@@ -804,40 +809,24 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         break;
     }
     
-    // Optimize: process every Nth pixel for large images
     const w = temp.width;
     const h = temp.height;
     const totalPixels = w * h;
     const step = totalPixels > 1000000 ? 2 : 1;
     
-    // Scale affects the search radius for edges
     const edgeRadius = Math.max(2, Math.round(scale * 2));
-    
-    // Depth parameter controls how far from edge to apply effect
     const effectDepth = depth || 20;
     
-    // Process pixels with optional downsampling
-    for (let y = 0; y < h; y += step) {
-      for (let x = 0; x < w; x += step) {
+    // Second pass: apply displacement to edge pixels
+    // Process in reverse to avoid overwriting pixels we haven't processed yet
+    for (let y = h - 1; y >= 0; y -= step) {
+      for (let x = w - 1; x >= 0; x -= step) {
         const idx = (y * w + x) * 4;
-        
         const alpha = srcData.data[idx + 3];
         
-        if (alpha === 0) {
-          dstData.data[idx + 3] = 0;
-          // Fill skipped pixels
-          if (step > 1) {
-            for (let dy = 0; dy < step && y + dy < h; dy++) {
-              for (let dx = 0; dx < step && x + dx < w; dx++) {
-                const i = ((y + dy) * w + (x + dx)) * 4;
-                dstData.data[i + 3] = 0;
-              }
-            }
-          }
-          continue;
-        }
+        if (alpha === 0) continue;
         
-        // Check neighbors for edge detection and distance from edge
+        // Check neighbors for edge detection
         let isNearEdge = false;
         let minAlpha = 255;
         let maxAlpha = 0;
@@ -857,9 +846,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         isNearEdge = (maxAlpha - minAlpha) > 30;
         
-        // Calculate distance from edge if we're near one
         if (isNearEdge) {
-          // Optimized distance calculation: check in expanding rings
           let minDist = effectDepth + 1;
           const maxSearchRadius = Math.min(effectDepth, 50);
           
@@ -882,10 +869,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         }
         
         if (isNearEdge && distanceFromEdge <= effectDepth) {
-          // Calculate fade factor based on distance from edge
           const fadeFactor = 1 - (distanceFromEdge / effectDepth);
           
-          // Apply noise displacement
           let noiseX, noiseY, noiseX2, noiseY2;
           
           if (algorithm === 'fractal') {
@@ -900,47 +885,32 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
           }
           
+          // Calculate displacement - noise is centered around 0, so it goes both inward and outward
           const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale * fadeFactor);
           const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale * fadeFactor);
           
-          const srcX = Math.max(0, Math.min(w - 1, x + offsetX));
-          const srcY = Math.max(0, Math.min(h - 1, y + offsetY));
-          const srcIdx = (srcY * w + srcX) * 4;
+          // Write current pixel to displaced position (creates both protrusions and indentations)
+          const dstX = Math.max(0, Math.min(w - 1, x + offsetX));
+          const dstY = Math.max(0, Math.min(h - 1, y + offsetY));
+          const dstIdx = (dstY * w + dstX) * 4;
           
-          // Copy pixel
-          dstData.data[idx]     = srcData.data[srcIdx];
-          dstData.data[idx + 1] = srcData.data[srcIdx + 1];
-          dstData.data[idx + 2] = srcData.data[srcIdx + 2];
-          dstData.data[idx + 3] = srcData.data[srcIdx + 3];
-          
-          // Fill skipped pixels with same value
-          if (step > 1) {
-            for (let dy = 0; dy < step && y + dy < h; dy++) {
-              for (let dx = 0; dx < step && x + dx < w; dx++) {
-                const i = ((y + dy) * w + (x + dx)) * 4;
-                dstData.data[i]     = srcData.data[srcIdx];
-                dstData.data[i + 1] = srcData.data[srcIdx + 1];
-                dstData.data[i + 2] = srcData.data[srcIdx + 2];
-                dstData.data[i + 3] = srcData.data[srcIdx + 3];
-              }
-            }
-          }
-        } else {
-          // Copy pixel as-is
-          dstData.data[idx]     = srcData.data[idx];
-          dstData.data[idx + 1] = srcData.data[idx + 1];
-          dstData.data[idx + 2] = srcData.data[idx + 2];
-          dstData.data[idx + 3] = srcData.data[idx + 3];
+          dstData.data[dstIdx]     = srcData.data[idx];
+          dstData.data[dstIdx + 1] = srcData.data[idx + 1];
+          dstData.data[dstIdx + 2] = srcData.data[idx + 2];
+          dstData.data[dstIdx + 3] = srcData.data[idx + 3];
           
           // Fill skipped pixels
           if (step > 1) {
             for (let dy = 0; dy < step && y + dy < h; dy++) {
               for (let dx = 0; dx < step && x + dx < w; dx++) {
-                const i = ((y + dy) * w + (x + dx)) * 4;
-                dstData.data[i]     = srcData.data[idx];
-                dstData.data[i + 1] = srcData.data[idx + 1];
-                dstData.data[i + 2] = srcData.data[idx + 2];
-                dstData.data[i + 3] = srcData.data[idx + 3];
+                const srcI = ((y + dy) * w + (x + dx)) * 4;
+                const dstI = ((dstY + dy) * w + (dstX + dx)) * 4;
+                if (dstI >= 0 && dstI < dstData.data.length) {
+                  dstData.data[dstI]     = srcData.data[srcI];
+                  dstData.data[dstI + 1] = srcData.data[srcI + 1];
+                  dstData.data[dstI + 2] = srcData.data[srcI + 2];
+                  dstData.data[dstI + 3] = srcData.data[srcI + 3];
+                }
               }
             }
           }
