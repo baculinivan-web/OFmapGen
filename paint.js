@@ -1848,8 +1848,42 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       const layer = paintLayers[i];
       const isSelected = currentLayerId === layer.id;
       const jaggedActive = layer.jaggedEdges?.enabled ? 'active' : '';
+      
+      // Generate thumbnail
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 32;
+      thumbCanvas.height = 32;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      
+      // Scale layer canvas to thumbnail
+      const scale = Math.min(32 / layer.canvas.width, 32 / layer.canvas.height);
+      const w = layer.canvas.width * scale;
+      const h = layer.canvas.height * scale;
+      const x = (32 - w) / 2;
+      const y = (32 - h) / 2;
+      
+      // Checkerboard background for transparency
+      thumbCtx.fillStyle = '#fff';
+      thumbCtx.fillRect(0, 0, 32, 32);
+      thumbCtx.fillStyle = '#ddd';
+      for (let ty = 0; ty < 32; ty += 8) {
+        for (let tx = 0; tx < 32; tx += 8) {
+          if ((tx / 8 + ty / 8) % 2 === 0) thumbCtx.fillRect(tx, ty, 8, 8);
+        }
+      }
+      
+      thumbCtx.drawImage(layer.canvas, x, y, w, h);
+      const thumbUrl = thumbCanvas.toDataURL();
+      
       html += `
-        <div class="layer-item ${isSelected ? 'selected' : ''}" data-layer-id="${layer.id}" data-layer-type="paint">
+        <div class="layer-item ${isSelected ? 'selected' : ''}" 
+             data-layer-id="${layer.id}" 
+             data-layer-type="paint"
+             data-layer-index="${i}"
+             draggable="true">
+          <img src="${thumbUrl}" 
+               style="width:32px;height:32px;border-radius:3px;border:1px solid var(--border);flex-shrink:0;" 
+               alt="Layer preview">
           <button class="layer-btn layer-visibility-btn" data-layer-id="${layer.id}" title="${layer.visible ? 'Hide' : 'Show'}">
             ${layer.visible ? 
               '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' :
@@ -1857,9 +1891,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             }
           </button>
           <div style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;" class="layer-select" data-layer-id="${layer.id}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-            </svg>
             <span style="font-size:0.78rem;" id="layerName${layer.id}">${escapeHtml(layer.name)}</span>
             ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
@@ -1948,6 +1979,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Attach event listeners using event delegation
     attachLayerEventListeners();
+    attachDragAndDrop();
   }
   
   function attachLayerEventListeners() {
@@ -2069,6 +2101,65 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           }
         });
       }
+    });
+  }
+  
+  // ── Drag and drop for layer reordering ─────────────────────────────────────
+  let draggedLayerIndex = null;
+  
+  function attachDragAndDrop() {
+    const layerItems = layersList.querySelectorAll('.layer-item[draggable="true"]');
+    
+    layerItems.forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        draggedLayerIndex = parseInt(item.dataset.layerIndex);
+        item.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      
+      item.addEventListener('dragend', (e) => {
+        item.style.opacity = '1';
+        draggedLayerIndex = null;
+        // Remove all drag-over styles
+        layerItems.forEach(i => i.style.borderTop = '');
+      });
+      
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (draggedLayerIndex === null) return;
+        
+        const targetIndex = parseInt(item.dataset.layerIndex);
+        if (draggedLayerIndex === targetIndex) return;
+        
+        // Visual feedback
+        layerItems.forEach(i => i.style.borderTop = '');
+        item.style.borderTop = '2px solid var(--accent)';
+      });
+      
+      item.addEventListener('dragleave', (e) => {
+        item.style.borderTop = '';
+      });
+      
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.style.borderTop = '';
+        
+        if (draggedLayerIndex === null) return;
+        
+        const targetIndex = parseInt(item.dataset.layerIndex);
+        if (draggedLayerIndex === targetIndex) return;
+        
+        // Reorder layers array
+        const draggedLayer = paintLayers[draggedLayerIndex];
+        paintLayers.splice(draggedLayerIndex, 1);
+        paintLayers.splice(targetIndex, 0, draggedLayer);
+        
+        hasChanges = true;
+        updateLayersList();
+        redraw();
+      });
     });
   }
   
