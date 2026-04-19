@@ -300,11 +300,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let riverWidth = 3;
   let selectedRiverId = null; // Currently selected river for editing
   let draggingPointId = null; // {riverId, pointIndex} for dragging control points
-  
-  // Global undo/redo history (tracks all actions across all layers)
-  let globalUndoStack = []; // Array of {type: 'layer'|'river', layerId, imageData, rivers}
-  let globalRedoStack = [];
-  const MAX_HISTORY = 50;
 
   // ── Brush state ────────────────────────────────────────────────────────────
   let currentBrushId = 'solid';
@@ -471,155 +466,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     e.target.value = ''; // reset input
   });
 
-  // ── Undo / Redo ────────────────────────────────────────────────────────────
-
-  function saveHistory() {
-    const layer = paintLayers.find(l => l.id === currentLayerId);
-    if (!layer) return;
-    
-    const lc = layer.canvas.getContext('2d');
-    // Save current state of this layer to global history
-    const historyEntry = {
-      type: 'layer',
-      layerId: currentLayerId,
-      imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
-      rivers: riverLayer.export() // Also save river state at this moment
-    };
-    console.log('[saveHistory] Saving layer', currentLayerId, 'stack size:', globalUndoStack.length);
-    globalUndoStack.push(historyEntry);
-    if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
-    globalRedoStack = [];
-    hasChanges = true;
-    
-    // Clear jagged edges cache for current layer since content changed
-    for (const key of jaggedCache.keys()) {
-      if (key.startsWith(`${layer.id}-`)) {
-        jaggedCache.delete(key);
-      }
-    }
-    
-    updateUndoRedoBtns();
-  }
-  
-  function saveRiverHistory() {
-    // Save river state to global history
-    globalUndoStack.push({
-      type: 'river',
-      rivers: riverLayer.export()
-    });
-    if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
-    globalRedoStack = [];
-    hasChanges = true;
-    updateUndoRedoBtns();
-  }
-
-  function undo() {
-    if (!globalUndoStack.length) return;
-    
-    const action = globalUndoStack.pop();
-    console.log('[undo] Undoing action on layer', action.layerId, 'current layer:', currentLayerId, 'stack size:', globalUndoStack.length);
-    
-    if (action.type === 'layer') {
-      const layer = paintLayers.find(l => l.id === action.layerId);
-      if (!layer) {
-        // Layer was deleted, skip this action
-        console.log('[undo] Layer not found, skipping');
-        updateUndoRedoBtns();
-        return;
-      }
-      
-      const lc = layer.canvas.getContext('2d');
-      // Save current state to redo
-      globalRedoStack.push({
-        type: 'layer',
-        layerId: action.layerId,
-        imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
-        rivers: riverLayer.export()
-      });
-      
-      console.log('[undo] Restoring layer', action.layerId);
-      // Restore previous state
-      lc.putImageData(action.imageData, 0, 0);
-      riverLayer.import(action.rivers);
-      
-      // Switch to this layer if not current
-      if (currentLayerId !== action.layerId) {
-        console.log('[undo] Switching from layer', currentLayerId, 'to layer', action.layerId);
-        currentLayerId = action.layerId;
-        updateLayersList();
-      }
-      
-      updateLayerThumbnail(action.layerId);
-    } else if (action.type === 'river') {
-      // Save current river state to redo
-      globalRedoStack.push({
-        type: 'river',
-        rivers: riverLayer.export()
-      });
-      
-      // Restore previous river state
-      riverLayer.import(action.rivers);
-      updateLayersList();
-    }
-    
-    redraw();
-    updateUndoRedoBtns();
-  }
-
-  function redo() {
-    if (!globalRedoStack.length) return;
-    
-    const action = globalRedoStack.pop();
-    
-    if (action.type === 'layer') {
-      const layer = paintLayers.find(l => l.id === action.layerId);
-      if (!layer) {
-        // Layer was deleted, skip this action
-        updateUndoRedoBtns();
-        return;
-      }
-      
-      const lc = layer.canvas.getContext('2d');
-      // Save current state to undo
-      globalUndoStack.push({
-        type: 'layer',
-        layerId: action.layerId,
-        imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
-        rivers: riverLayer.export()
-      });
-      
-      // Restore next state
-      lc.putImageData(action.imageData, 0, 0);
-      riverLayer.import(action.rivers);
-      
-      // Switch to this layer if not current
-      if (currentLayerId !== action.layerId) {
-        currentLayerId = action.layerId;
-        updateLayersList();
-      }
-      
-      updateLayerThumbnail(action.layerId);
-    } else if (action.type === 'river') {
-      // Save current river state to undo
-      globalUndoStack.push({
-        type: 'river',
-        rivers: riverLayer.export()
-      });
-      
-      // Restore next river state
-      riverLayer.import(action.rivers);
-      updateLayersList();
-    }
-    
-    redraw();
-    updateUndoRedoBtns();
-  }
+  // ── Undo / Redo (DISABLED - to be reimplemented) ──────────────────────────
 
   function updateUndoRedoBtns() {
-    undoBtn.disabled = globalUndoStack.length === 0;
-    redoBtn.disabled = globalRedoStack.length === 0;
-    undoBtn.style.opacity = globalUndoStack.length ? '1' : '0.35';
-    redoBtn.style.opacity = globalRedoStack.length ? '1' : '0.35';
+    // Disable buttons until undo/redo is reimplemented
+    undoBtn.disabled = true;
+    redoBtn.disabled = true;
+    undoBtn.style.opacity = '0.35';
+    redoBtn.style.opacity = '0.35';
   }
 
   // ── Reset all paint state (call when a new map is loaded) ─────────────────
@@ -1657,7 +1511,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   riverFinishBtn.addEventListener('click', () => {
     if (riverLayer.currentRiver) {
-      saveRiverHistory();
       riverLayer.finishRiver();
       hasChanges = true;
       selectedRiverId = null;
@@ -1665,7 +1518,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       redraw();
     } else if (selectedRiverId !== null) {
       // Finish editing existing river
-      saveRiverHistory();
       hasChanges = true;
       selectedRiverId = null;
       updateLayersList();
@@ -1690,7 +1542,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Fill mode: flood fill on click
     if (fillMode) {
-      saveHistory();
       floodFill(x, y);
       hasChanges = true;
       updateLayerThumbnail(currentLayerId);
@@ -1712,7 +1563,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               // Right click or Ctrl+click to delete point
               if (e.button === 2 || e.ctrlKey) {
                 if (river.controlPoints.length > 2) {
-                  saveRiverHistory();
                   river.controlPoints.splice(i, 1);
                   river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
                   hasChanges = true;
@@ -1726,7 +1576,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             }
           }
           // Not clicking on point, add new point
-          saveRiverHistory();
           river.controlPoints.push({ x, y });
           river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
           hasChanges = true;
@@ -1786,7 +1635,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
-    saveHistory(); // Save state BEFORE painting
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1860,7 +1708,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Fill mode: flood fill on tap
     if (fillMode) {
-      saveHistory();
       floodFill(x, y);
       hasChanges = true;
       updateLayerThumbnail(currentLayerId);
@@ -1897,7 +1744,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
-    saveHistory(); // Save state BEFORE painting
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -2012,14 +1858,20 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     spacingVal.textContent = brushSpacing + '%';
   });
 
-  undoBtn.addEventListener('click', undo);
-  redoBtn.addEventListener('click', redo);
+  undoBtn.addEventListener('click', () => {
+    // Undo functionality disabled - to be reimplemented
+    console.log('Undo functionality is currently disabled');
+  });
+  
+  redoBtn.addEventListener('click', () => {
+    // Redo functionality disabled - to be reimplemented
+    console.log('Redo functionality is currently disabled');
+  });
 
   clearBtn.addEventListener('click', () => {
     const layer = paintLayers.find(l => l.id === currentLayerId);
     if (!layer) return;
     if (!confirm(`Clear layer "${layer.name}"?`)) return;
-    saveHistory();
     layer.canvas.getContext('2d').clearRect(0, 0, layer.canvas.width, layer.canvas.height);
     hasChanges = true;
     updateLayerThumbnail(currentLayerId);
@@ -2259,7 +2111,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         if (paintLayers.length === 1) return;
         const layerId = parseInt(el.dataset.layerId);
         if (!confirm('Delete this layer?')) return;
-        saveHistory();
         const idx = paintLayers.findIndex(l => l.id === layerId);
         if (idx !== -1) {
           paintLayers.splice(idx, 1);
@@ -2288,7 +2139,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         e.stopPropagation();
         const riverId = parseInt(el.dataset.riverId);
         if (!confirm('Delete this river?')) return;
-        saveRiverHistory();
         riverLayer.removeRiver(riverId);
         if (selectedRiverId === riverId) selectedRiverId = null;
         hasChanges = true;
@@ -2399,21 +2249,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function addNewLayerFunc() {
-    // Save current layer state before switching to new layer
-    const currentLayer = paintLayers.find(l => l.id === currentLayerId);
-    if (currentLayer) {
-      const lc = currentLayer.canvas.getContext('2d');
-      globalUndoStack.push({
-        type: 'layer',
-        layerId: currentLayerId,
-        imageData: lc.getImageData(0, 0, currentLayer.canvas.width, currentLayer.canvas.height),
-        rivers: riverLayer.export()
-      });
-      if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
-      globalRedoStack = [];
-      console.log('[addNewLayer] Saved current layer', currentLayerId, 'before creating new layer');
-    }
-    
     const layer = {
       id: layerIdCounter++,
       name: `Layer ${layerIdCounter}`,
