@@ -322,9 +322,12 @@ footer a:hover { color: var(--text); }
 .layer-item {
   display: flex; align-items: center; gap: 4px;
   padding: 6px 8px; border-radius: 4px;
-  cursor: grab; transition: all 0.15s;
+  cursor: pointer; transition: all 0.15s;
   margin-bottom: 2px;
   border: 1px solid transparent;
+}
+.layer-item[draggable="true"] {
+  cursor: grab;
 }
 .layer-item[draggable="true"]:active {
   cursor: grabbing;

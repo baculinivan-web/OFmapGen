@@ -528,12 +528,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     riverCanvas = null;
     riverMode = false;
     fillMode = false;
+    selectedRiverId = null;
+    currentJaggedLayerId = null;
     undoStack = []; redoStack = [];
     cancelSnapshot = null;
     cancelRiverSnapshot = null;
     cancelRiversData = null;
     cancelLayersData = null;
     hasChanges = false;
+    jaggedCache.clear(); // Clear jagged edges cache
   }
 
   // ── Ensure paint canvas ────────────────────────────────────────────────────
@@ -886,9 +889,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function redraw() {
     if (!outCanvas.width) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(outCanvas, 0, 0);
     
-    // Composite all visible paint layers with jagged edges effect
+    // Composite all visible paint layers with jagged edges effect (respecting layer order and visibility)
     for (const layer of paintLayers) {
       if (layer.visible) {
         const layerCanvas = applyJaggedEdges(layer);
@@ -2197,7 +2199,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     layerItems.forEach(item => {
       item.addEventListener('dragstart', (e) => {
-        draggedLayerIndex = parseInt(item.dataset.layerIndex);
+        const displayedIndex = parseInt(item.dataset.layerIndex);
+        // Convert displayed index to model index (layers are rendered in reverse)
+        draggedLayerIndex = paintLayers.length - 1 - displayedIndex;
         item.style.opacity = '0.4';
         e.dataTransfer.effectAllowed = 'move';
       });
@@ -2215,7 +2219,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         if (draggedLayerIndex === null) return;
         
-        const targetIndex = parseInt(item.dataset.layerIndex);
+        const displayedTargetIndex = parseInt(item.dataset.layerIndex);
+        const targetIndex = paintLayers.length - 1 - displayedTargetIndex;
         if (draggedLayerIndex === targetIndex) return;
         
         // Visual feedback
@@ -2233,10 +2238,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         
         if (draggedLayerIndex === null) return;
         
-        const targetIndex = parseInt(item.dataset.layerIndex);
+        const displayedTargetIndex = parseInt(item.dataset.layerIndex);
+        // Convert displayed index to model index
+        const targetIndex = paintLayers.length - 1 - displayedTargetIndex;
         if (draggedLayerIndex === targetIndex) return;
         
-        // Reorder layers array
+        // Reorder layers array using model indices
         const draggedLayer = paintLayers[draggedLayerIndex];
         paintLayers.splice(draggedLayerIndex, 1);
         paintLayers.splice(targetIndex, 0, draggedLayer);

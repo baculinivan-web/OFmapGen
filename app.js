@@ -231,7 +231,6 @@ function loadFile(file) {
     setGisMode(false);
     eyedropperBtn.style.opacity = '';
     eyedropperBtn.style.pointerEvents = '';
-    if (painter && painter.reset) painter.reset();
     URL.revokeObjectURL(url);
     scheduleRender();
   };
@@ -255,6 +254,10 @@ worker.onmessage = ({ data }) => {
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
   enableNationBtn();
+  
+  // Reset painter after outCanvas is updated
+  if (painter && painter.reset) painter.reset();
+  
   if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
   
   // Open editor if requested (after blank map creation)
@@ -1112,7 +1115,6 @@ function createBlankMap() {
   setGisMode(false);
   eyedropperBtn.style.opacity = '';
   eyedropperBtn.style.pointerEvents = '';
-  if (painter && painter.reset) painter.reset();
   
   // Set flag to open editor after render completes
   openEditorAfterRender = true;
