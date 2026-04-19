@@ -1786,6 +1786,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
+    saveHistory(); // Save state BEFORE painting
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1832,9 +1833,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   canvas.addEventListener('mouseup',    () => { 
-    if (painting) {
-      saveHistory(); // Save state AFTER painting
-    }
     painting = false; 
     mybState = null;
     draggingPointId = null;
@@ -1899,6 +1897,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
+    saveHistory(); // Save state BEFORE painting
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1925,9 +1924,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }, { passive: false });
   
   canvas.addEventListener('touchend', () => {
-    if (painting) {
-      saveHistory(); // Save state AFTER painting
-    }
     painting = false;
     mybState = null;
     draggingPointId = null;
@@ -1939,9 +1935,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
   
   canvas.addEventListener('touchcancel', () => {
-    if (painting) {
-      saveHistory(); // Save state AFTER painting
-    }
     painting = false;
     mybState = null;
     draggingPointId = null;
@@ -2406,6 +2399,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function addNewLayerFunc() {
+    // Save current layer state before switching to new layer
+    const currentLayer = paintLayers.find(l => l.id === currentLayerId);
+    if (currentLayer) {
+      const lc = currentLayer.canvas.getContext('2d');
+      globalUndoStack.push({
+        type: 'layer',
+        layerId: currentLayerId,
+        imageData: lc.getImageData(0, 0, currentLayer.canvas.width, currentLayer.canvas.height),
+        rivers: riverLayer.export()
+      });
+      if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
+      globalRedoStack = [];
+      console.log('[addNewLayer] Saved current layer', currentLayerId, 'before creating new layer');
+    }
+    
     const layer = {
       id: layerIdCounter++,
       name: `Layer ${layerIdCounter}`,
@@ -2420,7 +2428,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     currentLayerId = layer.id;
     hasChanges = true;
     updateLayersList();
-    updateUndoRedoBtns(); // Update buttons for new layer (should be disabled)
+    updateUndoRedoBtns();
   }
   
   // Expose addNewLayer globally for the + button
