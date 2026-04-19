@@ -479,12 +479,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     const lc = layer.canvas.getContext('2d');
     // Save current state of this layer to global history
-    globalUndoStack.push({
+    const historyEntry = {
       type: 'layer',
       layerId: currentLayerId,
       imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
       rivers: riverLayer.export() // Also save river state at this moment
-    });
+    };
+    console.log('[saveHistory] Saving layer', currentLayerId, 'stack size:', globalUndoStack.length);
+    globalUndoStack.push(historyEntry);
     if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
     globalRedoStack = [];
     hasChanges = true;
@@ -515,11 +517,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (!globalUndoStack.length) return;
     
     const action = globalUndoStack.pop();
+    console.log('[undo] Undoing action on layer', action.layerId, 'current layer:', currentLayerId, 'stack size:', globalUndoStack.length);
     
     if (action.type === 'layer') {
       const layer = paintLayers.find(l => l.id === action.layerId);
       if (!layer) {
         // Layer was deleted, skip this action
+        console.log('[undo] Layer not found, skipping');
         updateUndoRedoBtns();
         return;
       }
@@ -533,12 +537,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         rivers: riverLayer.export()
       });
       
+      console.log('[undo] Restoring layer', action.layerId);
       // Restore previous state
       lc.putImageData(action.imageData, 0, 0);
       riverLayer.import(action.rivers);
       
       // Switch to this layer if not current
       if (currentLayerId !== action.layerId) {
+        console.log('[undo] Switching from layer', currentLayerId, 'to layer', action.layerId);
         currentLayerId = action.layerId;
         updateLayersList();
       }
