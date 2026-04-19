@@ -357,6 +357,14 @@ footer a:hover { color: var(--text); }
 #paintLayersList::-webkit-scrollbar-track { background: transparent; }
 #paintLayersList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
+/* Layers sidebar resize handle */
+#paintLayersResizeHandle {
+  transition: background 0.15s;
+}
+#paintLayersResizeHandle:hover {
+  background: var(--accent) !important;
+}
+
 .paint-brush-btn {
   display: flex; align-items: center; gap: 7px;
   padding: 6px 10px; border-radius: 6px;

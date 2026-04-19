@@ -214,11 +214,44 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedDepth = document.getElementById('paintJaggedDepth');
   const jaggedDepthVal = document.getElementById('paintJaggedDepthVal');
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
+  const layersSidebar = document.getElementById('paintLayersSidebar');
+  const layersResizeHandle = document.getElementById('paintLayersResizeHandle');
 
   // Validate all required DOM elements
   const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList };
   for (const [name, el] of Object.entries(domRefs)) {
     if (!el) console.error(`[paint] DOM element not found: ${name}`);
+  }
+
+  // ── Sidebar resize ─────────────────────────────────────────────────────────
+  let isResizingSidebar = false;
+  let sidebarStartWidth = 280;
+  let resizeStartX = 0;
+  
+  if (layersResizeHandle) {
+    layersResizeHandle.addEventListener('mousedown', (e) => {
+      isResizingSidebar = true;
+      resizeStartX = e.clientX;
+      sidebarStartWidth = layersSidebar.offsetWidth;
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    
+    window.addEventListener('mousemove', (e) => {
+      if (!isResizingSidebar) return;
+      const delta = e.clientX - resizeStartX;
+      const newWidth = Math.max(200, Math.min(500, sidebarStartWidth + delta));
+      layersSidebar.style.width = newWidth + 'px';
+    });
+    
+    window.addEventListener('mouseup', () => {
+      if (isResizingSidebar) {
+        isResizingSidebar = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
   }
 
   // Zoom button handlers (buttons may not exist in older HTML, guard with ?)
