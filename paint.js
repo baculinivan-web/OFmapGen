@@ -639,186 +639,85 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function applyJaggedEdgesToAllTerrains(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey) {
-    // Apply jagged edges to the entire layer at once, but constrain displacement
-    // to only affect transitions between adjacent terrain types
-    
     const temp = document.createElement('canvas');
     temp.width = layer.canvas.width;
     temp.height = layer.canvas.height;
     const tempCtx = temp.getContext('2d');
     
     const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
-    const dstData = tempCtx.createImageData(temp.width, temp.height);
-    
     const w = temp.width;
     const h = temp.height;
     
-    // Define terrain hierarchy
-    const terrainLevels = {
-      water: { rgb: [18, 15, 34], level: 0 },
-      plain: { rgb: [140, 170, 88], level: 1 },
-      highland: { rgb: [176, 159, 114], level: 2 },
-      mountain: { rgb: [190, 190, 190], level: 3 }
-    };
+    // Define terrain hierarchy from highest to lowest
+    const terrainLevels = [
+      { name: 'mountain', rgb: [190, 190, 190], level: 3 },
+      { name: 'highland', rgb: [176, 159, 114], level: 2 },
+      { name: 'plain', rgb: [140, 170, 88], level: 1 },
+      { name: 'water', rgb: [18, 15, 34], level: 0 }
+    ];
     
-    // Helper function to identify terrain type
-    function getTerrainLevel(r, g, b) {
-      for (const [name, terrain] of Object.entries(terrainLevels)) {
-        const dr = Math.abs(r - terrain.rgb[0]);
-        const dg = Math.abs(g - terrain.rgb[1]);
-        const db = Math.abs(b - terrain.rgb[2]);
-        if (dr < 5 && dg < 5 && db < 5) {
-          return terrain.level;
+    // Start with water as base
+    tempCtx.fillStyle = `rgb(${terrainLevels[3].rgb[0]}, ${terrainLevels[3].rgb[1]}, ${terrainLevels[3].rgb[2]})`;
+    tempCtx.fillRect(0, 0, w, h);
+    
+    // Process from highest to lowest terrain
+    for (let i = 0; i < terrainLevels.length; i++) {
+      const currentTerrain = terrainLevels[i];
+      const lowerTerrain = terrainLevels[Math.min(i + 1, terrainLevels.length - 1)];
+      
+      // Extract mask for current terrain and all higher terrains
+      const maskCanvas = document.createElement('canvas');
+      maskCanvas.width = w;
+      maskCanvas.height = h;
+      const maskCtx = maskCanvas.getContext('2d');
+      
+      // FIRST: Fill entire mask with lower terrain color (подложка)
+      maskCtx.fillStyle = `rgb(${lowerTerrain.rgb[0]}, ${lowerTerrain.rgb[1]}, ${lowerTerrain.rgb[2]})`;
+      maskCtx.fillRect(0, 0, w, h);
+      
+      // SECOND: Draw current terrain and all higher terrains on top
+      const maskData = maskCtx.getImageData(0, 0, w, h);
+      
+      for (let j = 0; j < srcData.data.length; j += 4) {
+        const r = srcData.data[j];
+        const g = srcData.data[j + 1];
+        const b = srcData.data[j + 2];
+        const a = srcData.data[j + 3];
+        
+        if (a === 0) continue;
+        
+        // Check if pixel belongs to current terrain or any higher terrain
+        let belongsToThisOrHigher = false;
+        for (let k = 0; k <= i; k++) {
+          const terrain = terrainLevels[k];
+          const dr = Math.abs(r - terrain.rgb[0]);
+          const dg = Math.abs(g - terrain.rgb[1]);
+          const db = Math.abs(b - terrain.rgb[2]);
+          
+          if (dr < 5 && dg < 5 && db < 5) {
+            belongsToThisOrHigher = true;
+            break;
+          }
+        }
+        
+        if (belongsToThisOrHigher) {
+          // Draw this pixel on top of the lower terrain color
+          maskData.data[j] = r;
+          maskData.data[j + 1] = g;
+          maskData.data[j + 2] = b;
+          maskData.data[j + 3] = 255; // Full opacity
         }
       }
-      return -1; // Unknown
+      
+      maskCtx.putImageData(maskData, 0, 0);
+      
+      // THIRD: Apply jagged edges to this mask
+      // Now when edges are "eaten away", the lower terrain color shows through
+      const processedMask = applyJaggedEdgesToCanvas(maskCanvas, intensity, frequency, scale, algorithm, seed, depth);
+      
+      // Draw result onto final canvas
+      tempCtx.drawImage(processedMask, 0, 0);
     }
-    
-    // First pass: copy all pixels
-    for (let i = 0; i < srcData.data.length; i++) {
-      dstData.data[i] = srcData.data[i];
-    }
-    
-    // Select noise generator
-    let noise;
-    switch (algorithm) {
-      case 'perlin':
-        noise = new PerlinNoise(seed);
-        break;
-      case 'simplex':
-        noise = new SimplexNoise(seed);
-        break;
-      case 'voronoi':
-        noise = new VoronoiNoise(seed);
-        break;
-      case 'fractal':
-      default:
-        noise = new FractalNoise(seed);
-        break;
-    }
-    
-    const totalPixels = w * h;
-    const step = totalPixels > 1000000 ? 2 : 1;
-    const edgeRadius = Math.max(2, Math.round(scale * 2));
-    const effectDepth = depth || 20;
-    
-    // Second pass: apply displacement only at terrain boundaries
-    for (let y = 0; y < h; y += step) {
-      for (let x = 0; x < w; x += step) {
-        const idx = (y * w + x) * 4;
-        const alpha = srcData.data[idx + 3];
-        
-        if (alpha === 0) continue;
-        
-        const currentR = srcData.data[idx];
-        const currentG = srcData.data[idx + 1];
-        const currentB = srcData.data[idx + 2];
-        const currentLevel = getTerrainLevel(currentR, currentG, currentB);
-        
-        if (currentLevel === -1) continue;
-        
-        // Check if we're at a terrain boundary
-        let isAtBoundary = false;
-        let neighborLevel = -1;
-        
-        for (let dy = -edgeRadius; dy <= edgeRadius; dy++) {
-          for (let dx = -edgeRadius; dx <= edgeRadius; dx++) {
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-            const nIdx = (ny * w + nx) * 4;
-            const nR = srcData.data[nIdx];
-            const nG = srcData.data[nIdx + 1];
-            const nB = srcData.data[nIdx + 2];
-            const nLevel = getTerrainLevel(nR, nG, nB);
-            
-            // Check if neighbor is adjacent terrain level (one level different)
-            if (nLevel !== -1 && Math.abs(nLevel - currentLevel) === 1) {
-              isAtBoundary = true;
-              neighborLevel = nLevel;
-              break;
-            }
-          }
-          if (isAtBoundary) break;
-        }
-        
-        if (!isAtBoundary) continue;
-        
-        // Calculate distance from boundary
-        let distanceFromEdge = effectDepth + 1;
-        const maxSearchRadius = Math.min(effectDepth, 50);
-        
-        outerLoop: for (let radius = 1; radius <= maxSearchRadius; radius += 2) {
-          for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / (4 * radius)) {
-            const dx = Math.round(Math.cos(angle) * radius);
-            const dy = Math.round(Math.sin(angle) * radius);
-            const nx = x + dx;
-            const ny = y + dy;
-            if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
-            const nIdx = (ny * w + nx) * 4;
-            const nR = srcData.data[nIdx];
-            const nG = srcData.data[nIdx + 1];
-            const nB = srcData.data[nIdx + 2];
-            const nLevel = getTerrainLevel(nR, nG, nB);
-            
-            if (nLevel !== -1 && Math.abs(nLevel - currentLevel) === 1) {
-              distanceFromEdge = radius;
-              break outerLoop;
-            }
-          }
-        }
-        
-        if (distanceFromEdge > effectDepth) continue;
-        
-        const fadeFactor = 1 - (distanceFromEdge / effectDepth);
-        
-        // Calculate noise displacement
-        let noiseX, noiseY, noiseX2, noiseY2;
-        
-        if (algorithm === 'fractal') {
-          noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale, 4);
-          noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100, 4);
-          noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50, 2);
-          noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150, 2);
-        } else {
-          noiseX = noise.noise(x * frequency * 0.03 / scale, y * frequency * 0.03 / scale);
-          noiseY = noise.noise(x * frequency * 0.03 / scale + 100, y * frequency * 0.03 / scale + 100);
-          noiseX2 = noise.noise(x * frequency * 0.1 / scale + 50, y * frequency * 0.1 / scale + 50);
-          noiseY2 = noise.noise(x * frequency * 0.1 / scale + 150, y * frequency * 0.1 / scale + 150);
-        }
-        
-        const offsetX = Math.round((noiseX * 0.7 + noiseX2 * 0.3) * intensity * scale * fadeFactor);
-        const offsetY = Math.round((noiseY * 0.7 + noiseY2 * 0.3) * intensity * scale * fadeFactor);
-        
-        // Write current pixel to displaced position
-        const dstX = Math.max(0, Math.min(w - 1, x + offsetX));
-        const dstY = Math.max(0, Math.min(h - 1, y + offsetY));
-        const dstIdx = (dstY * w + dstX) * 4;
-        
-        dstData.data[dstIdx]     = currentR;
-        dstData.data[dstIdx + 1] = currentG;
-        dstData.data[dstIdx + 2] = currentB;
-        dstData.data[dstIdx + 3] = alpha;
-        
-        // Fill skipped pixels
-        if (step > 1) {
-          for (let dy = 0; dy < step && y + dy < h; dy++) {
-            for (let dx = 0; dx < step && x + dx < w; dx++) {
-              const srcI = ((y + dy) * w + (x + dx)) * 4;
-              const dstI = ((dstY + dy) * w + (dstX + dx)) * 4;
-              if (dstI >= 0 && dstI < dstData.data.length) {
-                dstData.data[dstI]     = srcData.data[srcI];
-                dstData.data[dstI + 1] = srcData.data[srcI + 1];
-                dstData.data[dstI + 2] = srcData.data[srcI + 2];
-                dstData.data[dstI + 3] = srcData.data[srcI + 3];
-              }
-            }
-          }
-        }
-      }
-    }
-    
-    tempCtx.putImageData(dstData, 0, 0);
     
     // Cache result
     if (jaggedCache.size > 10) {
