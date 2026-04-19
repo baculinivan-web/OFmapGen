@@ -504,8 +504,22 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (paintCanvas && paintCanvas.width === outCanvas.width && paintCanvas.height === outCanvas.height) {
       // Canvas exists, restore layers from it
       if (paintLayers.length === 0) {
-        // Create initial layer from existing paintCanvas
-        const layer = {
+        // Create base layer with original image
+        const baseLayer = {
+          id: layerIdCounter++,
+          name: 'Layer 0 (Base)',
+          canvas: document.createElement('canvas'),
+          visible: true,
+          locked: true,
+          jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
+        };
+        baseLayer.canvas.width = outCanvas.width;
+        baseLayer.canvas.height = outCanvas.height;
+        baseLayer.canvas.getContext('2d').drawImage(outCanvas, 0, 0);
+        paintLayers.push(baseLayer);
+        
+        // Create empty paint layer
+        const paintLayer = {
           id: layerIdCounter++,
           name: 'Layer 1',
           canvas: document.createElement('canvas'),
@@ -513,11 +527,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           locked: false,
           jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
         };
-        layer.canvas.width = paintCanvas.width;
-        layer.canvas.height = paintCanvas.height;
-        layer.canvas.getContext('2d').drawImage(paintCanvas, 0, 0);
-        paintLayers.push(layer);
-        currentLayerId = layer.id;
+        paintLayer.canvas.width = paintCanvas.width;
+        paintLayer.canvas.height = paintCanvas.height;
+        paintLayer.canvas.getContext('2d').drawImage(paintCanvas, 0, 0);
+        paintLayers.push(paintLayer);
+        currentLayerId = paintLayer.id;
       }
       return;
     }
@@ -529,8 +543,22 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Clear any leftover layers from previous map
     paintLayers = [];
     
-    // Create initial layer
-    const layer = {
+    // Create base layer with original image (locked)
+    const baseLayer = {
+      id: layerIdCounter++,
+      name: 'Layer 0 (Base)',
+      canvas: document.createElement('canvas'),
+      visible: true,
+      locked: true,
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
+    };
+    baseLayer.canvas.width = outCanvas.width;
+    baseLayer.canvas.height = outCanvas.height;
+    baseLayer.canvas.getContext('2d').drawImage(outCanvas, 0, 0);
+    paintLayers.push(baseLayer);
+    
+    // Create empty paint layer
+    const paintLayer = {
       id: layerIdCounter++,
       name: 'Layer 1',
       canvas: document.createElement('canvas'),
@@ -538,10 +566,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       locked: false,
       jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
-    layer.canvas.width = outCanvas.width;
-    layer.canvas.height = outCanvas.height;
-    paintLayers.push(layer);
-    currentLayerId = layer.id;
+    paintLayer.canvas.width = outCanvas.width;
+    paintLayer.canvas.height = outCanvas.height;
+    paintLayers.push(paintLayer);
+    currentLayerId = paintLayer.id;
     
     // Create river canvas
     riverCanvas = document.createElement('canvas');
