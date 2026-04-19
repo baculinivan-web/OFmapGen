@@ -300,6 +300,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let riverWidth = 3;
   let selectedRiverId = null; // Currently selected river for editing
   let draggingPointId = null; // {riverId, pointIndex} for dragging control points
+  
+  // Global undo/redo history (tracks all actions across all layers)
+  let globalUndoStack = []; // Array of {type: 'layer'|'river', layerId, imageData, rivers}
+  let globalRedoStack = [];
+  const MAX_HISTORY = 50;
 
   // ── Brush state ────────────────────────────────────────────────────────────
   let currentBrushId = 'solid';
@@ -467,19 +472,22 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Undo / Redo ────────────────────────────────────────────────────────────
-  const MAX_HISTORY = 30;
-  let undoStack = [];
-  let redoStack = [];
 
   function saveHistory() {
     const layer = paintLayers.find(l => l.id === currentLayerId);
     if (!layer) return;
     
     const lc = layer.canvas.getContext('2d');
-    undoStack.push(lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height));
-    if (undoStack.length > MAX_HISTORY) undoStack.shift();
-    redoStack = [];
-    hasChanges = true; // Mark that changes were made
+    // Save current state of this layer to global history
+    globalUndoStack.push({
+      type: 'layer',
+      layerId: currentLayerId,
+      imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
+      rivers: riverLayer.export() // Also save river state at this moment
+    });
+    if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
+    globalRedoStack = [];
+    hasChanges = true;
     
     // Clear jagged edges cache for current layer since content changed
     for (const key of jaggedCache.keys()) {
@@ -490,38 +498,122 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     updateUndoRedoBtns();
   }
+  
+  function saveRiverHistory() {
+    // Save river state to global history
+    globalUndoStack.push({
+      type: 'river',
+      rivers: riverLayer.export()
+    });
+    if (globalUndoStack.length > MAX_HISTORY) globalUndoStack.shift();
+    globalRedoStack = [];
+    hasChanges = true;
+    updateUndoRedoBtns();
+  }
 
   function undo() {
-    if (!undoStack.length) return;
-    const layer = paintLayers.find(l => l.id === currentLayerId);
-    if (!layer) return;
+    if (!globalUndoStack.length) return;
     
-    const lc = layer.canvas.getContext('2d');
-    redoStack.push(lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height));
-    lc.putImageData(undoStack.pop(), 0, 0);
-    redraw(); 
+    const action = globalUndoStack.pop();
+    
+    if (action.type === 'layer') {
+      const layer = paintLayers.find(l => l.id === action.layerId);
+      if (!layer) {
+        // Layer was deleted, skip this action
+        updateUndoRedoBtns();
+        return;
+      }
+      
+      const lc = layer.canvas.getContext('2d');
+      // Save current state to redo
+      globalRedoStack.push({
+        type: 'layer',
+        layerId: action.layerId,
+        imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
+        rivers: riverLayer.export()
+      });
+      
+      // Restore previous state
+      lc.putImageData(action.imageData, 0, 0);
+      riverLayer.import(action.rivers);
+      
+      // Switch to this layer if not current
+      if (currentLayerId !== action.layerId) {
+        currentLayerId = action.layerId;
+        updateLayersList();
+      }
+      
+      updateLayerThumbnail(action.layerId);
+    } else if (action.type === 'river') {
+      // Save current river state to redo
+      globalRedoStack.push({
+        type: 'river',
+        rivers: riverLayer.export()
+      });
+      
+      // Restore previous river state
+      riverLayer.import(action.rivers);
+      updateLayersList();
+    }
+    
+    redraw();
     updateUndoRedoBtns();
-    updateLayerThumbnail(currentLayerId);
   }
 
   function redo() {
-    if (!redoStack.length) return;
-    const layer = paintLayers.find(l => l.id === currentLayerId);
-    if (!layer) return;
+    if (!globalRedoStack.length) return;
     
-    const lc = layer.canvas.getContext('2d');
-    undoStack.push(lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height));
-    lc.putImageData(redoStack.pop(), 0, 0);
-    redraw(); 
+    const action = globalRedoStack.pop();
+    
+    if (action.type === 'layer') {
+      const layer = paintLayers.find(l => l.id === action.layerId);
+      if (!layer) {
+        // Layer was deleted, skip this action
+        updateUndoRedoBtns();
+        return;
+      }
+      
+      const lc = layer.canvas.getContext('2d');
+      // Save current state to undo
+      globalUndoStack.push({
+        type: 'layer',
+        layerId: action.layerId,
+        imageData: lc.getImageData(0, 0, layer.canvas.width, layer.canvas.height),
+        rivers: riverLayer.export()
+      });
+      
+      // Restore next state
+      lc.putImageData(action.imageData, 0, 0);
+      riverLayer.import(action.rivers);
+      
+      // Switch to this layer if not current
+      if (currentLayerId !== action.layerId) {
+        currentLayerId = action.layerId;
+        updateLayersList();
+      }
+      
+      updateLayerThumbnail(action.layerId);
+    } else if (action.type === 'river') {
+      // Save current river state to undo
+      globalUndoStack.push({
+        type: 'river',
+        rivers: riverLayer.export()
+      });
+      
+      // Restore next river state
+      riverLayer.import(action.rivers);
+      updateLayersList();
+    }
+    
+    redraw();
     updateUndoRedoBtns();
-    updateLayerThumbnail(currentLayerId);
   }
 
   function updateUndoRedoBtns() {
-    undoBtn.disabled = undoStack.length === 0;
-    redoBtn.disabled = redoStack.length === 0;
-    undoBtn.style.opacity = undoStack.length ? '1' : '0.35';
-    redoBtn.style.opacity = redoStack.length ? '1' : '0.35';
+    undoBtn.disabled = globalUndoStack.length === 0;
+    redoBtn.disabled = globalRedoStack.length === 0;
+    undoBtn.style.opacity = globalUndoStack.length ? '1' : '0.35';
+    redoBtn.style.opacity = globalRedoStack.length ? '1' : '0.35';
   }
 
   // ── Reset all paint state (call when a new map is loaded) ─────────────────
@@ -537,7 +629,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     selectedRiverId = null;
     currentJaggedLayerId = null;
     window.riverStartPoint = null; // Clear river start anchor
-    undoStack = []; redoStack = [];
+    globalUndoStack = []; 
+    globalRedoStack = [];
     cancelSnapshot = null;
     cancelRiverSnapshot = null;
     cancelRiversData = null;
@@ -622,8 +715,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     riverCanvas = document.createElement('canvas');
     riverCanvas.width = outCanvas.width;
     riverCanvas.height = outCanvas.height;
-    
-    undoStack = []; redoStack = [];
   }
 
   // ── Fit / redraw ───────────────────────────────────────────────────────────
@@ -1560,7 +1651,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   riverFinishBtn.addEventListener('click', () => {
     if (riverLayer.currentRiver) {
-      saveHistory();
+      saveRiverHistory();
       riverLayer.finishRiver();
       hasChanges = true;
       selectedRiverId = null;
@@ -1568,7 +1659,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       redraw();
     } else if (selectedRiverId !== null) {
       // Finish editing existing river
-      saveHistory();
+      saveRiverHistory();
       hasChanges = true;
       selectedRiverId = null;
       updateLayersList();
@@ -1615,7 +1706,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               // Right click or Ctrl+click to delete point
               if (e.button === 2 || e.ctrlKey) {
                 if (river.controlPoints.length > 2) {
-                  saveHistory();
+                  saveRiverHistory();
                   river.controlPoints.splice(i, 1);
                   river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
                   hasChanges = true;
@@ -1629,7 +1720,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             }
           }
           // Not clicking on point, add new point
-          saveHistory();
+          saveRiverHistory();
           river.controlPoints.push({ x, y });
           river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
           hasChanges = true;
@@ -2097,6 +2188,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         }
         
         updateLayersList();
+        updateUndoRedoBtns(); // Update undo/redo buttons for new layer
       });
     });
     
@@ -2135,6 +2227,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         currentLayerId = layerId; // Switch to this layer
         openJaggedEdgesPanel(layerId);
         updateLayersList(); // Update selection highlight
+        updateUndoRedoBtns(); // Update undo/redo buttons for new layer
       });
     });
     
@@ -2189,7 +2282,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         e.stopPropagation();
         const riverId = parseInt(el.dataset.riverId);
         if (!confirm('Delete this river?')) return;
-        saveHistory();
+        saveRiverHistory();
         riverLayer.removeRiver(riverId);
         if (selectedRiverId === riverId) selectedRiverId = null;
         hasChanges = true;
@@ -2300,7 +2393,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function addNewLayerFunc() {
-    saveHistory();
     const layer = {
       id: layerIdCounter++,
       name: `Layer ${layerIdCounter}`,
@@ -2315,6 +2407,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     currentLayerId = layer.id;
     hasChanges = true;
     updateLayersList();
+    updateUndoRedoBtns(); // Update buttons for new layer (should be disabled)
   }
   
   // Expose addNewLayer globally for the + button
