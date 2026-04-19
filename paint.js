@@ -496,7 +496,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const pc = paintCanvas.getContext('2d');
     redoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
     pc.putImageData(undoStack.pop(), 0, 0);
-    redraw(); updateUndoRedoBtns();
+    redraw(); 
+    updateUndoRedoBtns();
+    updateLayerThumbnail(currentLayerId);
   }
 
   function redo() {
@@ -504,7 +506,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const pc = paintCanvas.getContext('2d');
     undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
     pc.putImageData(redoStack.pop(), 0, 0);
-    redraw(); updateUndoRedoBtns();
+    redraw(); 
+    updateUndoRedoBtns();
+    updateLayerThumbnail(currentLayerId);
   }
 
   function updateUndoRedoBtns() {
@@ -899,6 +903,41 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       riverLayer.render(rCtx, WATER_COLOR, selectedRiverId);
       ctx.drawImage(riverCanvas, 0, 0);
     }
+  }
+  
+  // ── Update layer thumbnail ─────────────────────────────────────────────────
+  function updateLayerThumbnail(layerId) {
+    const layer = paintLayers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    const img = document.querySelector(`[data-layer-id="${layerId}"] img`);
+    if (!img) return;
+    
+    // Generate thumbnail
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = 32;
+    thumbCanvas.height = 32;
+    const thumbCtx = thumbCanvas.getContext('2d');
+    
+    // Scale layer canvas to thumbnail
+    const scale = Math.min(32 / layer.canvas.width, 32 / layer.canvas.height);
+    const w = layer.canvas.width * scale;
+    const h = layer.canvas.height * scale;
+    const x = (32 - w) / 2;
+    const y = (32 - h) / 2;
+    
+    // Checkerboard background for transparency
+    thumbCtx.fillStyle = '#fff';
+    thumbCtx.fillRect(0, 0, 32, 32);
+    thumbCtx.fillStyle = '#ddd';
+    for (let ty = 0; ty < 32; ty += 8) {
+      for (let tx = 0; tx < 32; tx += 8) {
+        if ((tx / 8 + ty / 8) % 2 === 0) thumbCtx.fillRect(tx, ty, 8, 8);
+      }
+    }
+    
+    thumbCtx.drawImage(layer.canvas, x, y, w, h);
+    img.src = thumbCanvas.toDataURL();
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
@@ -1548,6 +1587,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       saveHistory();
       floodFill(x, y);
       hasChanges = true;
+      updateLayerThumbnail(currentLayerId);
       redraw();
       return;
     }
@@ -1692,6 +1732,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     draggingPointId = null;
     if (isPaintingActive) {
       isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId); // Update thumbnail after painting
       redraw(); // Redraw with jagged edges applied
     }
   });
@@ -1701,6 +1742,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     draggingPointId = null;
     if (isPaintingActive) {
       isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId); // Update thumbnail after painting
       redraw(); // Redraw with jagged edges applied
     }
   });
@@ -1715,6 +1757,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       saveHistory();
       floodFill(x, y);
       hasChanges = true;
+      updateLayerThumbnail(currentLayerId);
       redraw();
       return;
     }
@@ -1860,6 +1903,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     saveHistory();
     layer.canvas.getContext('2d').clearRect(0, 0, layer.canvas.width, layer.canvas.height);
     hasChanges = true;
+    updateLayerThumbnail(currentLayerId);
     updateLayersList();
     redraw();
   });
