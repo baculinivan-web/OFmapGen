@@ -213,7 +213,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedFrequencyVal = document.getElementById('paintJaggedFrequencyVal');
   const jaggedDepth = document.getElementById('paintJaggedDepth');
   const jaggedDepthVal = document.getElementById('paintJaggedDepthVal');
-  const jaggedAllTerrains = document.getElementById('paintJaggedAllTerrains');
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
 
   // Validate all required DOM elements
@@ -516,7 +515,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -598,7 +597,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   function getCacheKey(layer) {
     const je = layer.jaggedEdges;
-    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}-${je.depth}-${je.allTerrains}`;
+    return `${layer.id}-${je.enabled}-${je.intensity}-${je.frequency}-${je.scale}-${je.algorithm}-${je.seed}-${je.depth}`;
   }
   
   function applyJaggedEdges(layer) {
@@ -607,18 +606,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     if (!layer.jaggedEdges || !layer.jaggedEdges.enabled) return layer.canvas;
     
-    const { intensity, frequency, scale, algorithm, seed, depth, allTerrains } = layer.jaggedEdges;
+    const { intensity, frequency, scale, algorithm, seed, depth } = layer.jaggedEdges;
     if (intensity === 0) return layer.canvas;
     
     // Check cache
     const cacheKey = getCacheKey(layer);
     if (jaggedCache.has(cacheKey)) {
       return jaggedCache.get(cacheKey);
-    }
-    
-    // If allTerrains is enabled, process each terrain type separately
-    if (allTerrains) {
-      return applyJaggedEdgesToAllTerrains(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey);
     }
     
     // Original single-layer processing
@@ -629,97 +623,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const temp = applyJaggedEdgesToCanvas(layer.canvas, intensity, frequency, scale, algorithm, seed, depth);
     
     // Cache result (limit cache size)
-    if (jaggedCache.size > 10) {
-      const firstKey = jaggedCache.keys().next().value;
-      jaggedCache.delete(firstKey);
-    }
-    jaggedCache.set(cacheKey, temp);
-    
-    return temp;
-  }
-  
-  function applyJaggedEdgesToAllTerrains(layer, intensity, frequency, scale, algorithm, seed, depth, cacheKey) {
-    const temp = document.createElement('canvas');
-    temp.width = layer.canvas.width;
-    temp.height = layer.canvas.height;
-    const tempCtx = temp.getContext('2d');
-    
-    const srcData = layer.canvas.getContext('2d').getImageData(0, 0, temp.width, temp.height);
-    const w = temp.width;
-    const h = temp.height;
-    
-    // Define terrain hierarchy from highest to lowest
-    const terrainLevels = [
-      { name: 'mountain', rgb: [190, 190, 190], level: 3 },
-      { name: 'highland', rgb: [176, 159, 114], level: 2 },
-      { name: 'plain', rgb: [140, 170, 88], level: 1 },
-      { name: 'water', rgb: [18, 15, 34], level: 0 }
-    ];
-    
-    // Start with water as base
-    tempCtx.fillStyle = `rgb(${terrainLevels[3].rgb[0]}, ${terrainLevels[3].rgb[1]}, ${terrainLevels[3].rgb[2]})`;
-    tempCtx.fillRect(0, 0, w, h);
-    
-    // Process from highest to lowest terrain
-    for (let i = 0; i < terrainLevels.length; i++) {
-      const currentTerrain = terrainLevels[i];
-      const lowerTerrain = terrainLevels[Math.min(i + 1, terrainLevels.length - 1)];
-      
-      // Extract mask for current terrain and all higher terrains
-      const maskCanvas = document.createElement('canvas');
-      maskCanvas.width = w;
-      maskCanvas.height = h;
-      const maskCtx = maskCanvas.getContext('2d');
-      
-      // FIRST: Fill entire mask with lower terrain color (подложка)
-      maskCtx.fillStyle = `rgb(${lowerTerrain.rgb[0]}, ${lowerTerrain.rgb[1]}, ${lowerTerrain.rgb[2]})`;
-      maskCtx.fillRect(0, 0, w, h);
-      
-      // SECOND: Draw current terrain and all higher terrains on top
-      const maskData = maskCtx.getImageData(0, 0, w, h);
-      
-      for (let j = 0; j < srcData.data.length; j += 4) {
-        const r = srcData.data[j];
-        const g = srcData.data[j + 1];
-        const b = srcData.data[j + 2];
-        const a = srcData.data[j + 3];
-        
-        if (a === 0) continue;
-        
-        // Check if pixel belongs to current terrain or any higher terrain
-        let belongsToThisOrHigher = false;
-        for (let k = 0; k <= i; k++) {
-          const terrain = terrainLevels[k];
-          const dr = Math.abs(r - terrain.rgb[0]);
-          const dg = Math.abs(g - terrain.rgb[1]);
-          const db = Math.abs(b - terrain.rgb[2]);
-          
-          if (dr < 5 && dg < 5 && db < 5) {
-            belongsToThisOrHigher = true;
-            break;
-          }
-        }
-        
-        if (belongsToThisOrHigher) {
-          // Draw this pixel on top of the lower terrain color
-          maskData.data[j] = r;
-          maskData.data[j + 1] = g;
-          maskData.data[j + 2] = b;
-          maskData.data[j + 3] = 255; // Full opacity
-        }
-      }
-      
-      maskCtx.putImageData(maskData, 0, 0);
-      
-      // THIRD: Apply jagged edges to this mask
-      // Now when edges are "eaten away", the lower terrain color shows through
-      const processedMask = applyJaggedEdgesToCanvas(maskCanvas, intensity, frequency, scale, algorithm, seed, depth);
-      
-      // Draw result onto final canvas
-      tempCtx.drawImage(processedMask, 0, 0);
-    }
-    
-    // Cache result
     if (jaggedCache.size > 10) {
       const firstKey = jaggedCache.keys().next().value;
       jaggedCache.delete(firstKey);
@@ -989,12 +892,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Load current settings
     if (!layer.jaggedEdges) {
-      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false };
+      layer.jaggedEdges = { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 };
     }
     
     // Don't auto-enable - just load current state
     jaggedEnabled.checked = layer.jaggedEdges.enabled;
-    jaggedAllTerrains.checked = layer.jaggedEdges.allTerrains || false;
     jaggedAlgorithm.value = layer.jaggedEdges.algorithm || 'fractal';
     jaggedSeed.value = layer.jaggedEdges.seed || 12345;
     jaggedIntensity.value = layer.jaggedEdges.intensity;
@@ -1020,16 +922,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
       layer.jaggedEdges.enabled = jaggedEnabled.checked;
-      updateLayersList();
-      redraw();
-    }
-  });
-  
-  jaggedAllTerrains?.addEventListener('change', () => {
-    if (currentJaggedLayerId === null) return;
-    const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
-    if (layer) {
-      layer.jaggedEdges.allTerrains = jaggedAllTerrains.checked;
       updateLayersList();
       redraw();
     }
@@ -1201,7 +1093,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       name: l.name,
       visible: l.visible,
       locked: l.locked,
-      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false },
+      jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
       canvas: (() => {
         const c = document.createElement('canvas');
         c.width = l.canvas.width;
@@ -2167,7 +2059,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       canvas: document.createElement('canvas'),
       visible: true,
       locked: false,
-      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false }
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
     layer.canvas.width = outCanvas.width;
     layer.canvas.height = outCanvas.height;
@@ -2233,7 +2125,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (cancelLayersData) {
       paintLayers = cancelLayersData.map(l => ({
         ...l,
-        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20, allTerrains: false },
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 },
         canvas: (() => {
           const c = document.createElement('canvas');
           c.width = l.canvas.width;
