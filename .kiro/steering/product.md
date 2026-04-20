@@ -9,6 +9,8 @@ A browser-based tool that converts images or real-world elevation data into play
 - Three processing algorithms: Legacy (pixel-perfect), Smooth (noise removal), Advanced (AI segmentation via ONNX u2netp model)
 - Paint terrain directly on the map with customizable brushes
 - Create realistic winding rivers with adjustable curvature
+- Full undo/redo support for all editing actions (Ctrl+Z / Ctrl+Shift+Z)
+- Layer system with visibility, locking, reordering, and jagged edges effects
 - Export as visual preview PNG or OpenFront-compatible source PNG (specific color palette)
 - Python desktop GUI alternative (`image_to_map.py`) using tkinter + Pillow
 
