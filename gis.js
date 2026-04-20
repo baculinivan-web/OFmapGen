@@ -16,8 +16,15 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
   const elevZoomInfo = document.getElementById('elevZoomInfo');
   const loadRiversCheckbox = document.getElementById('loadRivers');
   const gisMapSizeSelect = document.getElementById('gisMapSize');
+  const gisMapSizeHelp = document.getElementById('gisMapSizeHelp');
+  const mapSizeGuideModal = document.getElementById('mapSizeGuideModal');
 
   let gisMap = null, drawnRect = null;
+
+  // Map size help button
+  gisMapSizeHelp.addEventListener('click', () => {
+    mapSizeGuideModal.classList.add('open');
+  });
 
   function updateZoomInfo() {
     if (!drawnRect) {

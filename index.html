@@ -249,16 +249,16 @@
         <label style="font-size: 0.82rem; color: var(--muted); font-weight: 500;">Map size:</label>
         <select id="gisMapSize" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; cursor: pointer;">
           <option value="auto">Auto (512-1024px)</option>
-          <option value="512">512px</option>
-          <option value="768">768px</option>
-          <option value="1024">1024px</option>
-          <option value="1536">1536px</option>
-          <option value="2048">2048px</option>
-          <option value="2560">2560px</option>
-          <option value="3072">3072px</option>
-          <option value="4096">4096px</option>
+          <option value="512">512px — 2-8 nations</option>
+          <option value="768">768px — 5-12 nations</option>
+          <option value="1024">1024px — 12-29 nations</option>
+          <option value="1536">1536px — 2-26 nations</option>
+          <option value="2048">2048px — 4-61 nations ⭐</option>
+          <option value="2560">2560px — 15-50 nations</option>
+          <option value="3072">3072px — 20-70 nations</option>
+          <option value="4096">4096px — 30-100+ nations</option>
         </select>
-        <span style="font-size: 0.72rem; color: var(--muted);">(longest side)</span>
+        <button class="help-btn" id="gisMapSizeHelp" style="background:none; border:1px solid var(--border); color:var(--muted); width:24px; height:24px; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.8rem; font-weight:600; flex-shrink:0;" title="Map size guide">?</button>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <label style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text); cursor: pointer;">
@@ -683,48 +683,77 @@
 
 <!-- Image resolution modal -->
 <div class="modal-overlay" id="imageResModal">
-  <div class="modal" style="max-width:420px;">
+  <div class="modal" style="max-width:520px;">
     <div class="modal-header">
       <span class="modal-title">Choose map size</span>
+      <button class="help-btn" id="imageResHelp" style="margin-left:auto; margin-right:8px; background:none; border:1px solid var(--border); color:var(--muted); width:28px; height:28px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.9rem; font-weight:600;" title="Map size guide">?</button>
     </div>
     <div style="padding:20px 24px;">
       <p style="font-size:0.85rem; color:var(--muted); margin-bottom:16px; line-height:1.5;">
         Original image: <span id="imageResOriginal" style="color:var(--text); font-weight:500;">—</span>
       </p>
-      <div style="display:flex; flex-direction:column; gap:8px;">
+      <div style="display:flex; flex-direction:column; gap:8px; max-height:400px; overflow-y:auto; padding-right:8px;">
         <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
-          <input type="radio" name="imageRes" value="0" checked style="cursor:pointer; width:18px; height:18px;" />
+          <input type="radio" name="imageRes" value="0" checked style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
           <div style="flex:1;">
             <div style="font-size:0.88rem; font-weight:500;">Auto (512-1024px)</div>
-            <div style="font-size:0.75rem; color:var(--muted);">Balanced map size</div>
+            <div style="font-size:0.72rem; color:var(--muted);">10-30 nations · Balanced maps</div>
           </div>
         </label>
         <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
-          <input type="radio" name="imageRes" value="512" style="cursor:pointer; width:18px; height:18px;" />
+          <input type="radio" name="imageRes" value="512" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
           <div style="flex:1;">
             <div style="font-size:0.88rem; font-weight:500;">512px</div>
-            <div style="font-size:0.75rem; color:var(--muted);">Small map, quick games</div>
+            <div style="font-size:0.72rem; color:var(--muted);">2-8 nations · Very small, quick games</div>
           </div>
         </label>
         <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
-          <input type="radio" name="imageRes" value="1024" style="cursor:pointer; width:18px; height:18px;" />
+          <input type="radio" name="imageRes" value="768" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
+          <div style="flex:1;">
+            <div style="font-size:0.88rem; font-weight:500;">768px</div>
+            <div style="font-size:0.72rem; color:var(--muted);">5-12 nations · Small regional maps</div>
+          </div>
+        </label>
+        <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
+          <input type="radio" name="imageRes" value="1024" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
           <div style="flex:1;">
             <div style="font-size:0.88rem; font-weight:500;">1024px</div>
-            <div style="font-size:0.75rem; color:var(--muted);">Medium map</div>
+            <div style="font-size:0.72rem; color:var(--muted);">12-29 nations · Medium regional maps</div>
           </div>
         </label>
         <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
-          <input type="radio" name="imageRes" value="2048" style="cursor:pointer; width:18px; height:18px;" />
+          <input type="radio" name="imageRes" value="1536" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
           <div style="flex:1;">
-            <div style="font-size:0.88rem; font-weight:500;">2048px</div>
-            <div style="font-size:0.75rem; color:var(--muted);">Large map, long games</div>
+            <div style="font-size:0.88rem; font-weight:500;">1536px</div>
+            <div style="font-size:0.72rem; color:var(--muted);">2-26 nations · Most flexible</div>
           </div>
         </label>
         <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
-          <input type="radio" name="imageRes" value="4096" style="cursor:pointer; width:18px; height:18px;" />
+          <input type="radio" name="imageRes" value="2048" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
+          <div style="flex:1;">
+            <div style="font-size:0.88rem; font-weight:500;">2048px ⭐</div>
+            <div style="font-size:0.72rem; color:var(--muted);">4-61 nations · Most popular</div>
+          </div>
+        </label>
+        <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
+          <input type="radio" name="imageRes" value="2560" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
+          <div style="flex:1;">
+            <div style="font-size:0.88rem; font-weight:500;">2560px</div>
+            <div style="font-size:0.72rem; color:var(--muted);">15-50 nations · Very large maps</div>
+          </div>
+        </label>
+        <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
+          <input type="radio" name="imageRes" value="3072" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
+          <div style="flex:1;">
+            <div style="font-size:0.88rem; font-weight:500;">3072px</div>
+            <div style="font-size:0.72rem; color:var(--muted);">20-70 nations · Huge maps</div>
+          </div>
+        </label>
+        <label style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:2px solid var(--border); border-radius:8px; cursor:pointer; transition:all 0.15s;" class="res-option">
+          <input type="radio" name="imageRes" value="4096" style="cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
           <div style="flex:1;">
             <div style="font-size:0.88rem; font-weight:500;">4096px</div>
-            <div style="font-size:0.75rem; color:var(--muted);">Huge map (slow processing)</div>
+            <div style="font-size:0.72rem; color:var(--muted);">30-100+ nations · Massive (slow)</div>
           </div>
         </label>
       </div>
@@ -732,6 +761,109 @@
     <div class="modal-footer">
       <button class="btn btn-primary" id="imageResConfirm" style="font-size:0.82rem; padding:8px 16px;">Load image</button>
       <button class="btn btn-ghost" id="imageResCancel" style="font-size:0.82rem; padding:8px 16px;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Map size guide modal -->
+<div class="modal-overlay" id="mapSizeGuideModal">
+  <div class="modal" style="max-width:680px; max-height:85vh;">
+    <div class="modal-header">
+      <span class="modal-title">Map Size Guide</span>
+      <button class="modal-close" id="mapSizeGuideClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="padding:20px 24px; overflow-y:auto; max-height:calc(85vh - 120px);">
+      <p style="font-size:0.88rem; color:var(--muted); margin-bottom:20px; line-height:1.6;">
+        Choose the right map size based on the number of players you want to support. Each nation spawn = one player.
+      </p>
+      
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">Auto (512-1024px)</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>10-30 nations</strong> · Balanced maps, automatic sizing<br>
+            The tool automatically scales your image to an optimal size.
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">512px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>2-8 nations</strong> · Very small maps, 1v1 or tiny battles<br>
+            Quick games (10-30 min). No official maps use this size.
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">768px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>5-12 nations</strong> · Small regional conflicts<br>
+            Good balance for smaller games. No official maps use this size.
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">1024px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>12-29 nations</strong> · Medium regional maps<br>
+            Examples: Bosphorus Straits (12), Caucasus (21), Pangaea (29)
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">1536px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>2-26 nations (avg 10)</strong> · Most flexible resolution<br>
+            Works for everything from tournament maps to regional conflicts.<br>
+            Examples: Bering Strait (2), Black Sea (9), East Asia (22)
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--accent); border-radius:8px; padding:14px; background:var(--accent-dim);">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">2048px ⭐ Most Popular</div>
+          <div style="font-size:0.8rem; color:var(--text); line-height:1.5;">
+            <strong>4-61 nations (avg 20)</strong> · Large maps, long games (30-60 min)<br>
+            Best for serious multiplayer. High detail for extended gameplay.<br>
+            Examples: Two Lakes (5), Alps (8), Europe Classic (31), Africa (36), World (61)
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">2560px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>15-50 nations</strong> · Very large maps, major regions<br>
+            Games last 1-2 hours. Examples: Japan (12), North America (49)
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">3072px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>20-70 nations</strong> · Huge maps, global conflicts<br>
+            Maximum detail for large-scale strategy (1-2 hours).<br>
+            Examples: Mediterranean (38), Europe (50), Dyslexdria (66)
+          </div>
+        </div>
+        
+        <div style="border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-size:0.92rem; font-weight:600; margin-bottom:6px;">4096px</div>
+          <div style="font-size:0.8rem; color:var(--muted); line-height:1.5;">
+            <strong>30-100+ nations</strong> · Massive world maps (2+ hours)<br>
+            ⚠️ Warning: Slow processing and high memory usage.<br>
+            Example: Giant World Map (97 nations)
+          </div>
+        </div>
+      </div>
+      
+      <div style="margin-top:20px; padding:14px; background:var(--surface2); border-radius:8px; font-size:0.8rem; color:var(--muted); line-height:1.6;">
+        <strong style="color:var(--text);">Tips:</strong><br>
+        • Start with Auto or 1024px for your first maps<br>
+        • Use 2048px for most serious multiplayer games<br>
+        • Only use 4096px for truly massive world maps<br>
+        • Based on 70+ official OpenFront.io maps
+      </div>
     </div>
   </div>
 </div>

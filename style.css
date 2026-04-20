@@ -473,3 +473,10 @@ footer a:hover { color: var(--text); }
   border-color: var(--accent);
   background: rgba(88, 166, 255, 0.05);
 }
+
+/* Help button */
+.help-btn:hover {
+  background: var(--surface2) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+}

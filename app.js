@@ -33,6 +33,9 @@ const imageResModal = document.getElementById('imageResModal');
 const imageResOriginal = document.getElementById('imageResOriginal');
 const imageResConfirm = document.getElementById('imageResConfirm');
 const imageResCancel = document.getElementById('imageResCancel');
+const imageResHelp = document.getElementById('imageResHelp');
+const mapSizeGuideModal = document.getElementById('mapSizeGuideModal');
+const mapSizeGuideClose = document.getElementById('mapSizeGuideClose');
 
 let customImageResolution = 0; // 0 = auto
 let pendingImageFile = null;
@@ -260,6 +263,18 @@ imageResCancel.addEventListener('click', () => {
   pendingImageFile = null;
   pendingImageObject = null;
   fileInput.value = ''; // Reset file input
+});
+
+imageResHelp.addEventListener('click', () => {
+  mapSizeGuideModal.classList.add('open');
+});
+
+mapSizeGuideClose.addEventListener('click', () => {
+  mapSizeGuideModal.classList.remove('open');
+});
+
+mapSizeGuideModal.addEventListener('click', (e) => {
+  if (e.target === mapSizeGuideModal) mapSizeGuideModal.classList.remove('open');
 });
 
 function loadImageWithResolution(img, fileName) {
