@@ -3,7 +3,7 @@
 //   aiMask, clampedSize, setGisMode, scheduleRender
 
 export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, setAiMask,
-                           clampedSize, setGisMode, scheduleRender }) {
+                           clampedSize, setGisMode, scheduleRender, setOsmRivers }) {
 
   const fromMapBtn    = document.getElementById('fromMapBtn');
   const gisModal      = document.getElementById('gisModal');
@@ -11,14 +11,60 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
   const gisModalClose2= document.getElementById('gisModalClose2');
   const gisLoadBtn    = document.getElementById('gisLoadBtn');
   const gisStatus     = document.getElementById('gisStatus');
+  const elevSourceSelect = document.getElementById('elevSource');
+  const elevZoomSelect = document.getElementById('elevZoom');
+  const elevZoomInfo = document.getElementById('elevZoomInfo');
+  const loadRiversCheckbox = document.getElementById('loadRivers');
 
   let gisMap = null, drawnRect = null;
+
+  function updateZoomInfo() {
+    if (!drawnRect) {
+      elevZoomInfo.textContent = '';
+      return;
+    }
+    const b = drawnRect.getBounds();
+    const south = b.getSouth(), north = b.getNorth();
+    const west = b.getWest(), east = b.getEast();
+
+    function lngToTileX(lng, z) { return Math.floor((lng + 180) / 360 * Math.pow(2, z)); }
+    function latToTileY(lat, z) {
+      const r = lat * Math.PI / 180;
+      return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z));
+    }
+
+    const zoomValue = elevZoomSelect.value;
+    let zoom;
+    let isAuto = false;
+    
+    if (zoomValue === 'auto') {
+      isAuto = true;
+      zoom = 5;
+      for (let z = 14; z >= 3; z--) {
+        const tileCount = (lngToTileX(east, z) - lngToTileX(west, z) + 1) *
+                          (latToTileY(south, z) - latToTileY(north, z) + 1);
+        if (tileCount <= 16) { zoom = z; break; }
+      }
+    } else {
+      zoom = parseInt(zoomValue);
+    }
+
+    const tx0 = lngToTileX(west, zoom), tx1 = lngToTileX(east, zoom);
+    const ty0 = latToTileY(north, zoom), ty1 = latToTileY(south, zoom);
+    const tileW = tx1 - tx0 + 1, tileH = ty1 - ty0 + 1;
+    const tileCount = tileW * tileH;
+    const pixelW = tileW * 256, pixelH = tileH * 256;
+
+    const autoLabel = isAuto ? ` — auto selected zoom ${zoom}` : '';
+    elevZoomInfo.textContent = `${tileCount} tile${tileCount > 1 ? 's' : ''} (${pixelW}×${pixelH}px)${autoLabel}`;
+  }
 
   function updateStatus() {
     if (!drawnRect) return;
     const b = drawnRect.getBounds();
     gisStatus.textContent = `${b.getSouth().toFixed(3)}°S  ${b.getNorth().toFixed(3)}°N  ${b.getWest().toFixed(3)}°W  ${b.getEast().toFixed(3)}°E`;
     gisLoadBtn.disabled = false;
+    updateZoomInfo();
   }
 
   function openGisModal() {
@@ -95,6 +141,9 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
         addHandles(drawnRect);
         updateStatus();
       });
+
+      // Update zoom info when zoom selection changes
+      elevZoomSelect.addEventListener('change', updateZoomInfo);
     }
     setTimeout(() => gisMap.invalidateSize(), 100);
   }
@@ -113,7 +162,8 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     const west  = b.getWest(),  east  = b.getEast();
 
     gisLoadBtn.disabled = true;
-    gisStatus.textContent = `Loading: Loading elevation tiles…`;
+    const elevSource = elevSourceSelect?.value || 'terrarium';
+    gisStatus.textContent = `Loading: Loading elevation tiles (${elevSource})…`;
 
     function lngToTileX(lng, z) { return Math.floor((lng + 180) / 360 * Math.pow(2, z)); }
     function latToTileY(lat, z) {
@@ -121,19 +171,37 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       return Math.floor((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z));
     }
 
-    let zoom = 5;
-    for (let z = 14; z >= 3; z--) {
-      const tileCount = (lngToTileX(east, z) - lngToTileX(west, z) + 1) *
-                        (latToTileY(south, z) - latToTileY(north, z) + 1);
-      if (tileCount <= 16) { zoom = z; break; }
+    const zoomValue = elevZoomSelect?.value || 'auto';
+    let zoom;
+    
+    if (zoomValue === 'auto') {
+      zoom = 5;
+      for (let z = 14; z >= 3; z--) {
+        const tileCount = (lngToTileX(east, z) - lngToTileX(west, z) + 1) *
+                          (latToTileY(south, z) - latToTileY(north, z) + 1);
+        if (tileCount <= 16) { zoom = z; break; }
+      }
+    } else {
+      zoom = parseInt(zoomValue);
     }
 
     const tx0 = lngToTileX(west, zoom),  tx1 = lngToTileX(east, zoom);
     const ty0 = latToTileY(north, zoom), ty1 = latToTileY(south, zoom);
     const tileW = tx1 - tx0 + 1, tileH = ty1 - ty0 + 1;
     const TILE = 256;
+    const tileCount = tileW * tileH;
 
-    gisStatus.textContent = `Loading: Loading ${tileW * tileH} tile(s) at zoom ${zoom}…`;
+    // Warn if too many tiles
+    if (tileCount > 50) {
+      const proceed = confirm(`Warning: You're about to download ${tileCount} tiles (${tileW * TILE}×${tileH * TILE}px). This may take a while and use significant bandwidth. Continue?`);
+      if (!proceed) {
+        gisLoadBtn.disabled = false;
+        gisStatus.textContent = 'Cancelled';
+        return;
+      }
+    }
+
+    gisStatus.textContent = `Loading: Loading ${tileCount} tile(s) at zoom ${zoom}…`;
 
     try {
       const tileImgs = [];
@@ -144,7 +212,13 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
             img.crossOrigin = 'anonymous';
             img.onload = () => { tileImgs.push({ tx, ty, img }); resolve(); };
             img.onerror = reject;
-            img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${tx}/${ty}.png`;
+            
+            // Choose tile source based on selection
+            if (elevSource === 'srtm') {
+              img.src = `https://s3.amazonaws.com/elevation-tiles-prod/skadi/${zoom}/${tx}/${ty}.png`;
+            } else {
+              img.src = `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${zoom}/${tx}/${ty}.png`;
+            }
           });
         }
       }
@@ -174,9 +248,20 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       const rawData = sCtx.getImageData(cropX, cropY, cropW, cropH).data;
 
       const elevations = new Float32Array(cropW * cropH);
-      for (let i = 0; i < cropW * cropH; i++) {
-        const si = i * 4;
-        elevations[i] = rawData[si] * 256 + rawData[si+1] + rawData[si+2] / 256 - 32768;
+      
+      // Decode elevation based on source format
+      if (elevSource === 'srtm') {
+        // SRTM format: RGB encoding where elevation = (R * 256 + G + B / 256) - 32768
+        for (let i = 0; i < cropW * cropH; i++) {
+          const si = i * 4;
+          elevations[i] = rawData[si] * 256 + rawData[si+1] + rawData[si+2] / 256 - 32768;
+        }
+      } else {
+        // Terrarium format: same encoding
+        for (let i = 0; i < cropW * cropH; i++) {
+          const si = i * 4;
+          elevations[i] = rawData[si] * 256 + rawData[si+1] + rawData[si+2] / 256 - 32768;
+        }
       }
 
       let maxE = 1;
@@ -291,9 +376,9 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           console.warn('[GIS] relation query failed:', relErr.message);
         }
 
-        function drawWaterOverlay(baseImgData) {
+        function drawWaterOverlay(baseImgData, includeRivers = true) {
           tmpCtx.putImageData(baseImgData, 0, 0);
-          if (elements.length === 0) return;
+          if (!includeRivers || elements.length === 0) return;
 
           function latToMercY(lat) {
             const r = lat * Math.PI / 180;
@@ -342,26 +427,45 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           gisStatus.textContent = `Loading: Drew ${drawnWater} water bodies, ${drawnRivers} rivers, finalizing…`;
         }
 
-        drawWaterOverlay(imgData);
+        // Store OSM rivers data for paint editor (only if checkbox is checked)
+        const shouldLoadRivers = loadRiversCheckbox?.checked !== false;
+        const osmRiversData = shouldLoadRivers ? {
+          elements,
+          bounds: { north, south, west, east, cropW, cropH },
+          scale: { tw, th }
+        } : null;
+
+        drawWaterOverlay(imgData, shouldLoadRivers);
 
         // Wire sea level slider to redraw with water overlay
         sliderSeaLevel.onchange = () => {
           const seaLevel = parseInt(sliderSeaLevel.value);
           valSeaLevel.textContent = seaLevel;
           const newImgData = buildElevationImageData(seaLevel);
-          drawWaterOverlay(newImgData);
-          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+          drawWaterOverlay(newImgData, shouldLoadRivers);
+          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
         };
 
-        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
-        gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
+        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
+        const riversMsg = shouldLoadRivers ? ' with rivers' : '';
+        gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})${riversMsg}`;
         gisLoadBtn.disabled = false;
         gisLoadBtn.textContent = 'Load elevation';
         closeGisModal();
       }
 
       try {
-        await loadWaterFeatures();
+        const shouldLoadRivers = loadRiversCheckbox?.checked !== false;
+        if (shouldLoadRivers) {
+          await loadWaterFeatures();
+        } else {
+          // Skip rivers, just apply elevation data
+          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+          gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom}) — rivers skipped`;
+          gisLoadBtn.disabled = false;
+          gisLoadBtn.textContent = 'Load elevation';
+          closeGisModal();
+        }
       } catch (riverErr) {
         console.warn('[GIS] water features error:', riverErr);
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
@@ -377,7 +481,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     }
   });
 
-  function _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom) {
+  function _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData = null) {
     srcCanvas.width = tw; srcCanvas.height = th;
     const ctx = srcCanvas.getContext('2d');
     ctx.drawImage(tmpC, 0, 0, tw, th);
@@ -388,6 +492,9 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     fileNameEl.style.display = 'block';
     setAiMask(null);
     setGisMode(true);
+    if (setOsmRivers && osmRiversData) {
+      setOsmRivers(osmRiversData);
+    }
     scheduleRender(imageData);
   }
 }

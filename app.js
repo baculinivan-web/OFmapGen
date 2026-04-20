@@ -48,6 +48,7 @@ let currentAlgo  = 'smooth';
 let aiMask       = null;
 let srcImageData = null;
 let rafId        = null;
+let osmRiversData = null;
 let isGisSource  = false;
 let eyedropperMode = false;
 let brightnessData = null; // Stores brightness values for nation placement validation
@@ -254,6 +255,10 @@ worker.onmessage = ({ data }) => {
   downloadBtn.disabled = false;
   downloadSrcBtn.disabled = false;
   enableNationBtn();
+  
+  // Reset painter after outCanvas is updated
+  if (painter && painter.reset) painter.reset();
+  
   if (pendingRender) { worker.postMessage(...pendingRender); pendingRender = null; }
   
   // Open editor if requested (after blank map creation)
@@ -1053,6 +1058,7 @@ try {
       downloadSrcBtn.disabled = false;
       enableNationBtn();
     },
+    getOsmRivers: () => osmRiversData,
   });
 } catch(e) {
   console.error('[app] initPaint failed:', e);
@@ -1069,6 +1075,7 @@ initGis({
   clampedSize,
   setGisMode,
   scheduleRender,
+  setOsmRivers: v => { osmRiversData = v; },
 });
 
 // ── Blank map modal ───────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@ index.html        — Single page app shell, all DOM markup, CDN script tags
 style.css         — All styles; uses CSS custom properties (defined in :root)
 app.js            — Main ES module: UI state, file loading, AI segmentation, download logic
 gis.js            — GIS modal module: Leaflet map, bbox selection, elevation tile fetching, river overlay
-paint.js          — Paint editor module: terrain painting, brush system, river creation tool
+paint.js          — Paint editor module: terrain painting, brush system, river creation tool, undo/redo system
 rivers.js         — River generation module: path algorithms, windiness, Catmull-Rom smoothing
 myb-engine.js     — MyPaint brush engine for custom brush rendering
 worker.js         — Web Worker: pixel classification and smoothing algorithms (no imports)
@@ -44,3 +44,12 @@ docker-compose.yml — Maps container port 80 → host port 3000
 - Catmull-Rom spline interpolation smooths the final path
 - Rivers are rendered with the same color as water terrain
 - River layer is composited onto the main canvas when applying changes
+
+## Undo/Redo System
+
+- Full undo/redo support for all paint editor actions (painting, fill, rivers, layers, jagged edges)
+- History stack limited to 50 steps to manage memory usage
+- State captured includes: all layer canvases (as ImageData), layer properties, rivers data, current layer selection
+- Undo/Redo triggered via buttons or keyboard shortcuts (Ctrl+Z / Ctrl+Shift+Z)
+- History cleared when opening paint modal or resetting
+- For slider adjustments (intensity, scale, etc.), undo state saved only on final value (mouseup/change event) to avoid cluttering history

@@ -322,8 +322,15 @@ footer a:hover { color: var(--text); }
 .layer-item {
   display: flex; align-items: center; gap: 4px;
   padding: 6px 8px; border-radius: 4px;
-  cursor: pointer; transition: background 0.15s;
+  cursor: pointer; transition: all 0.15s;
   margin-bottom: 2px;
+  border: 1px solid transparent;
+}
+.layer-item[draggable="true"] {
+  cursor: grab;
+}
+.layer-item[draggable="true"]:active {
+  cursor: grabbing;
 }
 .layer-item:hover {
   background: var(--accent-dim);
@@ -352,6 +359,14 @@ footer a:hover { color: var(--text); }
 #paintLayersList::-webkit-scrollbar { width: 4px; }
 #paintLayersList::-webkit-scrollbar-track { background: transparent; }
 #paintLayersList::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* Layers sidebar resize handle */
+#paintLayersResizeHandle {
+  transition: background 0.15s;
+}
+#paintLayersResizeHandle:hover {
+  background: var(--accent) !important;
+}
 
 .paint-brush-btn {
   display: flex; align-items: center; gap: 7px;

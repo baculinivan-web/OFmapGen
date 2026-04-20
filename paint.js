@@ -144,7 +144,7 @@ class VoronoiNoise {
   }
 }
 
-export function initPaint({ outCanvas, onPaintApplied }) {
+export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
 
   console.log('[paint] initPaint() called - module loaded');
 
@@ -214,11 +214,52 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedDepth = document.getElementById('paintJaggedDepth');
   const jaggedDepthVal = document.getElementById('paintJaggedDepthVal');
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
+  const layersSidebar = document.getElementById('paintLayersSidebar');
+  const layersResizeHandle = document.getElementById('paintLayersResizeHandle');
+  const undoSettingsBtn = document.getElementById('paintUndoSettingsBtn');
+  const undoSettingsModal = document.getElementById('paintUndoSettingsModal');
+  const undoSettingsModalClose = document.getElementById('paintUndoSettingsModalClose');
+  const undoLimitInputModal = document.getElementById('paintUndoLimitModal');
+  const undoLimitInfoModal = document.getElementById('paintUndoLimitInfoModal');
+  const undoSettingsOkBtn = document.getElementById('paintUndoSettingsOkBtn');
+  const undoInfoModal = document.getElementById('paintUndoInfoModal');
+  const undoInfoOkBtn = document.getElementById('paintUndoInfoOkBtn');
 
   // Validate all required DOM elements
-  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList };
+  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList, undoSettingsBtn, undoSettingsModal, undoLimitInputModal, undoLimitInfoModal, undoInfoModal };
   for (const [name, el] of Object.entries(domRefs)) {
     if (!el) console.error(`[paint] DOM element not found: ${name}`);
+  }
+
+  // ── Sidebar resize ─────────────────────────────────────────────────────────
+  let isResizingSidebar = false;
+  let sidebarStartWidth = 280;
+  let resizeStartX = 0;
+  
+  if (layersResizeHandle) {
+    layersResizeHandle.addEventListener('mousedown', (e) => {
+      isResizingSidebar = true;
+      resizeStartX = e.clientX;
+      sidebarStartWidth = layersSidebar.offsetWidth;
+      document.body.style.cursor = 'ew-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+    
+    window.addEventListener('mousemove', (e) => {
+      if (!isResizingSidebar) return;
+      const delta = e.clientX - resizeStartX;
+      const newWidth = Math.max(200, Math.min(500, sidebarStartWidth + delta));
+      layersSidebar.style.width = newWidth + 'px';
+    });
+    
+    window.addEventListener('mouseup', () => {
+      if (isResizingSidebar) {
+        isResizingSidebar = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    });
   }
 
   // Zoom button handlers (buttons may not exist in older HTML, guard with ?)
@@ -242,6 +283,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let cancelRiversData = null;
   let cancelLayersData = null;
   let hasChanges = false; // Track if any changes were made
+  
+  // ── Undo / Redo state ──────────────────────────────────────────────────────
+  let undoStack = [];
+  let redoStack = [];
+  let userUndoLimit = 50; // User-configurable limit
 
   // ── Zoom / Pan state ───────────────────────────────────────────────────────
   let zoomLevel = 1;
@@ -433,52 +479,296 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     e.target.value = ''; // reset input
   });
 
-  // ── Undo / Redo ────────────────────────────────────────────────────────────
-  const MAX_HISTORY = 30;
-  let undoStack = [];
-  let redoStack = [];
-
-  function saveHistory() {
-    const pc = paintCanvas.getContext('2d');
-    undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
-    if (undoStack.length > MAX_HISTORY) undoStack.shift();
-    redoStack = [];
-    hasChanges = true; // Mark that changes were made
+  // ── Undo / Redo System ────────────────────────────────────────────────────
+  
+  // Calculate safe max undo steps based on canvas size and layer count
+  function getMaxUndoSteps(width, height, layerCount) {
+    // Estimate memory per state: width * height * 4 bytes (RGBA) * layerCount
+    const bytesPerState = width * height * 4 * layerCount;
+    const mbPerState = bytesPerState / (1024 * 1024);
     
-    // Clear jagged edges cache for current layer since content changed
-    const layer = paintLayers.find(l => l.id === currentLayerId);
-    if (layer) {
-      for (const key of jaggedCache.keys()) {
-        if (key.startsWith(`${layer.id}-`)) {
-          jaggedCache.delete(key);
-        }
+    // Target max memory usage: 100MB for undo history
+    const targetMemoryMB = 100;
+    const recommendedSteps = Math.floor(targetMemoryMB / mbPerState);
+    
+    // Clamp between 5 and 100 steps
+    return Math.max(5, Math.min(100, recommendedSteps));
+  }
+  
+  function updateUndoLimitInfo() {
+    if (paintLayers.length === 0) return;
+    
+    const maxWidth = Math.max(...paintLayers.map(l => l.canvas.width));
+    const maxHeight = Math.max(...paintLayers.map(l => l.canvas.height));
+    const recommended = getMaxUndoSteps(maxWidth, maxHeight, paintLayers.length);
+    const bytesPerState = maxWidth * maxHeight * 4 * paintLayers.length;
+    const mbPerState = (bytesPerState / (1024 * 1024)).toFixed(1);
+    // Estimate ~60% compression with PNG
+    const compressedMbPerState = (mbPerState * 0.4).toFixed(1);
+    const totalMB = (compressedMbPerState * userUndoLimit).toFixed(1);
+    
+    let text = `${maxWidth}×${maxHeight}, ${paintLayers.length} layer${paintLayers.length > 1 ? 's' : ''} · ~${compressedMbPerState} MB/step (compressed), ${totalMB} MB total`;
+    
+    if (userUndoLimit > recommended * 2) { // More lenient with compression
+      text += ` · ⚠️ Recommended: ≤${recommended * 2} steps`;
+      if (undoLimitInfoModal) {
+        undoLimitInfoModal.style.color = 'var(--warning, orange)';
+      }
+    } else {
+      if (undoLimitInfoModal) {
+        undoLimitInfoModal.style.color = 'var(--muted)';
       }
     }
+    
+    if (undoLimitInfoModal) {
+      undoLimitInfoModal.textContent = text;
+    }
+  }
+
+  // Compress ImageData to Blob for efficient storage
+  async function compressImageData(imageData) {
+    return new Promise((resolve) => {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imageData.width;
+      tempCanvas.height = imageData.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.putImageData(imageData, 0, 0);
+      
+      // Use PNG compression (lossless, ~50-70% size reduction for typical paint data)
+      tempCanvas.toBlob((blob) => {
+        resolve(blob);
+      }, 'image/png');
+    });
+  }
+
+  // Decompress Blob back to ImageData
+  async function decompressBlob(blob, width, height) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0);
+        resolve(tempCtx.getImageData(0, 0, width, height));
+      };
+      img.src = URL.createObjectURL(blob);
+    });
+  }
+
+  async function captureState() {
+    const layersData = [];
+    
+    // Compress each layer's ImageData
+    for (const l of paintLayers) {
+      const imageData = l.canvas.getContext('2d').getImageData(0, 0, l.canvas.width, l.canvas.height);
+      const blob = await compressImageData(imageData);
+      
+      layersData.push({
+        id: l.id,
+        name: l.name,
+        visible: l.visible,
+        locked: l.locked,
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : null,
+        width: l.canvas.width,
+        height: l.canvas.height,
+        compressedData: blob
+      });
+    }
+    
+    return {
+      layers: layersData,
+      rivers: JSON.parse(JSON.stringify(riverLayer.export())),
+      currentLayerId: currentLayerId,
+      layerIdCounter: layerIdCounter
+    };
+  }
+
+  async function restoreState(state) {
+    // Restore layers
+    const restoredLayers = [];
+    
+    for (const l of state.layers) {
+      const layer = {
+        id: l.id,
+        name: l.name,
+        visible: l.visible,
+        locked: l.locked,
+        jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : null,
+        canvas: document.createElement('canvas')
+      };
+      layer.canvas.width = l.width;
+      layer.canvas.height = l.height;
+      
+      // Decompress blob back to ImageData
+      const imageData = await decompressBlob(l.compressedData, l.width, l.height);
+      layer.canvas.getContext('2d').putImageData(imageData, 0, 0);
+      
+      restoredLayers.push(layer);
+    }
+    
+    paintLayers = restoredLayers;
+    
+    // Restore rivers
+    riverLayer.import(state.rivers);
+    
+    // Restore current layer
+    currentLayerId = state.currentLayerId;
+    
+    // Restore layer ID counter to prevent ID collisions
+    if (state.layerIdCounter !== undefined) {
+      layerIdCounter = state.layerIdCounter;
+    }
+    
+    // Clear jagged edges cache since layers changed
+    jaggedCache.clear();
+    
+    updateLayersList();
+    redraw();
+  }
+
+  async function pushUndo() {
+    const state = await captureState();
+    undoStack.push(state);
+    
+    console.log('[undo] pushUndo called, stack size:', undoStack.length);
+    
+    // Use user-configured limit
+    const maxSteps = userUndoLimit;
+    
+    // Trim stack if needed
+    while (undoStack.length > maxSteps) {
+      undoStack.shift();
+      console.log('[undo] Trimmed stack, new size:', undoStack.length);
+    }
+    
+    // Clear redo stack on new action
+    redoStack = [];
     
     updateUndoRedoBtns();
   }
 
-  function undo() {
-    if (!undoStack.length) return;
-    const pc = paintCanvas.getContext('2d');
-    redoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
-    pc.putImageData(undoStack.pop(), 0, 0);
-    redraw(); updateUndoRedoBtns();
+  async function undo() {
+    console.log('[undo] undo called, stack size:', undoStack.length);
+    if (undoStack.length === 0) return;
+    
+    // Save current state to redo stack
+    redoStack.push(await captureState());
+    
+    // Restore previous state
+    const state = undoStack.pop();
+    console.log('[undo] Restoring state, remaining in stack:', undoStack.length);
+    await restoreState(state);
+    
+    hasChanges = true;
+    updateUndoRedoBtns();
   }
 
-  function redo() {
-    if (!redoStack.length) return;
-    const pc = paintCanvas.getContext('2d');
-    undoStack.push(pc.getImageData(0, 0, paintCanvas.width, paintCanvas.height));
-    pc.putImageData(redoStack.pop(), 0, 0);
-    redraw(); updateUndoRedoBtns();
+  async function redo() {
+    console.log('[undo] redo called, redo stack size:', redoStack.length);
+    if (redoStack.length === 0) return;
+    
+    // Save current state to undo stack
+    undoStack.push(await captureState());
+    
+    // Restore next state
+    const state = redoStack.pop();
+    console.log('[undo] Restoring redo state, remaining in redo stack:', redoStack.length);
+    await restoreState(state);
+    
+    hasChanges = true;
+    updateUndoRedoBtns();
   }
 
   function updateUndoRedoBtns() {
     undoBtn.disabled = undoStack.length === 0;
     redoBtn.disabled = redoStack.length === 0;
-    undoBtn.style.opacity = undoStack.length ? '1' : '0.35';
-    redoBtn.style.opacity = redoStack.length ? '1' : '0.35';
+    undoBtn.style.opacity = undoStack.length === 0 ? '0.35' : '1';
+    redoBtn.style.opacity = redoStack.length === 0 ? '0.35' : '1';
+  }
+
+  // ── Reset all paint state (call when a new map is loaded) ─────────────────
+  function reset() {
+    paintCanvas = null;
+    paintLayers = [];
+    currentLayerId = 0;
+    layerIdCounter = 1;
+    riverLayer = new RiverLayer();
+    riverCanvas = null;
+    riverMode = false;
+    fillMode = false;
+    selectedRiverId = null;
+    currentJaggedLayerId = null;
+    window.riverStartPoint = null; // Clear river start anchor
+    undoStack = [];
+    redoStack = [];
+    cancelSnapshot = null;
+    cancelRiverSnapshot = null;
+    cancelRiversData = null;
+    cancelLayersData = null;
+    hasChanges = false;
+    jaggedCache.clear(); // Clear jagged edges cache
+  }
+
+  // ── Draw OSM rivers to canvas ──────────────────────────────────────────────
+  function drawOsmRiversToCanvas(targetCanvas, osmData) {
+    const ctx = targetCanvas.getContext('2d');
+    const { elements, bounds, scale } = osmData;
+    const { north, south, west, east, cropW, cropH } = bounds;
+    const { tw, th } = scale;
+    
+    // Use same water color as river tool
+    const waterColor = TERRAIN_COLORS.water;
+    const waterRgb = `rgb(${waterColor[0]},${waterColor[1]},${waterColor[2]})`;
+    
+    function latToMercY(lat) {
+      const r = lat * Math.PI / 180;
+      return Math.log(Math.tan(Math.PI / 4 + r / 2));
+    }
+    const northY = latToMercY(north), southY = latToMercY(south);
+    
+    function drawGeomPath(geometry) {
+      if (!geometry || geometry.length < 2) return false;
+      ctx.beginPath();
+      geometry.forEach((pt, k) => {
+        const px = (pt.lon - west) / (east - west) * tw;
+        const py = (latToMercY(pt.lat) - northY) / (southY - northY) * th;
+        k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      });
+      return true;
+    }
+    
+    // Draw water bodies
+    ctx.fillStyle = waterRgb;
+    for (const el of elements) {
+      const isWaterBody = el.tags?.natural === 'water' || el.tags?.natural === 'wetland' ||
+                          el.tags?.natural === 'bay' || el.tags?.water;
+      if (!isWaterBody) continue;
+      if (el.type === 'way' && el.geometry) {
+        if (drawGeomPath(el.geometry)) { ctx.closePath(); ctx.fill(); }
+      } else if (el.type === 'relation' && el.members) {
+        for (const member of el.members) {
+          if ((member.role || '') === 'inner') continue;
+          if (!member.geometry || member.geometry.length < 3) continue;
+          if (drawGeomPath(member.geometry)) { ctx.closePath(); ctx.fill(); }
+        }
+      }
+    }
+    
+    // Draw rivers
+    ctx.strokeStyle = waterRgb;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const el of elements) {
+      if (el.type !== 'way') continue;
+      const wtype = el.tags?.waterway;
+      if (!wtype) continue;
+      ctx.lineWidth = wtype === 'river' ? 3 : wtype === 'canal' ? 2 : 1;
+      if (drawGeomPath(el.geometry)) { ctx.stroke(); }
+    }
+    
+    console.log(`[paint] Drew OSM rivers layer with ${elements.length} features`);
   }
 
   // ── Ensure paint canvas ────────────────────────────────────────────────────
@@ -486,8 +776,22 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (paintCanvas && paintCanvas.width === outCanvas.width && paintCanvas.height === outCanvas.height) {
       // Canvas exists, restore layers from it
       if (paintLayers.length === 0) {
-        // Create initial layer from existing paintCanvas
-        const layer = {
+        // Create base layer with original image
+        const baseLayer = {
+          id: layerIdCounter++,
+          name: 'Layer 0 (Base)',
+          canvas: document.createElement('canvas'),
+          visible: true,
+          locked: true,
+          jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
+        };
+        baseLayer.canvas.width = outCanvas.width;
+        baseLayer.canvas.height = outCanvas.height;
+        baseLayer.canvas.getContext('2d').drawImage(outCanvas, 0, 0);
+        paintLayers.push(baseLayer);
+        
+        // Create empty paint layer
+        const paintLayer = {
           id: layerIdCounter++,
           name: 'Layer 1',
           canvas: document.createElement('canvas'),
@@ -495,11 +799,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           locked: false,
           jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345 }
         };
-        layer.canvas.width = paintCanvas.width;
-        layer.canvas.height = paintCanvas.height;
-        layer.canvas.getContext('2d').drawImage(paintCanvas, 0, 0);
-        paintLayers.push(layer);
-        currentLayerId = layer.id;
+        paintLayer.canvas.width = paintCanvas.width;
+        paintLayer.canvas.height = paintCanvas.height;
+        paintLayer.canvas.getContext('2d').drawImage(paintCanvas, 0, 0);
+        paintLayers.push(paintLayer);
+        currentLayerId = paintLayer.id;
       }
       return;
     }
@@ -508,8 +812,25 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     paintCanvas.width  = outCanvas.width;
     paintCanvas.height = outCanvas.height;
     
-    // Create initial layer
-    const layer = {
+    // Clear any leftover layers from previous map
+    paintLayers = [];
+    
+    // Create base layer with original image (locked)
+    const baseLayer = {
+      id: layerIdCounter++,
+      name: 'Layer 0 (Base)',
+      canvas: document.createElement('canvas'),
+      visible: true,
+      locked: true,
+      jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
+    };
+    baseLayer.canvas.width = outCanvas.width;
+    baseLayer.canvas.height = outCanvas.height;
+    baseLayer.canvas.getContext('2d').drawImage(outCanvas, 0, 0);
+    paintLayers.push(baseLayer);
+    
+    // Create empty paint layer
+    const paintLayer = {
       id: layerIdCounter++,
       name: 'Layer 1',
       canvas: document.createElement('canvas'),
@@ -517,17 +838,34 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       locked: false,
       jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
     };
-    layer.canvas.width = outCanvas.width;
-    layer.canvas.height = outCanvas.height;
-    paintLayers.push(layer);
-    currentLayerId = layer.id;
+    paintLayer.canvas.width = outCanvas.width;
+    paintLayer.canvas.height = outCanvas.height;
+    paintLayers.push(paintLayer);
+    currentLayerId = paintLayer.id;
+    
+    // Create OSM rivers layer if data exists
+    const osmData = getOsmRivers?.();
+    if (osmData && osmData.elements && osmData.elements.length > 0) {
+      const osmLayer = {
+        id: layerIdCounter++,
+        name: 'OSM Rivers',
+        canvas: document.createElement('canvas'),
+        visible: true,
+        locked: false,
+        jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
+      };
+      osmLayer.canvas.width = outCanvas.width;
+      osmLayer.canvas.height = outCanvas.height;
+      
+      // Draw OSM rivers on this layer
+      drawOsmRiversToCanvas(osmLayer.canvas, osmData);
+      paintLayers.push(osmLayer);
+    }
     
     // Create river canvas
     riverCanvas = document.createElement('canvas');
     riverCanvas.width = outCanvas.width;
     riverCanvas.height = outCanvas.height;
-    
-    undoStack = []; redoStack = [];
   }
 
   // ── Fit / redraw ───────────────────────────────────────────────────────────
@@ -800,9 +1138,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function redraw() {
     if (!outCanvas.width) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(outCanvas, 0, 0);
     
-    // Composite all visible paint layers with jagged edges effect
+    // Composite all visible paint layers with jagged edges effect (respecting layer order and visibility)
     for (const layer of paintLayers) {
       if (layer.visible) {
         const layerCanvas = applyJaggedEdges(layer);
@@ -817,6 +1154,41 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       riverLayer.render(rCtx, WATER_COLOR, selectedRiverId);
       ctx.drawImage(riverCanvas, 0, 0);
     }
+  }
+  
+  // ── Update layer thumbnail ─────────────────────────────────────────────────
+  function updateLayerThumbnail(layerId) {
+    const layer = paintLayers.find(l => l.id === layerId);
+    if (!layer) return;
+    
+    const img = document.querySelector(`[data-layer-id="${layerId}"] img`);
+    if (!img) return;
+    
+    // Generate thumbnail
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = 32;
+    thumbCanvas.height = 32;
+    const thumbCtx = thumbCanvas.getContext('2d');
+    
+    // Scale layer canvas to thumbnail
+    const scale = Math.min(32 / layer.canvas.width, 32 / layer.canvas.height);
+    const w = layer.canvas.width * scale;
+    const h = layer.canvas.height * scale;
+    const x = (32 - w) / 2;
+    const y = (32 - h) / 2;
+    
+    // Checkerboard background for transparency
+    thumbCtx.fillStyle = '#fff';
+    thumbCtx.fillRect(0, 0, 32, 32);
+    thumbCtx.fillStyle = '#ddd';
+    for (let ty = 0; ty < 32; ty += 8) {
+      for (let tx = 0; tx < 32; tx += 8) {
+        if ((tx / 8 + ty / 8) % 2 === 0) thumbCtx.fillRect(tx, ty, 8, 8);
+      }
+    }
+    
+    thumbCtx.drawImage(layer.canvas, x, y, w, h);
+    img.src = thumbCanvas.toDataURL();
   }
 
   new ResizeObserver(() => { if (modal.classList.contains('open')) fitCanvas(); }).observe(mapArea);
@@ -917,10 +1289,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedCloseBtn?.addEventListener('click', closeJaggedEdgesPanel);
   
+  // Track if we need to capture state before slider change
+  let sliderChangeInProgress = false;
+  
   jaggedEnabled?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
+      pushUndo(); // Save state before change
       layer.jaggedEdges.enabled = jaggedEnabled.checked;
       updateLayersList();
       redraw();
@@ -931,6 +1307,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
     if (layer) {
+      pushUndo(); // Save state before change
       layer.jaggedEdges.algorithm = jaggedAlgorithm.value;
       redraw();
     }
@@ -942,9 +1319,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     if (layer) {
       const val = parseInt(jaggedSeed.value);
       if (!isNaN(val) && val >= 1) {
+        pushUndo(); // Save state before change
         layer.jaggedEdges.seed = val;
         redraw();
       }
+    }
+  });
+  
+  jaggedIntensity?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
     }
   });
   
@@ -959,6 +1344,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedIntensity?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -977,7 +1363,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedIntensityVal?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    pushUndo(); // Save state after manual input
     redraw();
+  });
+  
+  jaggedScale?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
   });
   
   jaggedScale?.addEventListener('input', () => {
@@ -991,6 +1385,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedScale?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -1009,7 +1404,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedScaleVal?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    pushUndo(); // Save state after manual input
     redraw();
+  });
+  
+  jaggedFrequency?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
   });
   
   jaggedFrequency?.addEventListener('input', () => {
@@ -1023,6 +1426,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedFrequency?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -1041,7 +1445,15 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedFrequencyVal?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    pushUndo(); // Save state after manual input
     redraw();
+  });
+  
+  jaggedDepth?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
   });
   
   jaggedDepth?.addEventListener('input', () => {
@@ -1055,6 +1467,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedDepth?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -1078,6 +1491,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedDepthVal?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
+    pushUndo(); // Save state after manual input
     redraw();
   });
 
@@ -1108,7 +1522,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       cancelRiversData = JSON.parse(JSON.stringify(riverLayer.export()));
     }
     
-    undoStack = []; redoStack = [];
+    undoStack = [];
+    redoStack = [];
     hasChanges = false;
     zoomLevel = 1; panX = 0; panY = 0;
     riverMode = false;
@@ -1120,8 +1535,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     closeJaggedEdgesPanel();
     updateUndoRedoBtns();
     updateLayersList();
+    
+    // Update undo limit info
+    updateUndoLimitInfo();
+    
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
+    
+    // Show info modal on first open
+    if (!localStorage.getItem('paintUndoInfoShown')) {
+      setTimeout(() => {
+        undoInfoModal?.classList.add('open');
+      }, 500);
+    }
     
     console.log('[paint] calling loadDefaultBrushes()...');
     loadDefaultBrushes();
@@ -1430,7 +1856,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   riverFinishBtn.addEventListener('click', () => {
     if (riverLayer.currentRiver) {
-      saveHistory();
+      pushUndo(); // Save state before finishing river
       riverLayer.finishRiver();
       hasChanges = true;
       selectedRiverId = null;
@@ -1438,7 +1864,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       redraw();
     } else if (selectedRiverId !== null) {
       // Finish editing existing river
-      saveHistory();
+      pushUndo(); // Save state before finishing edit
       hasChanges = true;
       selectedRiverId = null;
       updateLayersList();
@@ -1463,9 +1889,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Fill mode: flood fill on click
     if (fillMode) {
-      saveHistory();
+      pushUndo(); // Save state before fill
       floodFill(x, y);
       hasChanges = true;
+      updateLayerThumbnail(currentLayerId);
       redraw();
       return;
     }
@@ -1484,7 +1911,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               // Right click or Ctrl+click to delete point
               if (e.button === 2 || e.ctrlKey) {
                 if (river.controlPoints.length > 2) {
-                  saveHistory();
+                  pushUndo(); // Save state before deleting point
                   river.controlPoints.splice(i, 1);
                   river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
                   hasChanges = true;
@@ -1493,12 +1920,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
                 return;
               }
               // Start dragging this point
+              pushUndo(); // Save state before dragging
               draggingPointId = { riverId: selectedRiverId, pointIndex: i };
               return;
             }
           }
           // Not clicking on point, add new point
-          saveHistory();
+          pushUndo(); // Save state before adding point
           river.controlPoints.push({ x, y });
           river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
           hasChanges = true;
@@ -1517,19 +1945,24 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             // Right click or Ctrl+click to delete point
             if (e.button === 2 || e.ctrlKey) {
               if (riverLayer.currentRiver.controlPoints.length > 2) {
+                pushUndo(); // Save state before deleting point
                 riverLayer.currentRiver.controlPoints.splice(i, 1);
                 riverLayer.updateCurrentRiverPath();
+                hasChanges = true;
                 redraw();
               }
               return;
             }
             // Start dragging this point
+            pushUndo(); // Save state before dragging
             draggingPointId = { riverId: 'current', pointIndex: i };
             return;
           }
         }
         // Not clicking on point, add new point
+        pushUndo(); // Save state before adding point
         riverLayer.addControlPoint({ x, y });
+        hasChanges = true;
         updateLayersList();
         redraw();
         return;
@@ -1558,7 +1991,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
-    saveHistory();
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1568,6 +2000,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     } else {
       mybState = null;
     }
+    pushUndo(); // Save state before painting
     paintDot(x, y);
     redraw();
   });
@@ -1610,6 +2043,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     draggingPointId = null;
     if (isPaintingActive) {
       isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId); // Update thumbnail after painting
       redraw(); // Redraw with jagged edges applied
     }
   });
@@ -1619,6 +2053,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     draggingPointId = null;
     if (isPaintingActive) {
       isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId); // Update thumbnail after painting
       redraw(); // Redraw with jagged edges applied
     }
   });
@@ -1630,9 +2065,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Fill mode: flood fill on tap
     if (fillMode) {
-      saveHistory();
+      pushUndo(); // Save state before fill
       floodFill(x, y);
       hasChanges = true;
+      updateLayerThumbnail(currentLayerId);
       redraw();
       return;
     }
@@ -1666,7 +2102,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
     
     // Normal paint mode
-    saveHistory();
     painting = true;
     isPaintingActive = true; // Disable jagged edges during painting
     lastX = x; lastY = y;
@@ -1676,6 +2111,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     } else {
       mybState = null;
     }
+    pushUndo(); // Save state before painting
     paintDot(x, y);
     redraw();
   }, { passive: false });
@@ -1695,8 +2131,21 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   canvas.addEventListener('touchend', () => {
     painting = false;
     mybState = null;
+    draggingPointId = null;
     if (isPaintingActive) {
       isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId);
+      redraw(); // Redraw with jagged edges applied
+    }
+  });
+  
+  canvas.addEventListener('touchcancel', () => {
+    painting = false;
+    mybState = null;
+    draggingPointId = null;
+    if (isPaintingActive) {
+      isPaintingActive = false;
+      updateLayerThumbnail(currentLayerId);
       redraw(); // Redraw with jagged edges applied
     }
   });
@@ -1768,16 +2217,61 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     spacingVal.textContent = brushSpacing + '%';
   });
 
-  undoBtn.addEventListener('click', undo);
-  redoBtn.addEventListener('click', redo);
+  undoBtn.addEventListener('click', () => {
+    undo();
+  });
+  
+  redoBtn.addEventListener('click', () => {
+    redo();
+  });
+  
+  // Undo settings button
+  undoSettingsBtn?.addEventListener('click', () => {
+    if (undoLimitInputModal) {
+      undoLimitInputModal.value = userUndoLimit;
+    }
+    updateUndoLimitInfo();
+    undoSettingsModal?.classList.add('open');
+  });
+  
+  undoSettingsModalClose?.addEventListener('click', () => {
+    undoSettingsModal?.classList.remove('open');
+  });
+  
+  undoSettingsOkBtn?.addEventListener('click', () => {
+    undoSettingsModal?.classList.remove('open');
+  });
+  
+  // Undo limit control in modal
+  undoLimitInputModal?.addEventListener('change', () => {
+    const val = parseInt(undoLimitInputModal.value);
+    if (!isNaN(val) && val >= 5 && val <= 100) {
+      userUndoLimit = val;
+      console.log('[undo] User limit changed to:', userUndoLimit);
+      updateUndoLimitInfo();
+      
+      // Trim existing stack if new limit is lower
+      while (undoStack.length > userUndoLimit) {
+        undoStack.shift();
+      }
+      updateUndoRedoBtns();
+    }
+  });
+  
+  // Info modal handlers
+  undoInfoOkBtn?.addEventListener('click', () => {
+    undoInfoModal?.classList.remove('open');
+    localStorage.setItem('paintUndoInfoShown', 'true');
+  });
 
   clearBtn.addEventListener('click', () => {
     const layer = paintLayers.find(l => l.id === currentLayerId);
     if (!layer) return;
     if (!confirm(`Clear layer "${layer.name}"?`)) return;
-    saveHistory();
+    pushUndo(); // Save state before clearing
     layer.canvas.getContext('2d').clearRect(0, 0, layer.canvas.width, layer.canvas.height);
     hasChanges = true;
+    updateLayerThumbnail(currentLayerId);
     updateLayersList();
     redraw();
   });
@@ -1799,8 +2293,42 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       const layer = paintLayers[i];
       const isSelected = currentLayerId === layer.id;
       const jaggedActive = layer.jaggedEdges?.enabled ? 'active' : '';
+      
+      // Generate thumbnail
+      const thumbCanvas = document.createElement('canvas');
+      thumbCanvas.width = 32;
+      thumbCanvas.height = 32;
+      const thumbCtx = thumbCanvas.getContext('2d');
+      
+      // Scale layer canvas to thumbnail
+      const scale = Math.min(32 / layer.canvas.width, 32 / layer.canvas.height);
+      const w = layer.canvas.width * scale;
+      const h = layer.canvas.height * scale;
+      const x = (32 - w) / 2;
+      const y = (32 - h) / 2;
+      
+      // Checkerboard background for transparency
+      thumbCtx.fillStyle = '#fff';
+      thumbCtx.fillRect(0, 0, 32, 32);
+      thumbCtx.fillStyle = '#ddd';
+      for (let ty = 0; ty < 32; ty += 8) {
+        for (let tx = 0; tx < 32; tx += 8) {
+          if ((tx / 8 + ty / 8) % 2 === 0) thumbCtx.fillRect(tx, ty, 8, 8);
+        }
+      }
+      
+      thumbCtx.drawImage(layer.canvas, x, y, w, h);
+      const thumbUrl = thumbCanvas.toDataURL();
+      
       html += `
-        <div class="layer-item ${isSelected ? 'selected' : ''}" data-layer-id="${layer.id}" data-layer-type="paint">
+        <div class="layer-item ${isSelected ? 'selected' : ''}" 
+             data-layer-id="${layer.id}" 
+             data-layer-type="paint"
+             data-layer-index="${i}"
+             draggable="true">
+          <img src="${thumbUrl}" 
+               style="width:32px;height:32px;border-radius:3px;border:1px solid var(--border);flex-shrink:0;" 
+               alt="Layer preview">
           <button class="layer-btn layer-visibility-btn" data-layer-id="${layer.id}" title="${layer.visible ? 'Hide' : 'Show'}">
             ${layer.visible ? 
               '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>' :
@@ -1808,9 +2336,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             }
           </button>
           <div style="flex:1;display:flex;align-items:center;gap:6px;cursor:pointer;" class="layer-select" data-layer-id="${layer.id}">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-            </svg>
             <span style="font-size:0.78rem;" id="layerName${layer.id}">${escapeHtml(layer.name)}</span>
             ${layer.locked ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>' : ''}
           </div>
@@ -1899,6 +2424,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Attach event listeners using event delegation
     attachLayerEventListeners();
+    attachDragAndDrop();
   }
   
   function attachLayerEventListeners() {
@@ -1910,7 +2436,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       el.addEventListener('click', () => {
         const layerId = parseInt(el.dataset.layerId);
         currentLayerId = layerId;
+        
+        // If jagged edges panel is open, switch to new layer's settings
+        if (jaggedPanel && jaggedPanel.style.display !== 'none' && currentJaggedLayerId !== null) {
+          openJaggedEdgesPanel(layerId);
+        }
+        
         updateLayersList();
+        updateUndoRedoBtns(); // Update undo/redo buttons for new layer
       });
     });
     
@@ -1921,6 +2454,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         const layerId = parseInt(el.dataset.layerId);
         const layer = paintLayers.find(l => l.id === layerId);
         if (layer) {
+          pushUndo(); // Save state before visibility change
           layer.visible = !layer.visible;
           updateLayersList();
           redraw();
@@ -1935,6 +2469,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         const layerId = parseInt(el.dataset.layerId);
         const layer = paintLayers.find(l => l.id === layerId);
         if (layer) {
+          pushUndo(); // Save state before lock change
           layer.locked = !layer.locked;
           updateLayersList();
         }
@@ -1946,7 +2481,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       el.addEventListener('click', (e) => {
         e.stopPropagation();
         const layerId = parseInt(el.dataset.layerId);
+        currentLayerId = layerId; // Switch to this layer
         openJaggedEdgesPanel(layerId);
+        updateLayersList(); // Update selection highlight
+        updateUndoRedoBtns(); // Update undo/redo buttons for new layer
       });
     });
     
@@ -1958,7 +2496,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         const layer = paintLayers.find(l => l.id === layerId);
         if (!layer) return;
         const newName = prompt('Enter new layer name:', layer.name);
-        if (newName && newName.trim()) {
+        if (newName && newName.trim() && newName.trim() !== layer.name) {
+          pushUndo(); // Save state before rename
           layer.name = newName.trim();
           updateLayersList();
         }
@@ -1972,7 +2511,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         if (paintLayers.length === 1) return;
         const layerId = parseInt(el.dataset.layerId);
         if (!confirm('Delete this layer?')) return;
-        saveHistory();
+        pushUndo(); // Save state before delete
         const idx = paintLayers.findIndex(l => l.id === layerId);
         if (idx !== -1) {
           paintLayers.splice(idx, 1);
@@ -2001,7 +2540,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         e.stopPropagation();
         const riverId = parseInt(el.dataset.riverId);
         if (!confirm('Delete this river?')) return;
-        saveHistory();
+        pushUndo(); // Save state before delete
         riverLayer.removeRiver(riverId);
         if (selectedRiverId === riverId) selectedRiverId = null;
         hasChanges = true;
@@ -2020,6 +2559,97 @@ export function initPaint({ outCanvas, onPaintApplied }) {
           }
         });
       }
+    });
+  }
+  
+  // ── Drag and drop for layer reordering ─────────────────────────────────────
+  let draggedLayerIndex = null;
+  let dragUndoCaptured = false;
+  
+  function attachDragAndDrop() {
+    const layerItems = layersList.querySelectorAll('.layer-item[draggable="true"]');
+    
+    console.log('[drag] attachDragAndDrop called, items:', layerItems.length);
+    
+    layerItems.forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        // data-layer-index already holds the model index
+        draggedLayerIndex = parseInt(item.dataset.layerIndex);
+        item.style.opacity = '0.4';
+        e.dataTransfer.effectAllowed = 'move';
+        
+        console.log('[drag] dragstart, index:', draggedLayerIndex, 'captured:', dragUndoCaptured);
+        
+        // Capture state before drag starts
+        if (!dragUndoCaptured) {
+          console.log('[drag] Capturing undo state before drag');
+          pushUndo();
+          dragUndoCaptured = true;
+        } else {
+          console.log('[drag] Skipping undo capture (already captured)');
+        }
+      });
+      
+      item.addEventListener('dragend', (e) => {
+        console.log('[drag] dragend, resetting state');
+        item.style.opacity = '1';
+        draggedLayerIndex = null;
+        dragUndoCaptured = false;
+        // Remove all drag-over styles
+        layerItems.forEach(i => i.style.borderTop = '');
+      });
+      
+      item.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        
+        if (draggedLayerIndex === null) return;
+        
+        const targetIndex = parseInt(item.dataset.layerIndex);
+        if (draggedLayerIndex === targetIndex) return;
+        
+        // Visual feedback
+        layerItems.forEach(i => i.style.borderTop = '');
+        item.style.borderTop = '2px solid var(--accent)';
+      });
+      
+      item.addEventListener('dragleave', (e) => {
+        item.style.borderTop = '';
+      });
+      
+      item.addEventListener('drop', (e) => {
+        e.preventDefault();
+        item.style.borderTop = '';
+        
+        if (draggedLayerIndex === null) return;
+        
+        const targetIndex = parseInt(item.dataset.layerIndex);
+        
+        console.log('[drag] drop, from:', draggedLayerIndex, 'to:', targetIndex);
+        
+        if (draggedLayerIndex === targetIndex) {
+          // No actual reorder, just reset flag
+          console.log('[drag] Same position, resetting flag');
+          dragUndoCaptured = false;
+          return;
+        }
+        
+        console.log('[drag] Reordering layers');
+        
+        // State already captured in dragstart, just reorder
+        const draggedLayer = paintLayers[draggedLayerIndex];
+        paintLayers.splice(draggedLayerIndex, 1);
+        paintLayers.splice(targetIndex, 0, draggedLayer);
+        
+        hasChanges = true;
+        
+        // Reset flag immediately after reorder so next drag captures new state
+        console.log('[drag] Resetting dragUndoCaptured flag after reorder');
+        dragUndoCaptured = false;
+        
+        updateLayersList();
+        redraw();
+      });
     });
   }
   
@@ -2052,7 +2682,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function addNewLayerFunc() {
-    saveHistory();
+    pushUndo(); // Save state before adding layer
     const layer = {
       id: layerIdCounter++,
       name: `Layer ${layerIdCounter}`,
@@ -2067,6 +2697,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     currentLayerId = layer.id;
     hasChanges = true;
     updateLayersList();
+    updateUndoRedoBtns();
   }
   
   // Expose addNewLayer globally for the + button
@@ -2079,6 +2710,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function applyAndClose() {
+    // Finish any river being edited
+    if (riverLayer.currentRiver) {
+      riverLayer.finishRiver();
+    }
+    
     // Composite all layers to paintCanvas (with jagged edges applied)
     const pc = paintCanvas.getContext('2d');
     pc.clearRect(0, 0, paintCanvas.width, paintCanvas.height);
@@ -2092,7 +2728,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Apply to outCanvas
     outCanvas.getContext('2d').drawImage(paintCanvas, 0, 0);
     
-    // Apply rivers
+    // Apply rivers (without control points since selectedRiverId is not passed)
     if (riverCanvas) {
       const rCtx = riverCanvas.getContext('2d');
       rCtx.clearRect(0, 0, riverCanvas.width, riverCanvas.height);
@@ -2158,5 +2794,5 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   cancelBtn.addEventListener('click', cancelAndClose);
   closeBtn.addEventListener('click',  cancelAndClose);
 
-  return { open };
+  return { open, reset };
 }

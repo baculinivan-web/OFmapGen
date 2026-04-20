@@ -6,9 +6,13 @@ A browser-based tool that converts images or real-world elevation data into play
 
 - Upload any image (PNG/JPG/WebP) and map brightness to terrain zones
 - Import real-world elevation data by drawing a bounding box on a Leaflet map
+- Choose between Terrarium (AWS) or SRTM v3.0 (NASA) elevation sources
+- Select resolution (zoom level) from 8 to 14 for custom detail level
 - Three processing algorithms: Legacy (pixel-perfect), Smooth (noise removal), Advanced (AI segmentation via ONNX u2netp model)
 - Paint terrain directly on the map with customizable brushes
 - Create realistic winding rivers with adjustable curvature
+- Full undo/redo support for all editing actions (Ctrl+Z / Ctrl+Shift+Z)
+- Layer system with visibility, locking, reordering, and jagged edges effects
 - Export as visual preview PNG or OpenFront-compatible source PNG (specific color palette)
 - Python desktop GUI alternative (`image_to_map.py`) using tkinter + Pillow
 
@@ -37,7 +41,9 @@ Rivers are automatically generated with natural curves using multi-frequency noi
 
 ## External Data Sources
 
-- Elevation tiles: AWS Terrarium (`s3.amazonaws.com/elevation-tiles-prod/terrarium/`)
+- Elevation tiles: 
+  - Terrarium (Mapzen) — ~30m resolution at equator, global coverage including bathymetry
+  - NASA SRTM v3.0 — ~30m resolution at equator, global coverage
 - Rivers: OpenStreetMap Overpass API
 - Map tiles: CartoDB Voyager via Leaflet
 
