@@ -376,9 +376,9 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           console.warn('[GIS] relation query failed:', relErr.message);
         }
 
-        function drawWaterOverlay(baseImgData) {
+        function drawWaterOverlay(baseImgData, includeRivers = true) {
           tmpCtx.putImageData(baseImgData, 0, 0);
-          if (elements.length === 0) return;
+          if (!includeRivers || elements.length === 0) return;
 
           function latToMercY(lat) {
             const r = lat * Math.PI / 180;
@@ -427,26 +427,28 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           gisStatus.textContent = `Loading: Drew ${drawnWater} water bodies, ${drawnRivers} rivers, finalizing…`;
         }
 
-        // Store OSM rivers data for paint editor
-        const osmRiversData = {
+        // Store OSM rivers data for paint editor (only if checkbox is checked)
+        const shouldLoadRivers = loadRiversCheckbox?.checked !== false;
+        const osmRiversData = shouldLoadRivers ? {
           elements,
           bounds: { north, south, west, east, cropW, cropH },
           scale: { tw, th }
-        };
+        } : null;
 
-        drawWaterOverlay(imgData);
+        drawWaterOverlay(imgData, shouldLoadRivers);
 
         // Wire sea level slider to redraw with water overlay
         sliderSeaLevel.onchange = () => {
           const seaLevel = parseInt(sliderSeaLevel.value);
           valSeaLevel.textContent = seaLevel;
           const newImgData = buildElevationImageData(seaLevel);
-          drawWaterOverlay(newImgData);
+          drawWaterOverlay(newImgData, shouldLoadRivers);
           _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
         };
 
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
-        gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
+        const riversMsg = shouldLoadRivers ? ' with rivers' : '';
+        gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})${riversMsg}`;
         gisLoadBtn.disabled = false;
         gisLoadBtn.textContent = 'Load elevation';
         closeGisModal();
