@@ -223,6 +223,29 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
+    <div style="padding: 12px 20px; background: var(--surface2); border-bottom: 1px solid var(--border);">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+        <label style="font-size: 0.82rem; color: var(--muted); font-weight: 500;">Elevation source:</label>
+        <select id="elevSource" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; cursor: pointer;">
+          <option value="terrarium">Terrarium (Mapzen) — ~30m resolution</option>
+          <option value="srtm">SRTM v3.0 (NASA) — ~30m resolution</option>
+        </select>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <label style="font-size: 0.82rem; color: var(--muted); font-weight: 500;">Resolution:</label>
+        <select id="elevZoom" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; cursor: pointer;">
+          <option value="auto">Auto (optimal)</option>
+          <option value="8">Zoom 8 — ~600m/px</option>
+          <option value="9">Zoom 9 — ~300m/px</option>
+          <option value="10">Zoom 10 — ~150m/px</option>
+          <option value="11">Zoom 11 — ~75m/px</option>
+          <option value="12">Zoom 12 — ~40m/px</option>
+          <option value="13">Zoom 13 — ~20m/px</option>
+          <option value="14">Zoom 14 — ~10m/px</option>
+        </select>
+        <span id="elevZoomInfo" style="font-size: 0.72rem; color: var(--muted); margin-left: auto;"></span>
+      </div>
+    </div>
     <div id="gisMap"></div>
     <div class="modal-footer">
       <span id="gisStatus">Draw a rectangle to select a region</span>
