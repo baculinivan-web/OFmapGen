@@ -499,10 +499,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const mbPerState = (bytesPerState / (1024 * 1024)).toFixed(1);
     const totalMB = (mbPerState * userUndoLimit).toFixed(1);
     
-    let text = `Memory: ${mbPerState} MB per step, ${totalMB} MB total`;
+    let text = `${maxWidth}×${maxHeight}, ${paintLayers.length} layer${paintLayers.length > 1 ? 's' : ''} · ${mbPerState} MB/step, ${totalMB} MB total`;
     
     if (userUndoLimit > recommended) {
-      text += ` · Recommended: ${recommended} steps or less`;
+      text += ` · ⚠️ Recommended: ≤${recommended} steps`;
       undoLimitInfo.style.color = 'var(--warning, orange)';
     } else {
       undoLimitInfo.style.color = 'var(--muted)';
