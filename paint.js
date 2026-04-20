@@ -144,7 +144,7 @@ class VoronoiNoise {
   }
 }
 
-export function initPaint({ outCanvas, onPaintApplied }) {
+export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
 
   console.log('[paint] initPaint() called - module loaded');
 
@@ -711,6 +711,62 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     jaggedCache.clear(); // Clear jagged edges cache
   }
 
+  // ── Draw OSM rivers to canvas ──────────────────────────────────────────────
+  function drawOsmRiversToCanvas(targetCanvas, osmData) {
+    const ctx = targetCanvas.getContext('2d');
+    const { elements, bounds, scale } = osmData;
+    const { north, south, west, east, cropW, cropH } = bounds;
+    const { tw, th } = scale;
+    
+    function latToMercY(lat) {
+      const r = lat * Math.PI / 180;
+      return Math.log(Math.tan(Math.PI / 4 + r / 2));
+    }
+    const northY = latToMercY(north), southY = latToMercY(south);
+    
+    function drawGeomPath(geometry) {
+      if (!geometry || geometry.length < 2) return false;
+      ctx.beginPath();
+      geometry.forEach((pt, k) => {
+        const px = (pt.lon - west) / (east - west) * tw;
+        const py = (latToMercY(pt.lat) - northY) / (southY - northY) * th;
+        k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      });
+      return true;
+    }
+    
+    // Draw water bodies
+    ctx.fillStyle = 'rgb(20,20,30)';
+    for (const el of elements) {
+      const isWaterBody = el.tags?.natural === 'water' || el.tags?.natural === 'wetland' ||
+                          el.tags?.natural === 'bay' || el.tags?.water;
+      if (!isWaterBody) continue;
+      if (el.type === 'way' && el.geometry) {
+        if (drawGeomPath(el.geometry)) { ctx.closePath(); ctx.fill(); }
+      } else if (el.type === 'relation' && el.members) {
+        for (const member of el.members) {
+          if ((member.role || '') === 'inner') continue;
+          if (!member.geometry || member.geometry.length < 3) continue;
+          if (drawGeomPath(member.geometry)) { ctx.closePath(); ctx.fill(); }
+        }
+      }
+    }
+    
+    // Draw rivers
+    ctx.strokeStyle = 'rgb(20,20,30)';
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (const el of elements) {
+      if (el.type !== 'way') continue;
+      const wtype = el.tags?.waterway;
+      if (!wtype) continue;
+      ctx.lineWidth = wtype === 'river' ? 3 : wtype === 'canal' ? 2 : 1;
+      if (drawGeomPath(el.geometry)) { ctx.stroke(); }
+    }
+    
+    console.log(`[paint] Drew OSM rivers layer with ${elements.length} features`);
+  }
+
   // ── Ensure paint canvas ────────────────────────────────────────────────────
   function ensurePaintCanvas() {
     if (paintCanvas && paintCanvas.width === outCanvas.width && paintCanvas.height === outCanvas.height) {
@@ -782,6 +838,25 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     paintLayer.canvas.height = outCanvas.height;
     paintLayers.push(paintLayer);
     currentLayerId = paintLayer.id;
+    
+    // Create OSM rivers layer if data exists
+    const osmData = getOsmRivers?.();
+    if (osmData && osmData.elements && osmData.elements.length > 0) {
+      const osmLayer = {
+        id: layerIdCounter++,
+        name: 'OSM Rivers',
+        canvas: document.createElement('canvas'),
+        visible: true,
+        locked: false,
+        jaggedEdges: { enabled: false, intensity: 8, frequency: 1.2, scale: 1.5, algorithm: 'fractal', seed: 12345, depth: 20 }
+      };
+      osmLayer.canvas.width = outCanvas.width;
+      osmLayer.canvas.height = outCanvas.height;
+      
+      // Draw OSM rivers on this layer
+      drawOsmRiversToCanvas(osmLayer.canvas, osmData);
+      paintLayers.push(osmLayer);
+    }
     
     // Create river canvas
     riverCanvas = document.createElement('canvas');

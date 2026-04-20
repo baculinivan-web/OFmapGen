@@ -3,7 +3,7 @@
 //   aiMask, clampedSize, setGisMode, scheduleRender
 
 export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, setAiMask,
-                           clampedSize, setGisMode, scheduleRender }) {
+                           clampedSize, setGisMode, scheduleRender, setOsmRivers }) {
 
   const fromMapBtn    = document.getElementById('fromMapBtn');
   const gisModal      = document.getElementById('gisModal');
@@ -427,6 +427,13 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           gisStatus.textContent = `Loading: Drew ${drawnWater} water bodies, ${drawnRivers} rivers, finalizing…`;
         }
 
+        // Store OSM rivers data for paint editor
+        const osmRiversData = {
+          elements,
+          bounds: { north, south, west, east, cropW, cropH },
+          scale: { tw, th }
+        };
+
         drawWaterOverlay(imgData);
 
         // Wire sea level slider to redraw with water overlay
@@ -435,10 +442,10 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
           valSeaLevel.textContent = seaLevel;
           const newImgData = buildElevationImageData(seaLevel);
           drawWaterOverlay(newImgData);
-          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
         };
 
-        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
         gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom})`;
         gisLoadBtn.disabled = false;
         gisLoadBtn.textContent = 'Load elevation';
@@ -472,7 +479,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     }
   });
 
-  function _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom) {
+  function _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData = null) {
     srcCanvas.width = tw; srcCanvas.height = th;
     const ctx = srcCanvas.getContext('2d');
     ctx.drawImage(tmpC, 0, 0, tw, th);
@@ -483,6 +490,9 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     fileNameEl.style.display = 'block';
     setAiMask(null);
     setGisMode(true);
+    if (setOsmRivers && osmRiversData) {
+      setOsmRivers(osmRiversData);
+    }
     scheduleRender(imageData);
   }
 }
