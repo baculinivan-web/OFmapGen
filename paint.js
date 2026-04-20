@@ -497,12 +497,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const recommended = getMaxUndoSteps(maxWidth, maxHeight, paintLayers.length);
     const bytesPerState = maxWidth * maxHeight * 4 * paintLayers.length;
     const mbPerState = (bytesPerState / (1024 * 1024)).toFixed(1);
-    const totalMB = (mbPerState * userUndoLimit).toFixed(1);
+    // Estimate ~60% compression with PNG
+    const compressedMbPerState = (mbPerState * 0.4).toFixed(1);
+    const totalMB = (compressedMbPerState * userUndoLimit).toFixed(1);
     
-    let text = `${maxWidth}×${maxHeight}, ${paintLayers.length} layer${paintLayers.length > 1 ? 's' : ''} · ${mbPerState} MB/step, ${totalMB} MB total`;
+    let text = `${maxWidth}×${maxHeight}, ${paintLayers.length} layer${paintLayers.length > 1 ? 's' : ''} · ~${compressedMbPerState} MB/step (compressed), ${totalMB} MB total`;
     
-    if (userUndoLimit > recommended) {
-      text += ` · ⚠️ Recommended: ≤${recommended} steps`;
+    if (userUndoLimit > recommended * 2) { // More lenient with compression
+      text += ` · ⚠️ Recommended: ≤${recommended * 2} steps`;
       undoLimitInfo.style.color = 'var(--warning, orange)';
     } else {
       undoLimitInfo.style.color = 'var(--muted)';
@@ -511,25 +513,71 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     undoLimitInfo.textContent = text;
   }
 
-  function captureState() {
-    return {
-      layers: paintLayers.map(l => ({
+  // Compress ImageData to Blob for efficient storage
+  async function compressImageData(imageData) {
+    return new Promise((resolve) => {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = imageData.width;
+      tempCanvas.height = imageData.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.putImageData(imageData, 0, 0);
+      
+      // Use PNG compression (lossless, ~50-70% size reduction for typical paint data)
+      tempCanvas.toBlob((blob) => {
+        resolve(blob);
+      }, 'image/png');
+    });
+  }
+
+  // Decompress Blob back to ImageData
+  async function decompressBlob(blob, width, height) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = width;
+        tempCanvas.height = height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(img, 0, 0);
+        resolve(tempCtx.getImageData(0, 0, width, height));
+      };
+      img.src = URL.createObjectURL(blob);
+    });
+  }
+
+  async function captureState() {
+    const layersData = [];
+    
+    // Compress each layer's ImageData
+    for (const l of paintLayers) {
+      const imageData = l.canvas.getContext('2d').getImageData(0, 0, l.canvas.width, l.canvas.height);
+      const blob = await compressImageData(imageData);
+      
+      layersData.push({
         id: l.id,
         name: l.name,
         visible: l.visible,
         locked: l.locked,
         jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : null,
-        imageData: l.canvas.getContext('2d').getImageData(0, 0, l.canvas.width, l.canvas.height)
-      })),
+        width: l.canvas.width,
+        height: l.canvas.height,
+        compressedData: blob
+      });
+    }
+    
+    return {
+      layers: layersData,
       rivers: JSON.parse(JSON.stringify(riverLayer.export())),
       currentLayerId: currentLayerId,
       layerIdCounter: layerIdCounter
     };
   }
 
-  function restoreState(state) {
+  async function restoreState(state) {
     // Restore layers
-    paintLayers = state.layers.map(l => {
+    const restoredLayers = [];
+    
+    for (const l of state.layers) {
       const layer = {
         id: l.id,
         name: l.name,
@@ -538,11 +586,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         jaggedEdges: l.jaggedEdges ? { ...l.jaggedEdges } : null,
         canvas: document.createElement('canvas')
       };
-      layer.canvas.width = l.imageData.width;
-      layer.canvas.height = l.imageData.height;
-      layer.canvas.getContext('2d').putImageData(l.imageData, 0, 0);
-      return layer;
-    });
+      layer.canvas.width = l.width;
+      layer.canvas.height = l.height;
+      
+      // Decompress blob back to ImageData
+      const imageData = await decompressBlob(l.compressedData, l.width, l.height);
+      layer.canvas.getContext('2d').putImageData(imageData, 0, 0);
+      
+      restoredLayers.push(layer);
+    }
+    
+    paintLayers = restoredLayers;
     
     // Restore rivers
     riverLayer.import(state.rivers);
@@ -562,8 +616,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   }
 
-  function pushUndo() {
-    const state = captureState();
+  async function pushUndo() {
+    const state = await captureState();
     undoStack.push(state);
     
     console.log('[undo] pushUndo called, stack size:', undoStack.length);
@@ -583,33 +637,33 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     updateUndoRedoBtns();
   }
 
-  function undo() {
+  async function undo() {
     console.log('[undo] undo called, stack size:', undoStack.length);
     if (undoStack.length === 0) return;
     
     // Save current state to redo stack
-    redoStack.push(captureState());
+    redoStack.push(await captureState());
     
     // Restore previous state
     const state = undoStack.pop();
     console.log('[undo] Restoring state, remaining in stack:', undoStack.length);
-    restoreState(state);
+    await restoreState(state);
     
     hasChanges = true;
     updateUndoRedoBtns();
   }
 
-  function redo() {
+  async function redo() {
     console.log('[undo] redo called, redo stack size:', redoStack.length);
     if (redoStack.length === 0) return;
     
     // Save current state to undo stack
-    undoStack.push(captureState());
+    undoStack.push(await captureState());
     
     // Restore next state
     const state = redoStack.pop();
     console.log('[undo] Restoring redo state, remaining in redo stack:', redoStack.length);
-    restoreState(state);
+    await restoreState(state);
     
     hasChanges = true;
     updateUndoRedoBtns();
