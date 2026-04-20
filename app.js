@@ -29,6 +29,18 @@ const vals = {
   highland: document.getElementById('valHighland'),
 };
 
+const imageResModal = document.getElementById('imageResModal');
+const imageResOriginal = document.getElementById('imageResOriginal');
+const imageResConfirm = document.getElementById('imageResConfirm');
+const imageResCancel = document.getElementById('imageResCancel');
+const imageResHelp = document.getElementById('imageResHelp');
+const mapSizeGuideModal = document.getElementById('mapSizeGuideModal');
+const mapSizeGuideClose = document.getElementById('mapSizeGuideClose');
+
+let customImageResolution = 0; // 0 = auto
+let pendingImageFile = null;
+let pendingImageObject = null;
+
 const algoLegacyBtn   = document.getElementById('algoLegacy');
 const algoSmoothBtn   = document.getElementById('algoSmooth');
 const algoAdvancedBtn = document.getElementById('algoAdvanced');
@@ -194,7 +206,14 @@ runSegBtn.addEventListener('click', async () => {
 // ── File loading ──────────────────────────────────────────────────────────────
 const MIN_SIZE = 512, MAX_SIZE = 1024;
 
-export function clampedSize(w, h) {
+export function clampedSize(w, h, customSize = 0) {
+  if (customSize > 0) {
+    // Custom size: scale to match longest side
+    const long = Math.max(w, h);
+    const scale = customSize / long;
+    return [Math.round(w * scale), Math.round(h * scale)];
+  }
+  // Auto mode: clamp between MIN_SIZE and MAX_SIZE
   const long = Math.max(w, h);
   let scale = 1;
   if (long > MAX_SIZE) scale = MAX_SIZE / long;
@@ -203,39 +222,77 @@ export function clampedSize(w, h) {
 }
 
 dropZone.addEventListener('click', () => fileInput.click());
-fileInput.addEventListener('change', e => loadFile(e.target.files[0]));
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) showImageResModal(e.target.files[0]);
+});
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
   const file = e.dataTransfer.files[0];
-  if (file && file.type.startsWith('image/')) loadFile(file);
+  if (file && file.type.startsWith('image/')) showImageResModal(file);
 });
 
-function loadFile(file) {
-  if (!file) return;
-  const url = URL.createObjectURL(file);
+function showImageResModal(file) {
+  pendingImageFile = file;
   const img = new Image();
+  const url = URL.createObjectURL(file);
   img.onload = () => {
-    const [tw, th] = clampedSize(img.width, img.height);
-    srcCanvas.width = tw; srcCanvas.height = th;
-    const ctx = srcCanvas.getContext('2d');
-    ctx.drawImage(img, 0, 0, tw, th);
-    srcImageData = ctx.getImageData(0, 0, tw, th);
-    imgInfo.textContent = `${tw} × ${th}`;
-    fileNameEl.textContent = file.name;
-    fileNameEl.style.display = 'block';
-    aiMask = null;
-    brightnessData = null; // Reset brightness data on new file load
-    segStatus.textContent = '';
-    setGisMode(false);
-    eyedropperBtn.style.opacity = '';
-    eyedropperBtn.style.pointerEvents = '';
+    imageResOriginal.textContent = `${img.width} × ${img.height}px`;
+    pendingImageObject = img;
+    imageResModal.classList.add('open');
     URL.revokeObjectURL(url);
-    scheduleRender();
   };
   img.src = url;
+}
+
+imageResConfirm.addEventListener('click', () => {
+  const selected = document.querySelector('input[name="imageRes"]:checked');
+  customImageResolution = parseInt(selected.value);
+  imageResModal.classList.remove('open');
+  if (pendingImageObject) {
+    loadImageWithResolution(pendingImageObject, pendingImageFile.name);
+    pendingImageFile = null;
+    pendingImageObject = null;
+  }
+});
+
+imageResCancel.addEventListener('click', () => {
+  imageResModal.classList.remove('open');
+  pendingImageFile = null;
+  pendingImageObject = null;
+  fileInput.value = ''; // Reset file input
+});
+
+imageResHelp.addEventListener('click', () => {
+  mapSizeGuideModal.classList.add('open');
+});
+
+mapSizeGuideClose.addEventListener('click', () => {
+  mapSizeGuideModal.classList.remove('open');
+});
+
+mapSizeGuideModal.addEventListener('click', (e) => {
+  if (e.target === mapSizeGuideModal) mapSizeGuideModal.classList.remove('open');
+});
+
+function loadImageWithResolution(img, fileName) {
+  const [tw, th] = clampedSize(img.width, img.height, customImageResolution);
+  srcCanvas.width = tw; srcCanvas.height = th;
+  const ctx = srcCanvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, tw, th);
+  srcImageData = ctx.getImageData(0, 0, tw, th);
+  imgInfo.textContent = `${tw} × ${th}`;
+  fileNameEl.textContent = fileName;
+  fileNameEl.style.display = 'block';
+  aiMask = null;
+  brightnessData = null;
+  segStatus.textContent = '';
+  setGisMode(false);
+  eyedropperBtn.style.opacity = '';
+  eyedropperBtn.style.pointerEvents = '';
+  scheduleRender();
 }
 
 // ── Worker ────────────────────────────────────────────────────────────────────

@@ -5,9 +5,11 @@ A browser-based tool that converts images or real-world elevation data into play
 ## Core Features
 
 - Upload any image (PNG/JPG/WebP) and map brightness to terrain zones
+- Adjust map size with custom scaling (512px to 4096px) or auto mode — determines in-game map size
 - Import real-world elevation data by drawing a bounding box on a Leaflet map
 - Choose between Terrarium (AWS) or SRTM v3.0 (NASA) elevation sources
-- Select resolution (zoom level) from 8 to 14 for custom detail level
+- Select resolution (zoom level) from 3 to 14 for custom detail level (3=very low, 14=high detail)
+- Choose final map size for GIS imports (512px to 4096px on longest side)
 - Three processing algorithms: Legacy (pixel-perfect), Smooth (noise removal), Advanced (AI segmentation via ONNX u2netp model)
 - Paint terrain directly on the map with customizable brushes
 - Create realistic winding rivers with adjustable curvature
