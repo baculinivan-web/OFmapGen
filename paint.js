@@ -1568,9 +1568,21 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     const layer = paintLayers.find(l => l.id === currentLayerId);
     if (!layer || layer.locked) return;
     
+    const pc = layer.canvas.getContext('2d');
+    
+    // Eraser mode
+    if (currentTerrain === 'eraser') {
+      pc.globalCompositeOperation = 'destination-out';
+      pc.fillStyle = 'rgba(0,0,0,1)';
+      pc.beginPath();
+      pc.arc(px, py, brushSize, 0, Math.PI * 2);
+      pc.fill();
+      pc.globalCompositeOperation = 'source-over';
+      return;
+    }
+    
     const rgb = TERRAIN_COLORS[currentTerrain];
     const brush = brushCache[currentBrushId];
-    const pc = layer.canvas.getContext('2d');
     
     if (currentBrushId === 'solid') {
       pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
@@ -1588,9 +1600,28 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     const layer = paintLayers.find(l => l.id === currentLayerId);
     if (!layer || layer.locked) return;
     
+    const pc = layer.canvas.getContext('2d');
+    
+    // Eraser mode
+    if (currentTerrain === 'eraser') {
+      pc.globalCompositeOperation = 'destination-out';
+      pc.fillStyle = 'rgba(0,0,0,1)';
+      const dx = x1 - x0, dy = y1 - y0;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const steps = Math.max(1, Math.ceil(dist / (brushSize * 0.4)));
+      for (let i = 1; i <= steps; i++) {
+        const x = x0 + dx * (i / steps);
+        const y = y0 + dy * (i / steps);
+        pc.beginPath();
+        pc.arc(x, y, brushSize, 0, Math.PI * 2);
+        pc.fill();
+      }
+      pc.globalCompositeOperation = 'source-over';
+      return;
+    }
+    
     const rgb = TERRAIN_COLORS[currentTerrain];
     const brush = brushCache[currentBrushId];
-    const pc = layer.canvas.getContext('2d');
     
     if (currentBrushId === 'solid') {
       pc.fillStyle = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
@@ -1623,6 +1654,59 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     // Clamp coords
     px = Math.max(0, Math.min(w - 1, Math.round(px)));
     py = Math.max(0, Math.min(h - 1, Math.round(py)));
+    
+    // Eraser mode - fill with transparency
+    if (currentTerrain === 'eraser') {
+      // Get target color at click position from current layer
+      const layerData = pc.getImageData(0, 0, w, h);
+      const data = layerData.data;
+      
+      const idx = (py * w + px) * 4;
+      const targetR = data[idx];
+      const targetG = data[idx + 1];
+      const targetB = data[idx + 2];
+      const targetA = data[idx + 3];
+      
+      // Use typed array for visited
+      const visited = new Uint8Array(w * h);
+      
+      // Stack-based flood fill
+      const stack = [py * w + px];
+      
+      const colorTolerance = 30;
+      function colorMatch(i4) {
+        const dr = data[i4]     - targetR;
+        const dg = data[i4 + 1] - targetG;
+        const db = data[i4 + 2] - targetB;
+        const da = data[i4 + 3] - targetA;
+        return (dr * dr + dg * dg + db * db + da * da) <= colorTolerance * colorTolerance;
+      }
+      
+      while (stack.length > 0) {
+        const pos = stack.pop();
+        if (visited[pos]) continue;
+        
+        const x = pos % w;
+        const y = (pos - x) / w;
+        const i4 = pos * 4;
+        
+        if (!colorMatch(i4)) continue;
+        
+        visited[pos] = 1;
+        data[i4]     = 0;
+        data[i4 + 1] = 0;
+        data[i4 + 2] = 0;
+        data[i4 + 3] = 0; // Make transparent
+        
+        if (x + 1 < w)  stack.push(pos + 1);
+        if (x - 1 >= 0) stack.push(pos - 1);
+        if (y + 1 < h)  stack.push(pos + w);
+        if (y - 1 >= 0) stack.push(pos - w);
+      }
+      
+      pc.putImageData(layerData, 0, 0);
+      return;
+    }
     
     // Get target color at click position — sample from composited view (outCanvas + all layers)
     // so fill respects what user sees, not just current layer
@@ -2713,6 +2797,37 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     // Finish any river being edited
     if (riverLayer.currentRiver) {
       riverLayer.finishRiver();
+    }
+    
+    // Check for transparent holes (pixels not covered by any visible layer)
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = paintCanvas.width;
+    tempCanvas.height = paintCanvas.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    
+    // Composite all visible layers
+    for (const layer of paintLayers) {
+      if (layer.visible) {
+        const layerCanvas = applyJaggedEdges(layer);
+        tempCtx.drawImage(layerCanvas, 0, 0);
+      }
+    }
+    
+    // Check for transparent pixels
+    const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const data = imageData.data;
+    let hasTransparentPixels = false;
+    
+    for (let i = 3; i < data.length; i += 4) {
+      if (data[i] === 0) { // Alpha channel is 0 (fully transparent)
+        hasTransparentPixels = true;
+        break;
+      }
+    }
+    
+    if (hasTransparentPixels) {
+      alert('Cannot save: map contains transparent areas (holes). Please fill all transparent areas with terrain or hide/delete layers with erased areas.');
+      return;
     }
     
     // Composite all layers to paintCanvas (with jagged edges applied)
