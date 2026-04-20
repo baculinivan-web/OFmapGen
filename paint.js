@@ -541,6 +541,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const state = captureState();
     undoStack.push(state);
     
+    console.log('[undo] pushUndo called, stack size:', undoStack.length);
+    
     // Calculate dynamic limit based on canvas size and layer count
     const maxWidth = Math.max(...paintLayers.map(l => l.canvas.width));
     const maxHeight = Math.max(...paintLayers.map(l => l.canvas.height));
@@ -549,6 +551,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     // Trim stack if needed
     while (undoStack.length > maxSteps) {
       undoStack.shift();
+      console.log('[undo] Trimmed stack, new size:', undoStack.length);
     }
     
     // Log warning if aggressively trimming
@@ -563,6 +566,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function undo() {
+    console.log('[undo] undo called, stack size:', undoStack.length);
     if (undoStack.length === 0) return;
     
     // Save current state to redo stack
@@ -570,6 +574,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Restore previous state
     const state = undoStack.pop();
+    console.log('[undo] Restoring state, remaining in stack:', undoStack.length);
     restoreState(state);
     
     hasChanges = true;
@@ -577,6 +582,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
 
   function redo() {
+    console.log('[undo] redo called, redo stack size:', redoStack.length);
     if (redoStack.length === 0) return;
     
     // Save current state to undo stack
@@ -584,6 +590,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Restore next state
     const state = redoStack.pop();
+    console.log('[undo] Restoring redo state, remaining in redo stack:', redoStack.length);
     restoreState(state);
     
     hasChanges = true;
@@ -2349,6 +2356,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   function attachDragAndDrop() {
     const layerItems = layersList.querySelectorAll('.layer-item[draggable="true"]');
     
+    console.log('[drag] attachDragAndDrop called, items:', layerItems.length);
+    
     layerItems.forEach(item => {
       item.addEventListener('dragstart', (e) => {
         // data-layer-index already holds the model index
@@ -2356,14 +2365,20 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         item.style.opacity = '0.4';
         e.dataTransfer.effectAllowed = 'move';
         
+        console.log('[drag] dragstart, index:', draggedLayerIndex, 'captured:', dragUndoCaptured);
+        
         // Capture state before drag starts
         if (!dragUndoCaptured) {
+          console.log('[drag] Capturing undo state before drag');
           pushUndo();
           dragUndoCaptured = true;
+        } else {
+          console.log('[drag] Skipping undo capture (already captured)');
         }
       });
       
       item.addEventListener('dragend', (e) => {
+        console.log('[drag] dragend, resetting state');
         item.style.opacity = '1';
         draggedLayerIndex = null;
         dragUndoCaptured = false;
@@ -2396,11 +2411,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         if (draggedLayerIndex === null) return;
         
         const targetIndex = parseInt(item.dataset.layerIndex);
+        
+        console.log('[drag] drop, from:', draggedLayerIndex, 'to:', targetIndex);
+        
         if (draggedLayerIndex === targetIndex) {
           // No actual reorder, just reset flag
+          console.log('[drag] Same position, resetting flag');
           dragUndoCaptured = false;
           return;
         }
+        
+        console.log('[drag] Reordering layers');
         
         // State already captured in dragstart, just reorder
         const draggedLayer = paintLayers[draggedLayerIndex];
@@ -2410,6 +2431,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         hasChanges = true;
         
         // Reset flag immediately after reorder so next drag captures new state
+        console.log('[drag] Resetting dragUndoCaptured flag after reorder');
         dragUndoCaptured = false;
         
         updateLayersList();
