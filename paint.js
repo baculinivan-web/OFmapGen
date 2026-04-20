@@ -581,15 +581,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     selectedRiverId = null;
     currentJaggedLayerId = null;
     window.riverStartPoint = null; // Clear river start anchor
-    globalUndoStack = []; 
-    globalRedoStack = [];
+    undoStack = [];
+    redoStack = [];
     cancelSnapshot = null;
     cancelRiverSnapshot = null;
     cancelRiversData = null;
     cancelLayersData = null;
     hasChanges = false;
-    undoStack = [];
-    redoStack = [];
     jaggedCache.clear(); // Clear jagged edges cache
   }
 
