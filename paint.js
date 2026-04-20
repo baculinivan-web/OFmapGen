@@ -718,6 +718,10 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     const { north, south, west, east, cropW, cropH } = bounds;
     const { tw, th } = scale;
     
+    // Use same water color as river tool
+    const waterColor = TERRAIN_COLORS.water;
+    const waterRgb = `rgb(${waterColor[0]},${waterColor[1]},${waterColor[2]})`;
+    
     function latToMercY(lat) {
       const r = lat * Math.PI / 180;
       return Math.log(Math.tan(Math.PI / 4 + r / 2));
@@ -736,7 +740,7 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     }
     
     // Draw water bodies
-    ctx.fillStyle = 'rgb(20,20,30)';
+    ctx.fillStyle = waterRgb;
     for (const el of elements) {
       const isWaterBody = el.tags?.natural === 'water' || el.tags?.natural === 'wetland' ||
                           el.tags?.natural === 'bay' || el.tags?.water;
@@ -753,7 +757,7 @@ export function initPaint({ outCanvas, onPaintApplied, getOsmRivers }) {
     }
     
     // Draw rivers
-    ctx.strokeStyle = 'rgb(20,20,30)';
+    ctx.strokeStyle = waterRgb;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     for (const el of elements) {
