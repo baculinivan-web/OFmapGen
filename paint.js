@@ -471,7 +471,20 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Undo / Redo System ────────────────────────────────────────────────────
-  const MAX_UNDO_STEPS = 50;
+  
+  // Calculate safe max undo steps based on canvas size and layer count
+  function getMaxUndoSteps(width, height, layerCount) {
+    // Estimate memory per state: width * height * 4 bytes (RGBA) * layerCount
+    const bytesPerState = width * height * 4 * layerCount;
+    const mbPerState = bytesPerState / (1024 * 1024);
+    
+    // Target max memory usage: 100MB for undo history
+    const targetMemoryMB = 100;
+    const maxSteps = Math.floor(targetMemoryMB / mbPerState);
+    
+    // Clamp between 5 and 50 steps
+    return Math.max(5, Math.min(50, maxSteps));
+  }
 
   function captureState() {
     return {
@@ -528,9 +541,19 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     const state = captureState();
     undoStack.push(state);
     
-    // Limit stack size
-    if (undoStack.length > MAX_UNDO_STEPS) {
+    // Calculate dynamic limit based on canvas size and layer count
+    const maxWidth = Math.max(...paintLayers.map(l => l.canvas.width));
+    const maxHeight = Math.max(...paintLayers.map(l => l.canvas.height));
+    const maxSteps = getMaxUndoSteps(maxWidth, maxHeight, paintLayers.length);
+    
+    // Trim stack if needed
+    while (undoStack.length > maxSteps) {
       undoStack.shift();
+    }
+    
+    // Log warning if aggressively trimming
+    if (maxSteps < 10) {
+      console.warn(`[paint] Undo history limited to ${maxSteps} steps due to large canvas size (${maxWidth}x${maxHeight}, ${paintLayers.length} layers)`);
     }
     
     // Clear redo stack on new action
@@ -1676,6 +1699,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
               // Right click or Ctrl+click to delete point
               if (e.button === 2 || e.ctrlKey) {
                 if (river.controlPoints.length > 2) {
+                  pushUndo(); // Save state before deleting point
                   river.controlPoints.splice(i, 1);
                   river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
                   hasChanges = true;
@@ -1684,11 +1708,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
                 return;
               }
               // Start dragging this point
+              pushUndo(); // Save state before dragging
               draggingPointId = { riverId: selectedRiverId, pointIndex: i };
               return;
             }
           }
           // Not clicking on point, add new point
+          pushUndo(); // Save state before adding point
           river.controlPoints.push({ x, y });
           river.path = generateRiverPath(river.controlPoints, river.windiness, 5);
           hasChanges = true;
@@ -1707,19 +1733,24 @@ export function initPaint({ outCanvas, onPaintApplied }) {
             // Right click or Ctrl+click to delete point
             if (e.button === 2 || e.ctrlKey) {
               if (riverLayer.currentRiver.controlPoints.length > 2) {
+                pushUndo(); // Save state before deleting point
                 riverLayer.currentRiver.controlPoints.splice(i, 1);
                 riverLayer.updateCurrentRiverPath();
+                hasChanges = true;
                 redraw();
               }
               return;
             }
             // Start dragging this point
+            pushUndo(); // Save state before dragging
             draggingPointId = { riverId: 'current', pointIndex: i };
             return;
           }
         }
         // Not clicking on point, add new point
+        pushUndo(); // Save state before adding point
         riverLayer.addControlPoint({ x, y });
+        hasChanges = true;
         updateLayersList();
         redraw();
         return;
@@ -2328,12 +2359,14 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         const targetIndex = parseInt(item.dataset.layerIndex);
         if (draggedLayerIndex === targetIndex) return;
         
+        // Save state before reordering
+        pushUndo();
+        
         // Reorder layers array using model indices
         const draggedLayer = paintLayers[draggedLayerIndex];
         paintLayers.splice(draggedLayerIndex, 1);
         paintLayers.splice(targetIndex, 0, draggedLayer);
         
-        pushUndo(); // Save state after reorder
         hasChanges = true;
         updateLayersList();
         redraw();
