@@ -15,6 +15,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
   const elevZoomSelect = document.getElementById('elevZoom');
   const elevZoomInfo = document.getElementById('elevZoomInfo');
   const loadRiversCheckbox = document.getElementById('loadRivers');
+  const gisMapSizeSelect = document.getElementById('gisMapSize');
 
   let gisMap = null, drawnRect = null;
 
@@ -482,12 +483,23 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
   });
 
   function _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData = null) {
-    srcCanvas.width = tw; srcCanvas.height = th;
+    // Get custom map size from selector
+    const mapSizeValue = gisMapSizeSelect?.value || 'auto';
+    let finalW, finalH;
+    
+    if (mapSizeValue === 'auto') {
+      [finalW, finalH] = clampedSize(tw, th, 0);
+    } else {
+      const targetSize = parseInt(mapSizeValue);
+      [finalW, finalH] = clampedSize(tw, th, targetSize);
+    }
+    
+    srcCanvas.width = finalW; srcCanvas.height = finalH;
     const ctx = srcCanvas.getContext('2d');
-    ctx.drawImage(tmpC, 0, 0, tw, th);
+    ctx.drawImage(tmpC, 0, 0, finalW, finalH);
     // srcImageData is set via the exported setter
-    const imageData = ctx.getImageData(0, 0, tw, th);
-    imgInfo.textContent = `${tw} × ${th}`;
+    const imageData = ctx.getImageData(0, 0, finalW, finalH);
+    imgInfo.textContent = `${finalW} × ${finalH}`;
     fileNameEl.textContent = `elevation z${zoom} ${cropW}×${cropH}`;
     fileNameEl.style.display = 'block';
     setAiMask(null);

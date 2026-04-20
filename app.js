@@ -29,6 +29,23 @@ const vals = {
   highland: document.getElementById('valHighland'),
 };
 
+const sliderImageRes = document.getElementById('sliderImageRes');
+const valImageRes    = document.getElementById('valImageRes');
+
+const IMAGE_RES_OPTIONS = [
+  { label: 'Auto', value: 0 },
+  { label: '512px', value: 512 },
+  { label: '768px', value: 768 },
+  { label: '1024px', value: 1024 },
+  { label: '1536px', value: 1536 },
+  { label: '2048px', value: 2048 },
+  { label: '2560px', value: 2560 },
+  { label: '3072px', value: 3072 },
+  { label: '4096px', value: 4096 },
+];
+
+let customImageResolution = 0; // 0 = auto
+
 const algoLegacyBtn   = document.getElementById('algoLegacy');
 const algoSmoothBtn   = document.getElementById('algoSmooth');
 const algoAdvancedBtn = document.getElementById('algoAdvanced');
@@ -194,7 +211,14 @@ runSegBtn.addEventListener('click', async () => {
 // ── File loading ──────────────────────────────────────────────────────────────
 const MIN_SIZE = 512, MAX_SIZE = 1024;
 
-export function clampedSize(w, h) {
+export function clampedSize(w, h, customSize = 0) {
+  if (customSize > 0) {
+    // Custom size: scale to match longest side
+    const long = Math.max(w, h);
+    const scale = customSize / long;
+    return [Math.round(w * scale), Math.round(h * scale)];
+  }
+  // Auto mode: clamp between MIN_SIZE and MAX_SIZE
   const long = Math.max(w, h);
   let scale = 1;
   if (long > MAX_SIZE) scale = MAX_SIZE / long;
@@ -218,7 +242,7 @@ function loadFile(file) {
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
-    const [tw, th] = clampedSize(img.width, img.height);
+    const [tw, th] = clampedSize(img.width, img.height, customImageResolution);
     srcCanvas.width = tw; srcCanvas.height = th;
     const ctx = srcCanvas.getContext('2d');
     ctx.drawImage(img, 0, 0, tw, th);
@@ -308,6 +332,38 @@ function updateTrack(input, val) {
 
 Object.values(sliders).forEach(s => s.addEventListener('input', () => scheduleRender()));
 invertCheck.addEventListener('change', () => scheduleRender());
+
+// ── Image resolution slider ───────────────────────────────────────────────────
+sliderImageRes.addEventListener('input', () => {
+  const idx = parseInt(sliderImageRes.value);
+  valImageRes.textContent = IMAGE_RES_OPTIONS[idx].label;
+});
+
+sliderImageRes.addEventListener('change', () => {
+  const idx = parseInt(sliderImageRes.value);
+  customImageResolution = IMAGE_RES_OPTIONS[idx].value;
+  valImageRes.textContent = IMAGE_RES_OPTIONS[idx].label;
+  
+  // Reload current image with new resolution if one is loaded
+  if (srcCanvas.width > 0 && srcCanvas.height > 0 && !isGisSource) {
+    const currentData = srcCanvas.getContext('2d').getImageData(0, 0, srcCanvas.width, srcCanvas.height);
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = srcCanvas.width;
+    tempCanvas.height = srcCanvas.height;
+    tempCanvas.getContext('2d').putImageData(currentData, 0, 0);
+    
+    const [tw, th] = clampedSize(srcCanvas.width, srcCanvas.height, customImageResolution);
+    srcCanvas.width = tw;
+    srcCanvas.height = th;
+    const ctx = srcCanvas.getContext('2d');
+    ctx.drawImage(tempCanvas, 0, 0, tw, th);
+    srcImageData = ctx.getImageData(0, 0, tw, th);
+    imgInfo.textContent = `${tw} × ${th}`;
+    aiMask = null;
+    brightnessData = null;
+    scheduleRender();
+  }
+});
 
 // ── Eyedropper tool ───────────────────────────────────────────────────────────
 let savedPreviewSrc = null;
