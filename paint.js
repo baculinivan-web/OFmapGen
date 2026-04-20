@@ -484,7 +484,8 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         imageData: l.canvas.getContext('2d').getImageData(0, 0, l.canvas.width, l.canvas.height)
       })),
       rivers: JSON.parse(JSON.stringify(riverLayer.export())),
-      currentLayerId: currentLayerId
+      currentLayerId: currentLayerId,
+      layerIdCounter: layerIdCounter
     };
   }
 
@@ -510,6 +511,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Restore current layer
     currentLayerId = state.currentLayerId;
+    
+    // Restore layer ID counter to prevent ID collisions
+    if (state.layerIdCounter !== undefined) {
+      layerIdCounter = state.layerIdCounter;
+    }
     
     // Clear jagged edges cache since layers changed
     jaggedCache.clear();
