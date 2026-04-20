@@ -14,6 +14,7 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
   const elevSourceSelect = document.getElementById('elevSource');
   const elevZoomSelect = document.getElementById('elevZoom');
   const elevZoomInfo = document.getElementById('elevZoomInfo');
+  const loadRiversCheckbox = document.getElementById('loadRivers');
 
   let gisMap = null, drawnRect = null;
 
@@ -445,7 +446,17 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       }
 
       try {
-        await loadWaterFeatures();
+        const shouldLoadRivers = loadRiversCheckbox?.checked !== false;
+        if (shouldLoadRivers) {
+          await loadWaterFeatures();
+        } else {
+          // Skip rivers, just apply elevation data
+          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);
+          gisStatus.textContent = `Done: Loaded ${cropW}×${cropH}px elevation (zoom ${zoom}) — rivers skipped`;
+          gisLoadBtn.disabled = false;
+          gisLoadBtn.textContent = 'Load elevation';
+          closeGisModal();
+        }
       } catch (riverErr) {
         console.warn('[GIS] water features error:', riverErr);
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom);

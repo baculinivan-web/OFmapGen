@@ -231,7 +231,7 @@
           <option value="srtm">SRTM v3.0 (NASA) — ~30m resolution</option>
         </select>
       </div>
-      <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
         <label style="font-size: 0.82rem; color: var(--muted); font-weight: 500;">Resolution:</label>
         <select id="elevZoom" style="padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 0.82rem; cursor: pointer;">
           <option value="auto">Auto (optimal)</option>
@@ -244,6 +244,13 @@
           <option value="14">Zoom 14 — ~10m/px</option>
         </select>
         <span id="elevZoomInfo" style="font-size: 0.72rem; color: var(--muted); margin-left: auto;"></span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text); cursor: pointer;">
+          <input type="checkbox" id="loadRivers" checked style="cursor: pointer; width: 16px; height: 16px;" />
+          <span>Load rivers from OpenStreetMap</span>
+        </label>
+        <span style="font-size: 0.72rem; color: var(--muted); margin-left: 4px;">(may be slow for large areas)</span>
       </div>
     </div>
     <div id="gisMap"></div>
