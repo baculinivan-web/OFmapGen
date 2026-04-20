@@ -315,6 +315,23 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
       const imgData = buildElevationImageData(0);
       tmpCtx.putImageData(imgData, 0, 0);
 
+      // Wire sea level slider to redraw (must be set before loadWaterFeatures)
+      let osmRiversData = null;
+      let drawWaterOverlayFn = null;
+      let shouldLoadRivers = false;
+      
+      sliderSeaLevel.onchange = () => {
+        const seaLevel = parseInt(sliderSeaLevel.value);
+        valSeaLevel.textContent = seaLevel;
+        const newImgData = buildElevationImageData(seaLevel);
+        if (drawWaterOverlayFn && shouldLoadRivers) {
+          drawWaterOverlayFn(newImgData, true);
+        } else {
+          tmpCtx.putImageData(newImgData, 0, 0);
+        }
+        _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
+      };
+
       // Rivers + water bodies from Overpass
       const waterFailModal  = document.getElementById('waterFailModal');
       const waterFailRetry  = document.getElementById('waterFailRetry');
@@ -436,23 +453,17 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
         }
 
         // Store OSM rivers data for paint editor (only if checkbox is checked)
-        const shouldLoadRivers = loadRiversCheckbox?.checked !== false;
-        const osmRiversData = shouldLoadRivers ? {
+        shouldLoadRivers = loadRiversCheckbox?.checked !== false;
+        osmRiversData = shouldLoadRivers ? {
           elements,
           bounds: { north, south, west, east, cropW, cropH },
           scale: { tw, th }
         } : null;
 
+        // Store drawWaterOverlay function for sea level slider
+        drawWaterOverlayFn = drawWaterOverlay;
+        
         drawWaterOverlay(imgData, shouldLoadRivers);
-
-        // Wire sea level slider to redraw with water overlay
-        sliderSeaLevel.onchange = () => {
-          const seaLevel = parseInt(sliderSeaLevel.value);
-          valSeaLevel.textContent = seaLevel;
-          const newImgData = buildElevationImageData(seaLevel);
-          drawWaterOverlay(newImgData, shouldLoadRivers);
-          _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
-        };
 
         _applyToCanvas(tmpC, tw, th, cropW, cropH, zoom, osmRiversData);
         const riversMsg = shouldLoadRivers ? ' with rivers' : '';
