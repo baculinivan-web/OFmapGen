@@ -512,14 +512,9 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 5.5a9 9 0 0 0-5 7.5"/></svg>
               Redo
             </button>
-          </div>
-          <div style="margin-top:12px;padding:10px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border);">
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-              <label style="font-size:0.78rem;font-weight:500;color:var(--text);flex-shrink:0;">History limit:</label>
-              <input type="number" id="paintUndoLimit" min="5" max="100" value="50" title="Number of undo steps to keep in memory. Each step stores full canvas data for all layers." style="width:70px;padding:5px 8px;font-size:0.78rem;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);">
-              <span style="font-size:0.75rem;color:var(--muted);">steps</span>
-            </div>
-            <div id="paintUndoLimitInfo" style="font-size:0.72rem;color:var(--muted);line-height:1.4;"></div>
+            <button class="btn btn-ghost" id="paintUndoSettingsBtn" style="font-size:0.78rem;padding:7px 10px;" title="History settings">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.2-4.2l4.2-4.2"/></svg>
+            </button>
           </div>
         </div>
       </div>
@@ -538,6 +533,79 @@
       </div>
       <button class="btn btn-primary" id="paintDoneBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;flex:1;">Apply & close</button>
       <button class="btn btn-ghost" id="paintCancelBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Undo Settings Modal -->
+<div class="modal-overlay" id="paintUndoSettingsModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <span class="modal-title">Undo History Settings</span>
+      <button class="modal-close" id="paintUndoSettingsModalClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="padding:20px 24px;">
+      <div style="margin-bottom:20px;padding:12px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <label style="font-size:0.88rem;font-weight:500;color:var(--text);flex-shrink:0;">History limit:</label>
+          <input type="number" id="paintUndoLimitModal" min="5" max="100" value="50" style="width:80px;padding:6px 10px;font-size:0.88rem;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text);">
+          <span style="font-size:0.85rem;color:var(--muted);">steps</span>
+        </div>
+        <div id="paintUndoLimitInfoModal" style="font-size:0.78rem;color:var(--muted);line-height:1.5;"></div>
+      </div>
+      
+      <div style="font-size:0.85rem;color:var(--text);line-height:1.6;">
+        <p style="margin-bottom:12px;">
+          <strong>What is this?</strong><br>
+          The undo history stores previous states of your canvas so you can undo/redo changes. Each step stores all layer data compressed as PNG images.
+        </p>
+        <p style="margin-bottom:12px;">
+          <strong>Memory usage:</strong><br>
+          Larger canvases and more layers require more memory per step. The system uses PNG compression to reduce memory by ~60%.
+        </p>
+        <p style="margin-bottom:0;">
+          <strong>Recommendation:</strong><br>
+          Keep the limit at or below the recommended value to avoid excessive memory usage. You can increase it if you have plenty of RAM.
+        </p>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;">
+      <button class="btn btn-primary" id="paintUndoSettingsOkBtn">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Undo Info Modal (first time) -->
+<div class="modal-overlay" id="paintUndoInfoModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <span class="modal-title">About Undo History</span>
+    </div>
+    <div style="padding:20px 24px;">
+      <div style="font-size:0.88rem;color:var(--text);line-height:1.6;">
+        <p style="margin-bottom:14px;">
+          The paint editor now has <strong>full undo/redo support</strong> for all actions including painting, layers, and rivers.
+        </p>
+        <p style="margin-bottom:14px;">
+          By default, the last <strong>50 steps</strong> are kept in memory. Each step stores compressed canvas data for all layers.
+        </p>
+        <p style="margin-bottom:14px;">
+          <strong>Memory usage depends on:</strong>
+        </p>
+        <ul style="margin:0 0 14px 20px;padding:0;">
+          <li>Canvas size (e.g., 1024×1024)</li>
+          <li>Number of layers</li>
+          <li>History limit setting</li>
+        </ul>
+        <p style="margin-bottom:0;">
+          You can adjust the history limit anytime using the <strong>⚙️ settings button</strong> next to Undo/Redo.
+        </p>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:flex-end;">
+      <button class="btn btn-primary" id="paintUndoInfoOkBtn">Got it!</button>
     </div>
   </div>
 </div>

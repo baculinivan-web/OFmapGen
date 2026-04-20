@@ -216,11 +216,17 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
   const layersSidebar = document.getElementById('paintLayersSidebar');
   const layersResizeHandle = document.getElementById('paintLayersResizeHandle');
-  const undoLimitInput = document.getElementById('paintUndoLimit');
-  const undoLimitInfo = document.getElementById('paintUndoLimitInfo');
+  const undoSettingsBtn = document.getElementById('paintUndoSettingsBtn');
+  const undoSettingsModal = document.getElementById('paintUndoSettingsModal');
+  const undoSettingsModalClose = document.getElementById('paintUndoSettingsModalClose');
+  const undoLimitInputModal = document.getElementById('paintUndoLimitModal');
+  const undoLimitInfoModal = document.getElementById('paintUndoLimitInfoModal');
+  const undoSettingsOkBtn = document.getElementById('paintUndoSettingsOkBtn');
+  const undoInfoModal = document.getElementById('paintUndoInfoModal');
+  const undoInfoOkBtn = document.getElementById('paintUndoInfoOkBtn');
 
   // Validate all required DOM elements
-  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList, undoLimitInput, undoLimitInfo };
+  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList, undoSettingsBtn, undoSettingsModal, undoLimitInputModal, undoLimitInfoModal, undoInfoModal };
   for (const [name, el] of Object.entries(domRefs)) {
     if (!el) console.error(`[paint] DOM element not found: ${name}`);
   }
@@ -490,7 +496,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   }
   
   function updateUndoLimitInfo() {
-    if (!undoLimitInfo || paintLayers.length === 0) return;
+    if (paintLayers.length === 0) return;
     
     const maxWidth = Math.max(...paintLayers.map(l => l.canvas.width));
     const maxHeight = Math.max(...paintLayers.map(l => l.canvas.height));
@@ -505,12 +511,18 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     if (userUndoLimit > recommended * 2) { // More lenient with compression
       text += ` · ⚠️ Recommended: ≤${recommended * 2} steps`;
-      undoLimitInfo.style.color = 'var(--warning, orange)';
+      if (undoLimitInfoModal) {
+        undoLimitInfoModal.style.color = 'var(--warning, orange)';
+      }
     } else {
-      undoLimitInfo.style.color = 'var(--muted)';
+      if (undoLimitInfoModal) {
+        undoLimitInfoModal.style.color = 'var(--muted)';
+      }
     }
     
-    undoLimitInfo.textContent = text;
+    if (undoLimitInfoModal) {
+      undoLimitInfoModal.textContent = text;
+    }
   }
 
   // Compress ImageData to Blob for efficient storage
@@ -1451,6 +1463,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
     
+    // Show info modal on first open
+    if (!localStorage.getItem('paintUndoInfoShown')) {
+      setTimeout(() => {
+        undoInfoModal?.classList.add('open');
+      }, 500);
+    }
+    
     console.log('[paint] calling loadDefaultBrushes()...');
     loadDefaultBrushes();
   }
@@ -2127,9 +2146,26 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redo();
   });
   
-  // Undo limit control
-  undoLimitInput?.addEventListener('change', () => {
-    const val = parseInt(undoLimitInput.value);
+  // Undo settings button
+  undoSettingsBtn?.addEventListener('click', () => {
+    if (undoLimitInputModal) {
+      undoLimitInputModal.value = userUndoLimit;
+    }
+    updateUndoLimitInfo();
+    undoSettingsModal?.classList.add('open');
+  });
+  
+  undoSettingsModalClose?.addEventListener('click', () => {
+    undoSettingsModal?.classList.remove('open');
+  });
+  
+  undoSettingsOkBtn?.addEventListener('click', () => {
+    undoSettingsModal?.classList.remove('open');
+  });
+  
+  // Undo limit control in modal
+  undoLimitInputModal?.addEventListener('change', () => {
+    const val = parseInt(undoLimitInputModal.value);
     if (!isNaN(val) && val >= 5 && val <= 100) {
       userUndoLimit = val;
       console.log('[undo] User limit changed to:', userUndoLimit);
@@ -2141,6 +2177,12 @@ export function initPaint({ outCanvas, onPaintApplied }) {
       }
       updateUndoRedoBtns();
     }
+  });
+  
+  // Info modal handlers
+  undoInfoOkBtn?.addEventListener('click', () => {
+    undoInfoModal?.classList.remove('open');
+    localStorage.setItem('paintUndoInfoShown', 'true');
   });
 
   clearBtn.addEventListener('click', () => {
