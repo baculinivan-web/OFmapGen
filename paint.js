@@ -275,6 +275,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   let cancelRiversData = null;
   let cancelLayersData = null;
   let hasChanges = false; // Track if any changes were made
+  
+  // ── Undo / Redo state ──────────────────────────────────────────────────────
+  let undoStack = [];
+  let redoStack = [];
 
   // ── Zoom / Pan state ───────────────────────────────────────────────────────
   let zoomLevel = 1;
@@ -467,8 +471,6 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   });
 
   // ── Undo / Redo System ────────────────────────────────────────────────────
-  let undoStack = [];
-  let redoStack = [];
   const MAX_UNDO_STEPS = 50;
 
   function captureState() {
