@@ -34,8 +34,10 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
 
     const zoomValue = elevZoomSelect.value;
     let zoom;
+    let isAuto = false;
     
     if (zoomValue === 'auto') {
+      isAuto = true;
       zoom = 5;
       for (let z = 14; z >= 3; z--) {
         const tileCount = (lngToTileX(east, z) - lngToTileX(west, z) + 1) *
@@ -52,7 +54,8 @@ export function initGis({ srcCanvas, outCanvas, imgInfo, fileNameEl, getAiMask, 
     const tileCount = tileW * tileH;
     const pixelW = tileW * 256, pixelH = tileH * 256;
 
-    elevZoomInfo.textContent = `${tileCount} tile${tileCount > 1 ? 's' : ''} (${pixelW}×${pixelH}px)`;
+    const autoLabel = isAuto ? ` — auto selected zoom ${zoom}` : '';
+    elevZoomInfo.textContent = `${tileCount} tile${tileCount > 1 ? 's' : ''} (${pixelW}×${pixelH}px)${autoLabel}`;
   }
 
   function updateStatus() {
