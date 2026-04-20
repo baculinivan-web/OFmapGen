@@ -5,7 +5,7 @@ A browser-based tool that converts images or real-world elevation data into play
 ## Core Features
 
 - Upload any image (PNG/JPG/WebP) and map brightness to terrain zones
-- Adjust image resolution with custom scaling (512px to 4096px) or auto mode
+- Adjust map size with custom scaling (512px to 4096px) or auto mode — determines in-game map size
 - Import real-world elevation data by drawing a bounding box on a Leaflet map
 - Choose between Terrarium (AWS) or SRTM v3.0 (NASA) elevation sources
 - Select resolution (zoom level) from 8 to 14 for custom detail level
