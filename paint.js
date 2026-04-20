@@ -1119,6 +1119,9 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedCloseBtn?.addEventListener('click', closeJaggedEdgesPanel);
   
+  // Track if we need to capture state before slider change
+  let sliderChangeInProgress = false;
+  
   jaggedEnabled?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
@@ -1153,6 +1156,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     }
   });
   
+  jaggedIntensity?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
+  });
+  
   jaggedIntensity?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
@@ -1164,7 +1174,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedIntensity?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    pushUndo(); // Save state after slider release
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -1187,6 +1197,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   });
   
+  jaggedScale?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
+  });
+  
   jaggedScale?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
@@ -1198,7 +1215,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedScale?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    pushUndo(); // Save state after slider release
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -1221,6 +1238,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   });
   
+  jaggedFrequency?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
+  });
+  
   jaggedFrequency?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
@@ -1232,7 +1256,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedFrequency?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    pushUndo(); // Save state after slider release
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -1255,6 +1279,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     redraw();
   });
   
+  jaggedDepth?.addEventListener('mousedown', () => {
+    if (!sliderChangeInProgress && currentJaggedLayerId !== null) {
+      pushUndo(); // Capture state before slider starts moving
+      sliderChangeInProgress = true;
+    }
+  });
+  
   jaggedDepth?.addEventListener('input', () => {
     if (currentJaggedLayerId === null) return;
     const layer = paintLayers.find(l => l.id === currentJaggedLayerId);
@@ -1266,7 +1297,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   jaggedDepth?.addEventListener('change', () => {
     if (currentJaggedLayerId === null) return;
-    pushUndo(); // Save state after slider release
+    sliderChangeInProgress = false;
     redraw();
   });
   
@@ -2313,6 +2344,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   // ── Drag and drop for layer reordering ─────────────────────────────────────
   let draggedLayerIndex = null;
+  let dragUndoCaptured = false;
   
   function attachDragAndDrop() {
     const layerItems = layersList.querySelectorAll('.layer-item[draggable="true"]');
@@ -2323,11 +2355,18 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         draggedLayerIndex = parseInt(item.dataset.layerIndex);
         item.style.opacity = '0.4';
         e.dataTransfer.effectAllowed = 'move';
+        
+        // Capture state before drag starts
+        if (!dragUndoCaptured) {
+          pushUndo();
+          dragUndoCaptured = true;
+        }
       });
       
       item.addEventListener('dragend', (e) => {
         item.style.opacity = '1';
         draggedLayerIndex = null;
+        dragUndoCaptured = false;
         // Remove all drag-over styles
         layerItems.forEach(i => i.style.borderTop = '');
       });
@@ -2359,10 +2398,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         const targetIndex = parseInt(item.dataset.layerIndex);
         if (draggedLayerIndex === targetIndex) return;
         
-        // Save state before reordering
-        pushUndo();
-        
-        // Reorder layers array using model indices
+        // State already captured in dragstart, just reorder
         const draggedLayer = paintLayers[draggedLayerIndex];
         paintLayers.splice(draggedLayerIndex, 1);
         paintLayers.splice(targetIndex, 0, draggedLayer);
