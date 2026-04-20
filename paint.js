@@ -216,9 +216,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   const jaggedCloseBtn = document.getElementById('paintJaggedCloseBtn');
   const layersSidebar = document.getElementById('paintLayersSidebar');
   const layersResizeHandle = document.getElementById('paintLayersResizeHandle');
+  const undoLimitInput = document.getElementById('paintUndoLimit');
+  const undoLimitInfo = document.getElementById('paintUndoLimitInfo');
 
   // Validate all required DOM elements
-  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList };
+  const domRefs = { modal, mapArea, canvas, brushSlider, brushVal, spacingSlider, spacingVal, spacingRow, clearBtn, doneBtn, cancelBtn, closeBtn, undoBtn, redoBtn, loadBrushBtn, loadBrushInput, riverModeBtn, fillModeBtn, riverWindinessSlider, riverWindinessVal, riverWidthSlider, riverWidthVal, riverFinishBtn, riverCancelBtn, riverControlsRow, layersList, undoLimitInput, undoLimitInfo };
   for (const [name, el] of Object.entries(domRefs)) {
     if (!el) console.error(`[paint] DOM element not found: ${name}`);
   }
@@ -279,6 +281,7 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   // ── Undo / Redo state ──────────────────────────────────────────────────────
   let undoStack = [];
   let redoStack = [];
+  let userUndoLimit = 50; // User-configurable limit
 
   // ── Zoom / Pan state ───────────────────────────────────────────────────────
   let zoomLevel = 1;
@@ -480,10 +483,29 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     // Target max memory usage: 100MB for undo history
     const targetMemoryMB = 100;
-    const maxSteps = Math.floor(targetMemoryMB / mbPerState);
+    const recommendedSteps = Math.floor(targetMemoryMB / mbPerState);
     
-    // Clamp between 5 and 50 steps
-    return Math.max(5, Math.min(50, maxSteps));
+    // Clamp between 5 and 100 steps
+    return Math.max(5, Math.min(100, recommendedSteps));
+  }
+  
+  function updateUndoLimitInfo() {
+    if (!undoLimitInfo || paintLayers.length === 0) return;
+    
+    const maxWidth = Math.max(...paintLayers.map(l => l.canvas.width));
+    const maxHeight = Math.max(...paintLayers.map(l => l.canvas.height));
+    const recommended = getMaxUndoSteps(maxWidth, maxHeight, paintLayers.length);
+    const bytesPerState = maxWidth * maxHeight * 4 * paintLayers.length;
+    const mbPerState = (bytesPerState / (1024 * 1024)).toFixed(1);
+    const totalMB = (mbPerState * userUndoLimit).toFixed(1);
+    
+    undoLimitInfo.textContent = `~${mbPerState}MB per step, ${totalMB}MB total (recommended: ${recommended})`;
+    
+    if (userUndoLimit > recommended) {
+      undoLimitInfo.style.color = 'var(--warning, orange)';
+    } else {
+      undoLimitInfo.style.color = 'var(--muted)';
+    }
   }
 
   function captureState() {
@@ -543,20 +565,13 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     
     console.log('[undo] pushUndo called, stack size:', undoStack.length);
     
-    // Calculate dynamic limit based on canvas size and layer count
-    const maxWidth = Math.max(...paintLayers.map(l => l.canvas.width));
-    const maxHeight = Math.max(...paintLayers.map(l => l.canvas.height));
-    const maxSteps = getMaxUndoSteps(maxWidth, maxHeight, paintLayers.length);
+    // Use user-configured limit
+    const maxSteps = userUndoLimit;
     
     // Trim stack if needed
     while (undoStack.length > maxSteps) {
       undoStack.shift();
       console.log('[undo] Trimmed stack, new size:', undoStack.length);
-    }
-    
-    // Log warning if aggressively trimming
-    if (maxSteps < 10) {
-      console.warn(`[paint] Undo history limited to ${maxSteps} steps due to large canvas size (${maxWidth}x${maxHeight}, ${paintLayers.length} layers)`);
     }
     
     // Clear redo stack on new action
@@ -1372,6 +1387,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
     closeJaggedEdgesPanel();
     updateUndoRedoBtns();
     updateLayersList();
+    
+    // Update undo limit info
+    updateUndoLimitInfo();
+    
     modal.classList.add('open');
     requestAnimationFrame(() => requestAnimationFrame(fitCanvas));
     
@@ -2049,6 +2068,22 @@ export function initPaint({ outCanvas, onPaintApplied }) {
   
   redoBtn.addEventListener('click', () => {
     redo();
+  });
+  
+  // Undo limit control
+  undoLimitInput?.addEventListener('change', () => {
+    const val = parseInt(undoLimitInput.value);
+    if (!isNaN(val) && val >= 5 && val <= 100) {
+      userUndoLimit = val;
+      console.log('[undo] User limit changed to:', userUndoLimit);
+      updateUndoLimitInfo();
+      
+      // Trim existing stack if new limit is lower
+      while (undoStack.length > userUndoLimit) {
+        undoStack.shift();
+      }
+      updateUndoRedoBtns();
+    }
   });
 
   clearBtn.addEventListener('click', () => {
