@@ -2396,7 +2396,11 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         if (draggedLayerIndex === null) return;
         
         const targetIndex = parseInt(item.dataset.layerIndex);
-        if (draggedLayerIndex === targetIndex) return;
+        if (draggedLayerIndex === targetIndex) {
+          // No actual reorder, just reset flag
+          dragUndoCaptured = false;
+          return;
+        }
         
         // State already captured in dragstart, just reorder
         const draggedLayer = paintLayers[draggedLayerIndex];
@@ -2404,6 +2408,10 @@ export function initPaint({ outCanvas, onPaintApplied }) {
         paintLayers.splice(targetIndex, 0, draggedLayer);
         
         hasChanges = true;
+        
+        // Reset flag immediately after reorder so next drag captures new state
+        dragUndoCaptured = false;
+        
         updateLayersList();
         redraw();
       });
