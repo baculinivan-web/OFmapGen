@@ -503,17 +503,20 @@
             </div>
           </div>
           <button class="btn btn-ghost" id="paintClearBtn" style="font-size:0.78rem;padding:7px 10px;margin-top:4px;">Clear layer</button>
-          <div style="display:flex;gap:6px;margin-top:4px;">
-            <button class="btn btn-ghost" id="paintUndoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Undo (Ctrl+Z)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 5.5a9 9 0 0 1 5 7.5"/></svg>
+          <div style="display:flex;gap:4px;margin-top:4px;">
+            <button class="btn btn-ghost" id="paintUndoBtn" style="font-size:0.75rem;padding:6px 8px;flex:1;opacity:0.35;" disabled title="Undo (Ctrl+Z)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13C5 7 10 4 16 5.5a9 9 0 0 1 5 7.5"/></svg>
               Undo
             </button>
-            <button class="btn btn-ghost" id="paintRedoBtn" style="font-size:0.78rem;padding:7px 10px;flex:1;opacity:0.35;" disabled title="Redo (Ctrl+Shift+Z)">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 5.5a9 9 0 0 0-5 7.5"/></svg>
+            <button class="btn btn-ghost" id="paintRedoBtn" style="font-size:0.75rem;padding:6px 8px;flex:1;opacity:0.35;" disabled title="Redo (Ctrl+Shift+Z)">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13C19 7 14 4 8 5.5a9 9 0 0 0-5 7.5"/></svg>
               Redo
             </button>
-            <button class="btn btn-ghost" id="paintUndoSettingsBtn" style="font-size:0.78rem;padding:7px 10px;" title="History settings">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M5.6 5.6l4.2 4.2m4.2 4.2l4.2 4.2M1 12h6m6 0h6M5.6 18.4l4.2-4.2m4.2-4.2l4.2-4.2"/></svg>
+            <button class="btn btn-ghost" id="paintUndoSettingsBtn" style="font-size:0.75rem;padding:6px 8px;" title="History settings">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v6M12 17v6M5.6 5.6l4.2 4.2M14.2 14.2l4.2 4.2M1 12h6M17 12h6M5.6 18.4l4.2-4.2M14.2 9.8l4.2-4.2"/>
+              </svg>
             </button>
           </div>
         </div>
@@ -547,6 +550,22 @@
       </button>
     </div>
     <div style="padding:20px 24px;">
+      <div style="margin-bottom:16px;padding:12px;background:#fff3cd;border:2px solid #ffc107;border-radius:6px;">
+        <div style="display:flex;align-items:start;gap:8px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#856404" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:2px;">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div style="flex:1;">
+            <div style="font-size:0.88rem;font-weight:600;color:#856404;margin-bottom:4px;">Memory Warning</div>
+            <div style="font-size:0.82rem;color:#856404;line-height:1.5;">
+              Undo history stores full canvas data in browser memory. Large canvases with many layers can use significant RAM. Set a lower limit if you experience performance issues.
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <div style="margin-bottom:20px;padding:12px;background:var(--bg-secondary);border-radius:6px;border:1px solid var(--border);">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
           <label style="font-size:0.88rem;font-weight:500;color:var(--text);flex-shrink:0;">History limit:</label>
@@ -558,16 +577,14 @@
       
       <div style="font-size:0.85rem;color:var(--text);line-height:1.6;">
         <p style="margin-bottom:12px;">
-          <strong>What is this?</strong><br>
-          The undo history stores previous states of your canvas so you can undo/redo changes. Each step stores all layer data compressed as PNG images.
-        </p>
-        <p style="margin-bottom:12px;">
-          <strong>Memory usage:</strong><br>
-          Larger canvases and more layers require more memory per step. The system uses PNG compression to reduce memory by ~60%.
+          <strong>How it works:</strong><br>
+          Each undo step stores compressed PNG images of all layers. The system automatically compresses data to save ~60% memory.
         </p>
         <p style="margin-bottom:0;">
-          <strong>Recommendation:</strong><br>
-          Keep the limit at or below the recommended value to avoid excessive memory usage. You can increase it if you have plenty of RAM.
+          <strong>Tips:</strong><br>
+          • Lower limit = less memory usage<br>
+          • Fewer layers = less memory per step<br>
+          • Smaller canvas = less memory per step
         </p>
       </div>
     </div>
@@ -591,14 +608,14 @@
         <p style="margin-bottom:14px;">
           By default, the last <strong>50 steps</strong> are kept in memory. Each step stores compressed canvas data for all layers.
         </p>
-        <p style="margin-bottom:14px;">
-          <strong>Memory usage depends on:</strong>
-        </p>
-        <ul style="margin:0 0 14px 20px;padding:0;">
-          <li>Canvas size (e.g., 1024×1024)</li>
-          <li>Number of layers</li>
-          <li>History limit setting</li>
-        </ul>
+        
+        <div style="margin:16px 0;padding:10px 12px;background:#fff3cd;border-left:3px solid #ffc107;border-radius:4px;">
+          <div style="font-size:0.82rem;font-weight:600;color:#856404;margin-bottom:4px;">⚠️ Memory Usage</div>
+          <div style="font-size:0.8rem;color:#856404;">
+            Large canvases and many layers can use significant browser memory. Adjust the limit if needed.
+          </div>
+        </div>
+        
         <p style="margin-bottom:0;">
           You can adjust the history limit anytime using the <strong>⚙️ settings button</strong> next to Undo/Redo.
         </p>
