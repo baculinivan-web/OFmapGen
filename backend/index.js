@@ -122,6 +122,7 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
       id: baseFilename,
       name: mapName,
       author: authorNick,
+      description: req.body.description || '',
       timestamp: timestamp,
       date: new Date().toISOString(),
       dimensions: { width: metadata.width, height: metadata.height },

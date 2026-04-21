@@ -154,6 +154,8 @@ async function loadGallery() {
       ...map,
       folder: map.id,
       thumbnailUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.thumbnail}`,
+      fullUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
+      downloadUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
       hasNations: map.nations > 0
     }));
     renderGallery();
@@ -210,15 +212,16 @@ function renderGallery() {
 
 function showMapDetail(map) {
   document.getElementById('detailTitle').textContent = map.name;
-  document.getElementById('detailImage').src = map.thumbnailUrl;
+  document.getElementById('detailImage').src = map.fullUrl;
   document.getElementById('detailMeta').innerHTML = `
     <strong>Author:</strong> ${escapeHtml(map.author)} • 
     <strong>Size:</strong> ${map.dimensions.width}×${map.dimensions.height} • 
     <strong>Nations:</strong> ${map.nations} • 
-    <strong>Created:</strong> ${new Date(map.created).toLocaleDateString()}
+    <strong>Created:</strong> ${new Date(map.date).toLocaleDateString()}
   `;
   document.getElementById('detailDesc').textContent = map.description || 'No description provided.';
   document.getElementById('detailDownload').href = map.downloadUrl;
+  document.getElementById('detailDownload').download = `${map.name}.png`;
   mapDetailModal.classList.add('open');
 }
 
