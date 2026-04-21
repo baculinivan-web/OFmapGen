@@ -111,27 +111,29 @@
 
 <!-- Map detail modal -->
 <div class="modal-overlay" id="mapDetailModal">
-  <div class="modal" style="max-width:700px;">
+  <div class="modal" style="width:100vw;height:100vh;max-height:100vh;border-radius:0;border:none;display:flex;flex-direction:column;">
     <div class="modal-header">
       <span class="modal-title" id="detailTitle">Map Details</span>
       <button class="modal-close" id="detailClose">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div style="padding:20px;">
-      <img id="detailImage" style="width:100%;border-radius:8px;margin-bottom:16px;image-rendering:pixelated;" />
-      <div id="detailMeta" style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;"></div>
-      <div id="detailDesc" style="font-size:0.85rem;color:var(--text);line-height:1.6;margin-bottom:16px;"></div>
-      <div style="display:flex;gap:8px;">
-        <a id="detailDownload" class="btn btn-primary" target="_blank" rel="noopener">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download Map Package
-        </a>
-      </div>
+    <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px;min-height:0;">
+      <img id="detailImage" style="max-width:100%;border-radius:8px;image-rendering:pixelated;align-self:center;" />
+      <div id="detailMeta" style="font-size:0.82rem;color:var(--muted);"></div>
+      <div id="detailDesc" style="font-size:0.88rem;color:var(--text);line-height:1.6;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" id="detailDownloadBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Map Package
+      </button>
+      <button class="btn btn-ghost" id="detailClose2" style="font-size:0.82rem;padding:8px 16px;width:auto;">Close</button>
     </div>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module">
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3002/api'
@@ -142,6 +144,106 @@ const showNationsFilter = document.getElementById('showNationsFilter');
 const galleryCount = document.getElementById('galleryCount');
 const mapDetailModal = document.getElementById('mapDetailModal');
 const detailClose = document.getElementById('detailClose');
+const detailClose2 = document.getElementById('detailClose2');
+const detailDownloadBtn = document.getElementById('detailDownloadBtn');
+
+let currentDetailMap = null;
+
+function showOsPickerAndDownload(map) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px 24px;max-width:420px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
+      <div style="font-size:1.05rem;font-weight:600;margin-bottom:6px;color:var(--text);">Download map archive</div>
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px;line-height:1.6;">
+        The archive includes <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">image.png</code> and <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">info.json</code> map files.
+      </div>
+      <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px;">Include map tester script</div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:0.8rem;color:var(--muted);line-height:1.6;">
+        The script automatically downloads the game source, registers your map, generates it, and opens it in your browser — <strong style="color:var(--text);">no manual setup needed.</strong><br><br>
+        After extracting the archive, just double-click the launcher file to start.
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(80,180,100,0.08);border:1px solid rgba(80,180,100,0.2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:0.78rem;color:var(--muted);line-height:1.5;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5ab46e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>The script is <strong style="color:var(--text);">fully open source</strong> — it's included as a plain <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">setup.py</code> text file you can read before running.</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
+        <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:2px;">Choose your OS</div>
+        <button id="osMac" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          <div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">macOS</div><div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.command</code></div></div>
+        </button>
+        <button id="osWin" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V3l-9 1.68V12h9zm-17 1h6v6.57L3 18.25V13zm17 0h-9v7.32L20 22V13z"/></svg>
+          <div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">Windows</div><div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.bat</code></div></div>
+        </button>
+        <button id="osLinux" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>
+          <div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">Linux</div><div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.sh</code></div></div>
+        </button>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <button id="osArchiveOnly" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Download map files only (no script)</button>
+        <button id="osCancel" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Cancel</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  overlay.querySelector('#osCancel').onclick = () => overlay.remove();
+  const pick = (os) => { overlay.remove(); buildGalleryArchive(map, os); };
+  overlay.querySelector('#osMac').onclick = () => pick('mac');
+  overlay.querySelector('#osWin').onclick = () => pick('win');
+  overlay.querySelector('#osLinux').onclick = () => pick('linux');
+  overlay.querySelector('#osArchiveOnly').onclick = () => { overlay.remove(); buildGalleryArchive(map, null); };
+  ['osMac','osWin','osLinux'].forEach(id => {
+    const btn = overlay.querySelector(`#${id}`);
+    btn.addEventListener('mouseenter', () => btn.style.borderColor = 'var(--accent, #5b8dee)');
+    btn.addEventListener('mouseleave', () => btn.style.borderColor = 'var(--border)');
+  });
+}
+
+const GITHUB_RAW = 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/';
+
+async function buildGalleryArchive(map, os) {
+  const zip = new JSZip();
+
+  // Fetch full map image from GitHub
+  const imgResp = await fetch(GITHUB_RAW + map.full);
+  const imgBlob = await imgResp.blob();
+  zip.file('image.png', imgBlob);
+
+  // Build info.json from map metadata
+  const manifest = {
+    name: map.name,
+    map: { width: map.dimensions.width, height: map.dimensions.height, num_land_tiles: 0 },
+    nations: [],
+  };
+  zip.file('info.json', JSON.stringify(manifest, null, 2));
+
+  if (os) {
+    const setupResp = await fetch('map-test-kit/setup.py');
+    const setupText = await setupResp.text();
+    zip.file('setup.py', setupText);
+
+    if (os === 'win') {
+      const batResp = await fetch('map-test-kit/run.bat');
+      zip.file('Click me to install.bat', await batResp.text());
+    } else if (os === 'mac') {
+      const cmdResp = await fetch('map-test-kit/run.command');
+      zip.file('Click me to install.command', await cmdResp.text(), { unixPermissions: '755' });
+    } else {
+      const launcher = '#!/bin/bash\ncd "$(dirname "$0")"\nif ! command -v python3 &> /dev/null; then\n  echo "Python 3 is not installed."\n  read -p "Press Enter to exit..."\n  exit 1\nfi\npython3 setup.py\n';
+      zip.file('Click me to install.sh', launcher, { unixPermissions: '755' });
+    }
+  }
+
+  const blob = await zip.generateAsync({ type: 'blob', platform: 'UNIX' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${map.name.replace(/[^a-z0-9]+/gi, '-')}.zip`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 let allMaps = [];
 
@@ -211,6 +313,7 @@ function renderGallery() {
 }
 
 function showMapDetail(map) {
+  currentDetailMap = map;
   document.getElementById('detailTitle').textContent = map.name;
   document.getElementById('detailImage').src = map.fullUrl;
   document.getElementById('detailMeta').innerHTML = `
@@ -219,13 +322,16 @@ function showMapDetail(map) {
     <strong>Nations:</strong> ${map.nations} • 
     <strong>Created:</strong> ${new Date(map.date).toLocaleDateString()}
   `;
-  document.getElementById('detailDesc').textContent = map.description || 'No description provided.';
-  document.getElementById('detailDownload').href = map.downloadUrl;
-  document.getElementById('detailDownload').download = `${map.name}.png`;
+  document.getElementById('detailDesc').textContent = map.description || '';
   mapDetailModal.classList.add('open');
 }
 
 detailClose.addEventListener('click', () => mapDetailModal.classList.remove('open'));
+detailClose2.addEventListener('click', () => mapDetailModal.classList.remove('open'));
+detailDownloadBtn.addEventListener('click', () => {
+  if (currentDetailMap) showOsPickerAndDownload(currentDetailMap);
+});
+
 showNationsFilter.addEventListener('change', renderGallery);
 
 function escapeHtml(text) {
