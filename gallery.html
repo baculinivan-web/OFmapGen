@@ -128,9 +128,7 @@
       <h1>Map Gallery</h1>
       <p>Browse community-created maps for <a href="https://openfront.io" target="_blank" rel="noopener">openfront.io</a></p>
     </div>
-    <div style="display:flex;gap:12px;">
-      <a href="index.html" class="btn btn-ghost">← Back to Generator</a>
-    </div>
+    <a href="index.html" class="btn btn-ghost" style="font-size:0.82rem;padding:6px 12px;">← Generator</a>
   </div>
 
   <div class="gallery-filter">
@@ -323,9 +321,11 @@ async function loadGallery() {
       });
     });
     renderGallery();
+    return true;
   } catch (error) {
     console.error('Failed to load gallery:', error);
     galleryGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);"><p>Failed to load gallery</p><p style="font-size:0.8rem;margin-top:8px;">' + error.message + '</p></div>';
+    return false;
   }
 }
 
@@ -402,6 +402,10 @@ function showMapDetail(map) {
   }
   
   renderDetailMarkers(map);
+  
+  // Push state for browser history
+  history.pushState({ mapId: map.id, view: 'detail' }, map.name, '#map=' + map.id);
+  
   mapDetailModal.classList.add('open');
 }
 
@@ -447,11 +451,55 @@ detailShowNations.addEventListener('click', function() {
   if (currentDetailMap) renderDetailMarkers(currentDetailMap);
 });
 
-detailClose.addEventListener('click', function() { mapDetailModal.classList.remove('open'); });
-detailClose2.addEventListener('click', function() { mapDetailModal.classList.remove('open'); });
+function closeMapDetail() {
+  mapDetailModal.classList.remove('open');
+  currentDetailMap = null;
+  // Go back to gallery state
+  if (history.state && history.state.view === 'detail') {
+    history.pushState({ view: 'gallery' }, 'Gallery', window.location.pathname);
+  }
+}
+
+detailClose.addEventListener('click', closeMapDetail);
+detailClose2.addEventListener('click', closeMapDetail);
 detailDownloadBtn.addEventListener('click', function() {
   if (currentDetailMap) showOsPickerAndDownload(currentDetailMap);
 });
+
+// Handle browser back/forward
+window.addEventListener('popstate', function(e) {
+  if (e.state && e.state.view === 'detail' && e.state.mapId) {
+    var map = allMaps.find(function(m) { return m.id === e.state.mapId; });
+    if (map) {
+      currentDetailMap = map;
+      // Update modal content without pushing new state
+      document.getElementById('detailTitle').textContent = map.name;
+      document.getElementById('detailImage').src = map.fullUrl;
+      document.getElementById('detailAuthor').textContent = map.author;
+      document.getElementById('detailSize').textContent = map.dimensions.width + ' × ' + map.dimensions.height;
+      document.getElementById('detailNationsCount').textContent = map.nations;
+      document.getElementById('detailDate').textContent = new Date(map.date).toLocaleDateString();
+      mapDetailModal.classList.add('open');
+    }
+  } else {
+    // Back to gallery
+    mapDetailModal.classList.remove('open');
+    currentDetailMap = null;
+  }
+});
+
+// Check URL on load for direct map link
+function checkUrlForMap() {
+  var hash = window.location.hash;
+  if (hash.startsWith('#map=')) {
+    var mapId = hash.substring(5);
+    var map = allMaps.find(function(m) { return m.id === mapId; });
+    if (map) {
+      history.replaceState({ view: 'gallery' }, 'Gallery', window.location.pathname);
+      showMapDetail(map);
+    }
+  }
+}
 
 function escapeHtml(text) {
   var div = document.createElement('div');
@@ -459,7 +507,7 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-loadGallery();
+loadGallery().then(checkUrlForMap);
 </script>
 
 <footer>
