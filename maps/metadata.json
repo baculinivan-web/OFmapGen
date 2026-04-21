@@ -1,19 +1,19 @@
 {
   "maps": [
     {
-      "id": "github-by-ivan-1776767595213",
+      "id": "github-by-ivan-1776767817936",
       "name": "GitHub",
       "author": "ivan",
-      "timestamp": 1776767595213,
-      "date": "2026-04-21T10:33:15.672Z",
+      "timestamp": 1776767817936,
+      "date": "2026-04-21T10:36:58.205Z",
       "dimensions": {
         "width": 720,
         "height": 720
       },
       "nations": 1,
-      "thumbnail": "maps/thumbnails/github-by-ivan-1776767595213.png",
-      "full": "maps/full/github-by-ivan-1776767595213.png",
-      "proof": "maps/proof/github-by-ivan-1776767595213.png",
+      "thumbnail": "maps/thumbnails/github-by-ivan-1776767817936.png",
+      "full": "maps/full/github-by-ivan-1776767817936.png",
+      "proof": "maps/proof/github-by-ivan-1776767817936.png",
       "hasCopyright": false
     }
   ]
