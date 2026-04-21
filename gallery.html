@@ -207,8 +207,8 @@ const GITHUB_RAW = 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/d
 async function buildGalleryArchive(map, os) {
   const zip = new JSZip();
 
-  // Fetch full map image from GitHub
-  const imgResp = await fetch(map.fullUrl);
+  // Fetch source map image (OpenFront palette) from GitHub
+  const imgResp = await fetch(map.sourceUrl);
   if (!imgResp.ok) {
     alert('Failed to download map image');
     return;
@@ -261,7 +261,7 @@ async function loadGallery() {
       folder: map.id,
       thumbnailUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.thumbnail}`,
       fullUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
-      downloadUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
+      sourceUrl: map.source ? `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.source}` : `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
       hasNations: map.nations > 0
     }));
     renderGallery();

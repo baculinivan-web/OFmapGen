@@ -47,6 +47,46 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// OpenFront palette conversion (same logic as in app.js buildSourceCanvas)
+const OF_PALETTE = [
+  [190,220,140],[190,218,142],[190,216,144],[190,214,146],[190,212,148],
+  [190,210,150],[190,208,152],[190,206,154],[190,204,156],[190,202,158],
+  [220,203,160],[222,205,162],[224,207,164],[226,209,166],[228,211,168],
+  [230,213,170],[232,215,172],[234,217,174],[236,219,176],[238,221,178],
+  [240,240,180],[240,240,182],[241,241,184],[242,242,186],[242,242,188],
+  [242,242,190],[243,243,192],[244,244,194],[244,244,196],[244,244,198],[245,245,200],
+];
+const OF_WATER = [0, 0, 106];
+const ZONE_COLORS_SRC = [[18,15,34],[140,170,88],[176,159,114],[190,190,190]];
+const ZONE_TO_MAG = [-1, 4, 14, 25];
+
+async function convertToOpenFrontPalette(imageBuffer) {
+  const image = sharp(imageBuffer);
+  const metadata = await image.metadata();
+  const { width, height } = metadata;
+  const { data } = await image.raw().toBuffer({ resolveWithObject: true });
+  const result = Buffer.alloc(data.length);
+  
+  for (let i = 0; i < width * height; i++) {
+    const si = i * 4;
+    let zone = 0, minDist = Infinity;
+    for (let z = 0; z < 4; z++) {
+      const c = ZONE_COLORS_SRC[z];
+      const dist = (data[si]-c[0])**2 + (data[si+1]-c[1])**2 + (data[si+2]-c[2])**2;
+      if (dist < minDist) { minDist = dist; zone = z; }
+    }
+    const col = zone === 0 ? OF_WATER : OF_PALETTE[ZONE_TO_MAG[zone]];
+    result[si] = col[0];
+    result[si+1] = col[1];
+    result[si+2] = col[2];
+    result[si+3] = 255;
+  }
+  
+  return await sharp(result, { raw: { width, height, channels: 4 } })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
 // Submit map endpoint
 app.post('/api/submit-map', upload.single('map'), async (req, res) => {
   try {
@@ -72,19 +112,24 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
     const sanitizedAuthor = authorNick.toLowerCase().replace(/[^a-z0-9]+/g, '-');
     const baseFilename = `${sanitizedName}-by-${sanitizedAuthor}-${timestamp}`;
     
+    // Get image metadata
+    const imageMetadata = await sharp(mapFile.buffer).metadata();
+    
     // Create thumbnail (300x200)
     const thumbnailBuffer = await sharp(mapFile.buffer)
       .resize(300, 200, { fit: 'contain', background: { r: 8, g: 11, b: 16, alpha: 1 } })
       .png()
       .toBuffer();
 
+    // Create OpenFront source image (convert to OpenFront palette)
+    const sourceBuffer = await convertToOpenFrontPalette(mapFile.buffer);
+
     // Create watermarked proof image
-    const metadata = await sharp(mapFile.buffer).metadata();
     const watermarkText = `Created by ${authorNick} - ${mapName} - ${new Date().toLocaleDateString()}`;
     
     // Create SVG watermark
     const svgWatermark = Buffer.from(`
-      <svg width="${metadata.width}" height="${metadata.height}">
+      <svg width="${imageMetadata.width}" height="${imageMetadata.height}">
         <style>
           .watermark { 
             fill: rgba(255, 255, 255, 0.3); 
@@ -125,10 +170,11 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
       description: req.body.description || '',
       timestamp: timestamp,
       date: new Date().toISOString(),
-      dimensions: { width: metadata.width, height: metadata.height },
+      dimensions: { width: imageMetadata.width, height: imageMetadata.height },
       nations: nationsData.length,
       thumbnail: `maps/thumbnails/${baseFilename}.png`,
       full: `maps/full/${baseFilename}.png`,
+      source: `maps/source/${baseFilename}.png`,
       proof: `maps/proof/${baseFilename}.png`,
       hasCopyright: !!copyright
     };
@@ -158,6 +204,10 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
       {
         path: `maps/thumbnails/${baseFilename}.png`,
         content: thumbnailBuffer.toString('base64')
+      },
+      {
+        path: `maps/source/${baseFilename}.png`,
+        content: sourceBuffer.toString('base64')
       },
       {
         path: `maps/proof/${baseFilename}.png`,
@@ -215,7 +265,7 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
 **Map Name:** ${mapName}
 **Author:** ${authorNick}
 **Nations:** ${nationsData.length}
-**Dimensions:** ${metadata.width} × ${metadata.height}
+**Dimensions:** ${imageMetadata.width} × ${imageMetadata.height}
 **Timestamp:** ${new Date().toISOString()}
 
 ${copyright ? '**Copyright Notice:** See maps/copyrights/' + baseFilename + '.md' : '**License:** Open source, no copyright restrictions'}
@@ -226,7 +276,8 @@ ${copyright ? '**Copyright Notice:** See maps/copyrights/' + baseFilename + '.md
 ![Thumbnail](https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${branchName}/maps/thumbnails/${baseFilename}.png)
 
 ### Files Added
-- \`maps/full/${baseFilename}.png\` - Full resolution map
+- \`maps/full/${baseFilename}.png\` - Full resolution map (visual preview)
+- \`maps/source/${baseFilename}.png\` - OpenFront game-compatible source
 - \`maps/thumbnails/${baseFilename}.png\` - Thumbnail preview
 - \`maps/proof/${baseFilename}.png\` - Watermarked proof of authorship
 ${copyright ? '- `maps/copyrights/' + baseFilename + '.md` - Copyright information' : ''}
