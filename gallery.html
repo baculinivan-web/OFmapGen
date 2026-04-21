@@ -42,23 +42,6 @@
       object-fit: cover;
       image-rendering: pixelated;
     }
-    .gallery-card-nations {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-      max-width: 60%;
-    }
-    .gallery-card-nation-flag {
-      width: 24px;
-      height: 16px;
-      border-radius: 2px;
-      border: 1px solid rgba(255,255,255,0.3);
-      object-fit: cover;
-      background: var(--surface2);
-    }
     .gallery-card-body {
       padding: 16px;
     }
@@ -77,7 +60,6 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
     }
     .gallery-card-desc {
       font-size: 0.8rem;
@@ -87,6 +69,7 @@
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
+      margin-top: 8px;
     }
     .gallery-filter {
       display: flex;
@@ -131,6 +114,11 @@
     .toggle-switch.active::after {
       transform: translateX(20px);
     }
+    .gallery-nation-marker {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10;
+    }
   </style>
 </head>
 <body>
@@ -146,12 +134,7 @@
   </div>
 
   <div class="gallery-filter">
-    <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--text);cursor:pointer;">
-      <div class="toggle-switch active" id="showNationsToggle"></div>
-      <span>Show nations on maps</span>
-    </label>
-    <div style="flex:1"></div>
-    <span id="galleryCount" style="font-size:0.8rem;color:var(--muted);"></span>
+    <span id="galleryCount" style="font-size:0.85rem;color:var(--muted);"></span>
   </div>
 
   <div id="galleryGrid" class="gallery-grid">
@@ -200,6 +183,13 @@
             </div>
           </div>
         </div>
+        <!-- Show nations toggle -->
+        <div id="showNationsToggleWrap" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;">
+          <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--text);cursor:pointer;">
+            <div class="toggle-switch active" id="detailShowNations"></div>
+            <span>Show nations on map</span>
+          </label>
+        </div>
         <div id="detailDescWrap" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;">
           <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px;">Description</div>
           <div id="detailDesc" style="font-size:0.85rem;color:var(--text);line-height:1.6;"></div>
@@ -222,200 +212,153 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script type="module">
+<script>
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3002/api'
-  : `${window.location.protocol}//${window.location.hostname}/api`;
+  : window.location.protocol + '//' + window.location.hostname + '/api';
 
 const FLAG_BASE = 'https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/flags/';
 
 const galleryGrid = document.getElementById('galleryGrid');
-const showNationsToggle = document.getElementById('showNationsToggle');
 const galleryCount = document.getElementById('galleryCount');
 const mapDetailModal = document.getElementById('mapDetailModal');
 const detailClose = document.getElementById('detailClose');
 const detailClose2 = document.getElementById('detailClose2');
 const detailDownloadBtn = document.getElementById('detailDownloadBtn');
+const detailShowNations = document.getElementById('detailShowNations');
+const showNationsToggleWrap = document.getElementById('showNationsToggleWrap');
 
 let currentDetailMap = null;
-let showNationsOnMaps = true;
+let showNationsOnMap = true;
 
-function flagUrl(code) { return code ? `${FLAG_BASE}${encodeURIComponent(code)}.svg` : ''; }
+function flagUrl(code) { return code ? FLAG_BASE + encodeURIComponent(code) + '.svg' : ''; }
 
 function showOsPickerAndDownload(map) {
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);';
-  overlay.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px 24px;max-width:420px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.6);">
-      <div style="font-size:1.05rem;font-weight:600;margin-bottom:6px;color:var(--text);">Download map archive</div>
-      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px;line-height:1.6;">
-        The archive includes <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">image.png</code> and <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">info.json</code> map files.
-      </div>
-      <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px;">Include map tester script</div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;font-size:0.8rem;color:var(--muted);line-height:1.6;">
-        The script automatically downloads the game source, registers your map, generates it, and opens it in your browser — <strong style="color:var(--text);">no manual setup needed.</strong><br><br>
-        After extracting the archive, just double-click the launcher file to start.
-      </div>
-      <div style="display:flex;align-items:flex-start;gap:8px;background:rgba(80,180,100,0.08);border:1px solid rgba(80,180,100,0.2);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:0.78rem;color:var(--muted);line-height:1.5;">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#5ab46e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        <span>The script is <strong style="color:var(--text);">fully open source</strong> — it's included as a plain <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">setup.py</code> text file you can read before running.</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
-        <div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:2px;">Choose your OS</div>
-        <button id="osMac" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
-          <div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">macOS</div><div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.command</code></div></div>
-        </button>
-        <button id="osWin" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V3l-9 1.68V12h9zm-17 1h6v6.57L3 18.25V13zm17 0h-9v7.32L20 22V13z"/></svg>
-          <div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">Windows</div><div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.bat</code></div></div>
-        </button>
-        <button id="osLinux" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>
-          <div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">Linux</div><div style="font-size:0.75rem;color:var(--muted);">Includes <code style="background:var(--surface);padding:1px 4px;border-radius:3px;">Click me to install.sh</code></div></div>
-        </button>
-      </div>
-      <div style="border-top:1px solid var(--border);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <button id="osArchiveOnly" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Download map files only (no script)</button>
-        <button id="osCancel" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Cancel</button>
-      </div>
-    </div>`;
+  overlay.innerHTML = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 28px 24px;max-width:420px;width:92%;box-shadow:0 24px 64px rgba(0,0,0,0.6);">' +
+    '<div style="font-size:1.05rem;font-weight:600;margin-bottom:6px;color:var(--text);">Download map archive</div>' +
+    '<div style="font-size:0.8rem;color:var(--muted);margin-bottom:24px;line-height:1.6;">The archive includes <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">image.png</code> and <code style="background:var(--surface2);padding:1px 5px;border-radius:4px;font-size:0.78rem;">info.json</code> map files.</div>' +
+    '<div style="font-size:0.72rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:10px;">Choose your OS</div>' +
+    '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">' +
+      '<button id="osMac" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>' +
+        '<div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">macOS</div></div>' +
+      '</button>' +
+      '<button id="osWin" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M3 12V6.75l6-1.32v6.57H3zm17 0V3l-9 1.68V12h9zm-17 1h6v6.57L3 18.25V13zm17 0h-9v7.32L20 22V13z"/></svg>' +
+        '<div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">Windows</div></div>' +
+      '</button>' +
+      '<button id="osLinux" style="display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;cursor:pointer;text-align:left;transition:border-color 0.15s;">' +
+        '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0;color:var(--text);"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>' +
+        '<div><div style="font-size:0.88rem;font-weight:500;color:var(--text);">Linux</div></div>' +
+      '</button>' +
+    '</div>' +
+    '<div style="border-top:1px solid var(--border);padding-top:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">' +
+      '<button id="osArchiveOnly" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Map files only</button>' +
+      '<button id="osCancel" class="btn btn-ghost" style="font-size:0.8rem;padding:8px 14px;">Cancel</button>' +
+    '</div>' +
+  '</div>';
   document.body.appendChild(overlay);
 
-  overlay.querySelector('#osCancel').onclick = () => overlay.remove();
-  const pick = (os) => { overlay.remove(); buildGalleryArchive(map, os); };
-  overlay.querySelector('#osMac').onclick = () => pick('mac');
-  overlay.querySelector('#osWin').onclick = () => pick('win');
-  overlay.querySelector('#osLinux').onclick = () => pick('linux');
-  overlay.querySelector('#osArchiveOnly').onclick = () => { overlay.remove(); buildGalleryArchive(map, null); };
-  ['osMac','osWin','osLinux'].forEach(id => {
-    const btn = overlay.querySelector(`#${id}`);
-    btn.addEventListener('mouseenter', () => btn.style.borderColor = 'var(--accent, #5b8dee)');
-    btn.addEventListener('mouseleave', () => btn.style.borderColor = 'var(--border)');
+  overlay.querySelector('#osCancel').onclick = function() { overlay.remove(); };
+  var pick = function(os) { overlay.remove(); buildGalleryArchive(map, os); };
+  overlay.querySelector('#osMac').onclick = function() { pick('mac'); };
+  overlay.querySelector('#osWin').onclick = function() { pick('win'); };
+  overlay.querySelector('#osLinux').onclick = function() { pick('linux'); };
+  overlay.querySelector('#osArchiveOnly').onclick = function() { overlay.remove(); buildGalleryArchive(map, null); };
+  ['osMac','osWin','osLinux'].forEach(function(id) {
+    var btn = overlay.querySelector('#' + id);
+    btn.addEventListener('mouseenter', function() { btn.style.borderColor = 'var(--accent)'; });
+    btn.addEventListener('mouseleave', function() { btn.style.borderColor = 'var(--border)'; });
   });
 }
 
-const GITHUB_RAW = 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/';
-
 async function buildGalleryArchive(map, os) {
-  const zip = new JSZip();
-
-  // Fetch source map image (OpenFront palette) from GitHub
-  const imgResp = await fetch(map.sourceUrl);
-  if (!imgResp.ok) {
-    alert('Failed to download map image');
-    return;
-  }
-  const imgBlob = await imgResp.blob();
+  var zip = new JSZip();
+  var imgResp = await fetch(map.sourceUrl);
+  if (!imgResp.ok) { alert('Failed to download map image'); return; }
+  var imgBlob = await imgResp.blob();
   zip.file('image.png', imgBlob, { binary: true });
 
-  // Build info.json from map metadata
-  const manifest = {
+  var manifest = {
     name: map.name,
     map: { width: map.dimensions.width, height: map.dimensions.height, num_land_tiles: 0 },
-    nations: (map.nationsData || []).map(n => ({
-      name: n.name,
-      spawn: { x: n.x, y: n.y },
-      flag: n.flag || null
-    })),
+    nations: (map.nationsData || []).map(function(n) { return { name: n.name, spawn: { x: n.x, y: n.y }, flag: n.flag || null }; })
   };
   zip.file('info.json', JSON.stringify(manifest, null, 2));
 
   if (os) {
-    const setupResp = await fetch('map-test-kit/setup.py');
-    const setupText = await setupResp.text();
-    zip.file('setup.py', setupText);
-
+    var setupResp = await fetch('map-test-kit/setup.py');
+    zip.file('setup.py', await setupResp.text());
     if (os === 'win') {
-      const batResp = await fetch('map-test-kit/run.bat');
-      zip.file('Click me to install.bat', await batResp.text());
+      zip.file('Click me to install.bat', await (await fetch('map-test-kit/run.bat')).text());
     } else if (os === 'mac') {
-      const cmdResp = await fetch('map-test-kit/run.command');
-      zip.file('Click me to install.command', await cmdResp.text(), { unixPermissions: '755' });
+      zip.file('Click me to install.command', await (await fetch('map-test-kit/run.command')).text(), { unixPermissions: '755' });
     } else {
-      const launcher = '#!/bin/bash\ncd "$(dirname "$0")"\nif ! command -v python3 &> /dev/null; then\n  echo "Python 3 is not installed."\n  read -p "Press Enter to exit..."\n  exit 1\nfi\npython3 setup.py\n';
-      zip.file('Click me to install.sh', launcher, { unixPermissions: '755' });
+      zip.file('Click me to install.sh', '#!/bin/bash\ncd "$(dirname "$0")"\npython3 setup.py\n', { unixPermissions: '755' });
     }
   }
 
-  const blob = await zip.generateAsync({ type: 'blob', platform: 'UNIX' });
-  const a = document.createElement('a');
+  var blob = await zip.generateAsync({ type: 'blob', platform: 'UNIX' });
+  var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${map.name.replace(/[^a-z0-9]+/gi, '-')}.zip`;
+  a.download = map.name.replace(/[^a-z0-9]+/gi, '-') + '.zip';
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
-let allMaps = [];
+var allMaps = [];
 
 async function loadGallery() {
   try {
-    const response = await fetch(`${API_URL}/maps`);
-    const data = await response.json();
-    // Transform backend data to gallery format
-    allMaps = (data.maps || []).map(map => ({
-      ...map,
-      folder: map.id,
-      thumbnailUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.thumbnail}`,
-      fullUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
-      sourceUrl: map.source ? `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.source}` : `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.full}`,
-      hasNations: map.nations > 0
-    }));
+    var response = await fetch(API_URL + '/maps');
+    var data = await response.json();
+    allMaps = (data.maps || []).map(function(map) {
+      return Object.assign({}, map, {
+        folder: map.id,
+        thumbnailUrl: 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/' + map.thumbnail,
+        fullUrl: 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/' + map.full,
+        sourceUrl: map.source ? 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/' + map.source : 'https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/' + map.full
+      });
+    });
     renderGallery();
   } catch (error) {
     console.error('Failed to load gallery:', error);
-    galleryGrid.innerHTML = `
-      <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">
-        <p>Failed to load gallery</p>
-        <p style="font-size:0.8rem;margin-top:8px;">${error.message}</p>
-      </div>`;
+    galleryGrid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);"><p>Failed to load gallery</p><p style="font-size:0.8rem;margin-top:8px;">' + error.message + '</p></div>';
   }
 }
 
 function renderGallery() {
-  galleryCount.textContent = `${allMaps.length} map${allMaps.length !== 1 ? 's' : ''}`;
+  galleryCount.textContent = allMaps.length + ' map' + (allMaps.length !== 1 ? 's' : '');
 
   if (allMaps.length === 0) {
-    galleryGrid.innerHTML = `
-      <div class="gallery-empty" style="grid-column:1/-1;">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:0.3;margin-bottom:16px;">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
-        </svg>
-        <p>No maps found</p>
-      </div>`;
+    galleryGrid.innerHTML = '<div class="gallery-empty" style="grid-column:1/-1;"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:0.3;margin-bottom:16px;"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><p>No maps found</p></div>';
     return;
   }
 
-  galleryGrid.innerHTML = allMaps.map(map => `
-    <div class="gallery-card" data-folder="${map.folder}">
-      <div class="gallery-card-image-wrap">
-        <img src="${map.thumbnailUrl}" class="gallery-card-image" alt="${escapeHtml(map.name)}" />
-        ${showNationsOnMaps && map.nationsData && map.nationsData.length > 0 ? `
-          <div class="gallery-card-nations">
-            ${map.nationsData.slice(0, 5).map(n => n.flag ? 
-              `<img src="${flagUrl(n.flag)}" class="gallery-card-nation-flag" title="${escapeHtml(n.name)}" onerror="this.style.display='none'" />` : 
-              `<div class="gallery-card-nation-flag" style="display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:var(--accent);font-weight:600;" title="${escapeHtml(n.name)}">${n.name.charAt(0).toUpperCase()}</div>`
-            ).join('')}
-            ${map.nationsData.length > 5 ? `<div style="font-size:0.7rem;color:var(--muted);align-self:center;">+${map.nationsData.length - 5}</div>` : ''}
-          </div>
-        ` : ''}
-      </div>
-      <div class="gallery-card-body">
-        <div class="gallery-card-title">${escapeHtml(map.name)}</div>
-        <div class="gallery-card-meta">
-          <span>by ${escapeHtml(map.author)}</span>
-          ${map.nations > 0 ? `<span>• ${map.nations} nation${map.nations !== 1 ? 's' : ''}</span>` : ''}
-        </div>
-        ${map.description ? `<div class="gallery-card-desc">${escapeHtml(map.description)}</div>` : ''}
-      </div>
-    </div>
-  `).join('');
+  var html = '';
+  allMaps.forEach(function(map) {
+    html += '<div class="gallery-card" data-folder="' + map.folder + '">' +
+      '<div class="gallery-card-image-wrap">' +
+        '<img src="' + map.thumbnailUrl + '" class="gallery-card-image" alt="' + escapeHtml(map.name) + '" />' +
+      '</div>' +
+      '<div class="gallery-card-body">' +
+        '<div class="gallery-card-title">' + escapeHtml(map.name) + '</div>' +
+        '<div class="gallery-card-meta">' +
+          '<span>by ' + escapeHtml(map.author) + '</span>' +
+          (map.nations > 0 ? '<span>• ' + map.nations + ' nation' + (map.nations !== 1 ? 's' : '') + '</span>' : '') +
+        '</div>' +
+        (map.description ? '<div class="gallery-card-desc">' + escapeHtml(map.description) + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  });
+  galleryGrid.innerHTML = html;
 
-  // Add click handlers
-  document.querySelectorAll('.gallery-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const folder = card.dataset.folder;
-      const map = allMaps.find(m => m.folder === folder);
+  document.querySelectorAll('.gallery-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      var folder = card.dataset.folder;
+      var map = allMaps.find(function(m) { return m.folder === folder; });
       if (map) showMapDetail(map);
     });
   });
@@ -426,12 +369,11 @@ function showMapDetail(map) {
   document.getElementById('detailTitle').textContent = map.name;
   document.getElementById('detailImage').src = map.fullUrl;
   document.getElementById('detailAuthor').textContent = map.author;
-  document.getElementById('detailSize').textContent = `${map.dimensions.width} × ${map.dimensions.height}`;
+  document.getElementById('detailSize').textContent = map.dimensions.width + ' × ' + map.dimensions.height;
   document.getElementById('detailNationsCount').textContent = map.nations;
   document.getElementById('detailDate').textContent = new Date(map.date).toLocaleDateString();
   
-  // Description
-  const descWrap = document.getElementById('detailDescWrap');
+  var descWrap = document.getElementById('detailDescWrap');
   if (map.description) {
     document.getElementById('detailDesc').textContent = map.description;
     descWrap.style.display = 'block';
@@ -439,82 +381,53 @@ function showMapDetail(map) {
     descWrap.style.display = 'none';
   }
   
-  // Nations list
-  const nationsListWrap = document.getElementById('detailNationsListWrap');
-  const nationsList = document.getElementById('detailNationsList');
-  if (map.nationsData && map.nationsData.length > 0) {
-    nationsList.innerHTML = map.nationsData.map(n => `
-      <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--surface);border-radius:6px;">
-        ${n.flag ? 
-          `<img src="${flagUrl(n.flag)}" style="width:28px;height:18px;border-radius:2px;object-fit:cover;" onerror="this.style.display='none'" />` : 
-          `<div style="width:28px;height:18px;border-radius:2px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:var(--accent);font-weight:600;">${n.name.charAt(0).toUpperCase()}</div>`
-        }
-        <span style="font-size:0.85rem;color:var(--text);">${escapeHtml(n.name)}</span>
-      </div>
-    `).join('');
+  // Show nations toggle and list
+  var hasNationsData = map.nationsData && map.nationsData.length > 0;
+  showNationsToggleWrap.style.display = hasNationsData ? 'block' : 'none';
+  
+  var nationsListWrap = document.getElementById('detailNationsListWrap');
+  var nationsList = document.getElementById('detailNationsList');
+  if (hasNationsData) {
+    var listHtml = '';
+    map.nationsData.forEach(function(n) {
+      var flagHtml = n.flag 
+        ? '<img src="' + flagUrl(n.flag) + '" style="width:28px;height:18px;border-radius:2px;object-fit:cover;" onerror="this.style.display=\'none\'" />'
+        : '<div style="width:28px;height:18px;border-radius:2px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:var(--accent);font-weight:600;">' + n.name.charAt(0).toUpperCase() + '</div>';
+      listHtml += '<div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--surface);border-radius:6px;">' + flagHtml + '<span style="font-size:0.85rem;color:var(--text);">' + escapeHtml(n.name) + '</span></div>';
+    });
+    nationsList.innerHTML = listHtml;
     nationsListWrap.style.display = 'block';
   } else {
     nationsListWrap.style.display = 'none';
   }
   
-  // Render nation markers on map
   renderDetailMarkers(map);
-  
   mapDetailModal.classList.add('open');
 }
 
 function renderDetailMarkers(map) {
-  const mapWrap = document.getElementById('detailMapWrap');
-  const img = document.getElementById('detailImage');
+  var mapWrap = document.getElementById('detailMapWrap');
+  var img = document.getElementById('detailImage');
   
-  // Remove existing markers
-  mapWrap.querySelectorAll('.gallery-nation-marker').forEach(el => el.remove());
+  mapWrap.querySelectorAll('.gallery-nation-marker').forEach(function(el) { el.remove(); });
   
-  if (!showNationsOnMaps || !map.nationsData || map.nationsData.length === 0) return;
+  if (!showNationsOnMap || !map.nationsData || map.nationsData.length === 0) return;
   
-  // Wait for image to load
-  const render = () => {
-    const imgRect = img.getBoundingClientRect();
-    const scaleX = imgRect.width / map.dimensions.width;
-    const scaleY = imgRect.height / map.dimensions.height;
+  var render = function() {
+    var imgRect = img.getBoundingClientRect();
+    var scaleX = imgRect.width / map.dimensions.width;
+    var scaleY = imgRect.height / map.dimensions.height;
     
-    map.nationsData.forEach((n, i) => {
-      const el = document.createElement('div');
+    map.nationsData.forEach(function(n, i) {
+      var el = document.createElement('div');
       el.className = 'gallery-nation-marker';
-      el.style.cssText = `
-        position: absolute;
-        left: ${n.x * scaleX}px;
-        top: ${n.y * scaleY}px;
-        transform: translate(-50%, -50%);
-        pointer-events: none;
-        z-index: 10;
-      `;
+      el.style.cssText = 'position:absolute;left:' + (n.x * scaleX) + 'px;top:' + (n.y * scaleY) + 'px;transform:translate(-50%,-100%);pointer-events:none;z-index:10;';
       
-      const flagImg = n.flag
-        ? `<img src="${flagUrl(n.flag)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<span style=\\'font-size:0.6rem;font-weight:700;color:var(--accent);\\'>${i + 1}</span>'" />`
-        : `<span style="font-size:0.6rem;font-weight:700;color:var(--accent);">${i + 1}</span>`;
+      var flagImg = n.flag
+        ? '<img src="' + flagUrl(n.flag) + '" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML=\'<span style=&quot;font-size:0.6rem;font-weight:700;color:var(--accent);&quot;>' + (i + 1) + '</span>\'" />'
+        : '<span style="font-size:0.6rem;font-weight:700;color:var(--accent);">' + (i + 1) + '</span>';
       
-      el.innerHTML = `
-        <div style="
-          width: 28px; height: 20px;
-          border-radius: 3px;
-          border: 2px solid rgba(255,255,255,0.9);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.7);
-          overflow: hidden;
-          background: var(--surface2);
-          display: flex; align-items: center; justify-content: center;
-        ">${flagImg}</div>
-        <div style="
-          position: absolute;
-          bottom: -6px;
-          left: 50%;
-          transform: translateX(-50%);
-          width: 0; height: 0;
-          border-left: 4px solid transparent;
-          border-right: 4px solid transparent;
-          border-top: 6px solid rgba(255,255,255,0.9);
-        "></div>
-      `;
+      el.innerHTML = '<div style="width:28px;height:20px;border-radius:3px;border:2px solid rgba(255,255,255,0.9);box-shadow:0 2px 8px rgba(0,0,0,0.7);overflow:hidden;background:var(--surface2);display:flex;align-items:center;justify-content:center;">' + flagImg + '</div><div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid rgba(255,255,255,0.9);"></div>';
       
       mapWrap.appendChild(el);
     });
@@ -527,24 +440,21 @@ function renderDetailMarkers(map) {
   }
 }
 
-// Toggle nations visibility
-showNationsToggle.addEventListener('click', () => {
-  showNationsOnMaps = !showNationsOnMaps;
-  showNationsToggle.classList.toggle('active', showNationsOnMaps);
-  renderGallery();
-  if (mapDetailModal.classList.contains('open') && currentDetailMap) {
-    renderDetailMarkers(currentDetailMap);
-  }
+// Toggle nations visibility in detail modal
+detailShowNations.addEventListener('click', function() {
+  showNationsOnMap = !showNationsOnMap;
+  detailShowNations.classList.toggle('active', showNationsOnMap);
+  if (currentDetailMap) renderDetailMarkers(currentDetailMap);
 });
 
-detailClose.addEventListener('click', () => mapDetailModal.classList.remove('open'));
-detailClose2.addEventListener('click', () => mapDetailModal.classList.remove('open'));
-detailDownloadBtn.addEventListener('click', () => {
+detailClose.addEventListener('click', function() { mapDetailModal.classList.remove('open'); });
+detailClose2.addEventListener('click', function() { mapDetailModal.classList.remove('open'); });
+detailDownloadBtn.addEventListener('click', function() {
   if (currentDetailMap) showOsPickerAndDownload(currentDetailMap);
 });
 
 function escapeHtml(text) {
-  const div = document.createElement('div');
+  var div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
 }
@@ -558,10 +468,9 @@ loadGallery();
       <a href="https://github.com/baculinivan-web/OFmapGen" target="_blank" rel="noopener" aria-label="GitHub">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
-{}
         </svg>
       </a>
-      <span style="font-size:0.8rem; color:var(--muted)">made by ivan ❤️</span>
+      <span style="font-size:0.8rem; color:var(--muted)">made by ivan</span>
     </div>
   </div>
 </footer>
