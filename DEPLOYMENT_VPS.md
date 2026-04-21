@@ -133,10 +133,10 @@ sudo nano /etc/nginx/sites-available/devmaps.mivps.ru
 
 ### 5.2 Добавьте проксирование API
 
-Найдите блок `server` и добавьте **перед** блоком `location /`:
+Найдите блок `server` (тот что с `listen 443 ssl`) и добавьте **перед** блоком `location /`:
 
 ```nginx
-# API proxy для галереи
+# API proxy для галереи (ВАЖНО: должен быть ПЕРЕД location /)
 location /api/ {
     proxy_pass http://localhost:3002/api/;
     proxy_http_version 1.1;
@@ -158,13 +158,9 @@ location /api/ {
         return 204;
     }
 }
-
-# Существующий location /
-location / {
-    proxy_pass http://localhost:3001;
-    # ... остальные настройки
-}
 ```
+
+**Полный пример конфига:** см. файл `nginx-config-example.conf` в репозитории
 
 Сохраните: `Ctrl+O`, `Enter`, `Ctrl+X`
 
