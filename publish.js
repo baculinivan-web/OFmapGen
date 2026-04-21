@@ -235,7 +235,7 @@ publishSubmitBtn.addEventListener('click', async () => {
     
     // Add metadata
     formData.append('mapName', publishMapName.value.trim());
-    formData.append('author', publishAuthor.value.trim() || 'Anonymous');
+    formData.append('authorNick', publishAuthor.value.trim() || 'Anonymous');
     formData.append('description', publishDescription.value.trim());
     formData.append('nations', JSON.stringify(window.nations));
     formData.append('mapWidth', window.outCanvas.width);
