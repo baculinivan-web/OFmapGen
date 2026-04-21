@@ -2,7 +2,7 @@
 
 const API_URL = window.location.hostname === 'localhost' 
   ? 'http://localhost:3002/api'
-  : `${window.location.protocol}//${window.location.hostname}:3002/api`;
+  : `${window.location.protocol}//${window.location.hostname}/api`;
 
 const publishModal = document.getElementById('publishModal');
 const publishModalClose = document.getElementById('publishModalClose');
