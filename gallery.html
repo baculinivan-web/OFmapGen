@@ -149,7 +149,13 @@ async function loadGallery() {
   try {
     const response = await fetch(`${API_URL}/maps`);
     const data = await response.json();
-    allMaps = data.maps || [];
+    // Transform backend data to gallery format
+    allMaps = (data.maps || []).map(map => ({
+      ...map,
+      folder: map.id,
+      thumbnailUrl: `https://raw.githubusercontent.com/baculinivan-web/OFmapGen/dev/${map.thumbnail}`,
+      hasNations: map.nations > 0
+    }));
     renderGallery();
   } catch (error) {
     console.error('Failed to load gallery:', error);
