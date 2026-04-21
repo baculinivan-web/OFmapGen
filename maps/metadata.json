@@ -1,6 +1,68 @@
 {
   "maps": [
     {
+      "id": "baltic-sea-by-anonymous-1776806545906",
+      "name": "Baltic sea",
+      "author": "Anonymous",
+      "description": "",
+      "timestamp": 1776806545906,
+      "date": "2026-04-21T21:22:26.412Z",
+      "dimensions": {
+        "width": 996,
+        "height": 598
+      },
+      "nations": 7,
+      "nationsData": [
+        {
+          "x": 934,
+          "y": 237,
+          "name": "Latvia",
+          "flag": "lv"
+        },
+        {
+          "x": 886,
+          "y": 387,
+          "name": "Estonia",
+          "flag": "ee"
+        },
+        {
+          "x": 409,
+          "y": 573,
+          "name": "Germany",
+          "flag": "de"
+        },
+        {
+          "x": 672,
+          "y": 554,
+          "name": "Poland",
+          "flag": "pl"
+        },
+        {
+          "x": 192,
+          "y": 371,
+          "name": "Denmark",
+          "flag": "dk"
+        },
+        {
+          "x": 409,
+          "y": 167,
+          "name": "Norway",
+          "flag": "no"
+        },
+        {
+          "x": 149,
+          "y": 72,
+          "name": "Sweden",
+          "flag": "se"
+        }
+      ],
+      "thumbnail": "maps/thumbnails/baltic-sea-by-anonymous-1776806545906.png",
+      "full": "maps/full/baltic-sea-by-anonymous-1776806545906.png",
+      "source": "maps/source/baltic-sea-by-anonymous-1776806545906.png",
+      "proof": "maps/proof/baltic-sea-by-anonymous-1776806545906.png",
+      "hasCopyright": false
+    },
+    {
       "id": "github6-by-ivan-1776774426522",
       "name": "GitHub6",
       "author": "ivan",
