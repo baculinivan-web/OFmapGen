@@ -1204,3 +1204,7 @@ fromScratchBtn.addEventListener('click', openBlankMapModal);
 blankMapModalClose.addEventListener('click', closeBlankMapModal);
 blankMapModalClose2.addEventListener('click', closeBlankMapModal);
 createBlankMapBtn.addEventListener('click', createBlankMap);
+
+// Export for publish.js
+window.nations = nations;
+window.outCanvas = outCanvas;

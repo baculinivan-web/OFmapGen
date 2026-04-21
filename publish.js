@@ -54,7 +54,7 @@ let proofDownloaded = false;
 
 // Open modal
 publishToGalleryBtn.addEventListener('click', () => {
-  if (!outCanvas.width || nations.length === 0) {
+  if (!window.outCanvas || !window.outCanvas.width || !window.nations || window.nations.length === 0) {
     alert('Please create a map and add at least one nation before publishing.');
     return;
   }
@@ -134,8 +134,8 @@ function generateProofImage() {
   const canvas = publishProofCanvas;
   const padding = 40;
   const footerHeight = 80;
-  const mapWidth = outCanvas.width;
-  const mapHeight = outCanvas.height;
+  const mapWidth = window.outCanvas.width;
+  const mapHeight = window.outCanvas.height;
   
   // Scale map to fit max 500px width
   const maxWidth = 500;
@@ -158,7 +158,7 @@ function generateProofImage() {
   ctx.strokeRect(padding - 10, padding - 10, scaledWidth + 20, scaledHeight + 20);
   
   // Draw map
-  ctx.drawImage(outCanvas, padding, padding, scaledWidth, scaledHeight);
+  ctx.drawImage(window.outCanvas, padding, padding, scaledWidth, scaledHeight);
   
   // Footer background
   ctx.fillStyle = '#1a202c';
@@ -230,16 +230,16 @@ publishSubmitBtn.addEventListener('click', async () => {
     const formData = new FormData();
     
     // Add map image
-    const mapBlob = await new Promise(resolve => outCanvas.toBlob(resolve, 'image/png'));
+    const mapBlob = await new Promise(resolve => window.outCanvas.toBlob(resolve, 'image/png'));
     formData.append('map', mapBlob, 'map.png');
     
     // Add metadata
     formData.append('mapName', publishMapName.value.trim());
     formData.append('author', publishAuthor.value.trim() || 'Anonymous');
     formData.append('description', publishDescription.value.trim());
-    formData.append('nations', JSON.stringify(nations));
-    formData.append('mapWidth', outCanvas.width);
-    formData.append('mapHeight', outCanvas.height);
+    formData.append('nations', JSON.stringify(window.nations));
+    formData.append('mapWidth', window.outCanvas.width);
+    formData.append('mapHeight', window.outCanvas.height);
     
     if (hasCopyright && publishCopyrightText.value.trim()) {
       formData.append('copyright', publishCopyrightText.value.trim());
