@@ -1,0 +1,21 @@
+{
+  "name": "ofmapgen-backend",
+  "version": "1.0.0",
+  "description": "Backend for OpenFront Map Generator gallery",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.0.2",
+    "express": "^4.18.2",
+    "multer": "^1.4.5-lts.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "sharp": "^0.33.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Map Gallery - OpenFront Map Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      padding: 20px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .gallery-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .gallery-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    }
+    .gallery-card-image {
+      width: 100%;
+      height: 180px;
+      object-fit: cover;
+      background: var(--surface2);
+      image-rendering: pixelated;
+    }
+    .gallery-card-body {
+      padding: 14px;
+    }
+    .gallery-card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .gallery-card-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .gallery-card-desc {
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.4;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .gallery-filter {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+    .gallery-empty {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="header-text">
+      <h1>Map Gallery</h1>
+      <p>Browse community-created maps for <a href="https://openfront.io" target="_blank" rel="noopener">openfront.io</a></p>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <a href="index.html" class="btn btn-ghost">← Back to Generator</a>
+    </div>
+  </div>
+
+  <div class="gallery-filter">
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text);cursor:pointer;">
+      <input type="checkbox" id="showNationsFilter" checked style="cursor:pointer;" />
+      <span>Show nations</span>
+    </label>
+    <div style="flex:1"></div>
+    <span id="galleryCount" style="font-size:0.8rem;color:var(--muted);"></span>
+  </div>
+
+  <div id="galleryGrid" class="gallery-grid">
+    <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">
+      Loading gallery...
+    </div>
+  </div>
+</div>
+
+<!-- Map detail modal -->
+<div class="modal-overlay" id="mapDetailModal">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-header">
+      <span class="modal-title" id="detailTitle">Map Details</span>
+      <button class="modal-close" id="detailClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div style="padding:20px;">
+      <img id="detailImage" style="width:100%;border-radius:8px;margin-bottom:16px;image-rendering:pixelated;" />
+      <div id="detailMeta" style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;"></div>
+      <div id="detailDesc" style="font-size:0.85rem;color:var(--text);line-height:1.6;margin-bottom:16px;"></div>
+      <div style="display:flex;gap:8px;">
+        <a id="detailDownload" class="btn btn-primary" target="_blank" rel="noopener">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Map Package
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const API_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3002/api'
+  : `${window.location.protocol}//${window.location.hostname}:3002/api`;
+
+const galleryGrid = document.getElementById('galleryGrid');
+const showNationsFilter = document.getElementById('showNationsFilter');
+const galleryCount = document.getElementById('galleryCount');
+const mapDetailModal = document.getElementById('mapDetailModal');
+const detailClose = document.getElementById('detailClose');
+
+let allMaps = [];
+
+async function loadGallery() {
+  try {
+    const response = await fetch(`${API_URL}/maps`);
+    const data = await response.json();
+    allMaps = data.maps || [];
+    renderGallery();
+  } catch (error) {
+    console.error('Failed to load gallery:', error);
+    galleryGrid.innerHTML = `
+      <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted);">
+        <p>Failed to load gallery</p>
+        <p style="font-size:0.8rem;margin-top:8px;">${error.message}</p>
+      </div>`;
+  }
+}
+
+function renderGallery() {
+  const showNations = showNationsFilter.checked;
+  const filtered = allMaps.filter(map => !showNations || map.hasNations);
+  
+  galleryCount.textContent = `${filtered.length} map${filtered.length !== 1 ? 's' : ''}`;
+
+  if (filtered.length === 0) {
+    galleryGrid.innerHTML = `
+      <div class="gallery-empty" style="grid-column:1/-1;">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:0.3;margin-bottom:16px;">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+        </svg>
+        <p>No maps found</p>
+      </div>`;
+    return;
+  }
+
+  galleryGrid.innerHTML = filtered.map(map => `
+    <div class="gallery-card" data-folder="${map.folder}">
+      <img src="${map.thumbnailUrl}" class="gallery-card-image" alt="${map.name}" />
+      <div class="gallery-card-body">
+        <div class="gallery-card-title">${escapeHtml(map.name)}</div>
+        <div class="gallery-card-meta">
+          <span>by ${escapeHtml(map.author)}</span>
+          ${map.nations > 0 ? `<span>• ${map.nations} nations</span>` : ''}
+        </div>
+        ${map.description ? `<div class="gallery-card-desc">${escapeHtml(map.description)}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  // Add click handlers
+  document.querySelectorAll('.gallery-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const folder = card.dataset.folder;
+      const map = allMaps.find(m => m.folder === folder);
+      if (map) showMapDetail(map);
+    });
+  });
+}
+
+function showMapDetail(map) {
+  document.getElementById('detailTitle').textContent = map.name;
+  document.getElementById('detailImage').src = map.thumbnailUrl;
+  document.getElementById('detailMeta').innerHTML = `
+    <strong>Author:</strong> ${escapeHtml(map.author)} • 
+    <strong>Size:</strong> ${map.dimensions.width}×${map.dimensions.height} • 
+    <strong>Nations:</strong> ${map.nations} • 
+    <strong>Created:</strong> ${new Date(map.created).toLocaleDateString()}
+  `;
+  document.getElementById('detailDesc').textContent = map.description || 'No description provided.';
+  document.getElementById('detailDownload').href = map.downloadUrl;
+  mapDetailModal.classList.add('open');
+}
+
+detailClose.addEventListener('click', () => mapDetailModal.classList.remove('open'));
+showNationsFilter.addEventListener('change', renderGallery);
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+loadGallery();
+</script>
+
+<footer>
+  <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <a href="https://github.com/baculinivan-web/OFmapGen" target="_blank" rel="noopener" aria-label="GitHub">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+        </svg>
+      </a>
+      <span style="font-size:0.8rem; color:var(--muted)">made by ivan ❤️</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

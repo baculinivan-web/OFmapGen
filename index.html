@@ -19,6 +19,12 @@
       <h1>OpenFront Map Generator</h1>
       <p>Convert any image into a playable map for <a href="https://openfront.io" target="_blank" rel="noopener">openfront.io</a></p>
     </div>
+    <a href="gallery.html" class="btn btn-ghost" style="margin-left:auto;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Gallery
+    </a>
   </div>
 
   <div class="layout">
@@ -353,6 +359,14 @@
     </div>
     <div class="modal-footer">
       <span style="font-size:0.75rem; color:var(--muted); flex:2; line-height:1.4;">Click land to place spawn · Drag flag to move · Hover for edit/remove</span>
+      <button class="btn btn-secondary" id="publishToGalleryBtn" style="font-size:0.82rem; padding:8px 16px; width:auto;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Publish to Gallery
+      </button>
       <button class="btn btn-primary" id="downloadArchiveBtn" style="font-size:0.82rem; padding:8px 16px; width:auto; flex:1;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download map archive
@@ -942,9 +956,187 @@
   </div>
 </div>
 
+<!-- Publish to Gallery Modal -->
+<div class="modal-overlay" id="publishModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <span class="modal-title">Publish Map to Gallery</span>
+      <button class="modal-close" id="publishModalClose">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div id="publishStep1" style="padding:20px 24px;">
+      <div style="font-size:0.88rem; color:var(--text); margin-bottom:20px; line-height:1.6;">
+        Share your map with the OpenFront community! Your map will be reviewed and added to the public gallery.
+      </div>
+      
+      <div style="margin-bottom:16px;">
+        <label style="font-size:0.82rem; font-weight:500; color:var(--text); display:block; margin-bottom:6px;">Map Name <span style="color:#e74c3c;">*</span></label>
+        <input type="text" id="publishMapName" placeholder="e.g. Fantasy Archipelago" maxlength="60" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid var(--border); border-radius:6px; background:var(--surface2); color:var(--text);" />
+      </div>
+      
+      <div style="margin-bottom:16px;">
+        <label style="font-size:0.82rem; font-weight:500; color:var(--text); display:block; margin-bottom:6px;">Your Nickname (optional)</label>
+        <input type="text" id="publishAuthor" placeholder="e.g. MapMaster123" maxlength="40" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid var(--border); border-radius:6px; background:var(--surface2); color:var(--text);" />
+        <div style="font-size:0.72rem; color:var(--muted); margin-top:4px;">Leave empty to publish anonymously</div>
+      </div>
+      
+      <div style="margin-bottom:20px;">
+        <label style="font-size:0.82rem; font-weight:500; color:var(--text); display:block; margin-bottom:6px;">Description (optional)</label>
+        <textarea id="publishDescription" placeholder="Describe your map..." maxlength="300" rows="3" style="width:100%; padding:10px 12px; font-size:0.88rem; border:1px solid var(--border); border-radius:6px; background:var(--surface2); color:var(--text); resize:vertical; font-family:inherit;"></textarea>
+      </div>
+      
+      <div style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px;">
+        <label style="display:flex; align-items:start; gap:10px; cursor:pointer;">
+          <input type="checkbox" id="publishAgreeOpenSource" style="margin-top:3px; cursor:pointer; width:18px; height:18px; flex-shrink:0;" />
+          <div style="flex:1; font-size:0.82rem; color:var(--text); line-height:1.5;">
+            I agree that this map is <strong>open source</strong> and can be freely used, modified, and distributed by others, including for commercial purposes on openfront.io
+          </div>
+        </label>
+      </div>
+      
+      <div style="font-size:0.78rem; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+        <strong style="color:var(--text);">What happens next:</strong><br>
+        1. You'll download a proof-of-authorship image<br>
+        2. We'll ask about copyright/resources used<br>
+        3. Your map will be submitted for review<br>
+        4. Once approved, it appears in the gallery
+      </div>
+    </div>
+    
+    <div id="publishStep2" style="display:none; padding:20px 24px;">
+      <div style="text-align:center; margin-bottom:20px;">
+        <div style="width:80px; height:80px; margin:0 auto 12px; background:var(--accent-dim); border-radius:50%; display:flex; align-items:center; justify-content:center;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </div>
+        <div style="font-size:1.05rem; font-weight:600; color:var(--text); margin-bottom:8px;">Download Proof of Authorship</div>
+        <div style="font-size:0.85rem; color:var(--muted); line-height:1.5; max-width:400px; margin:0 auto;">
+          This image contains your map with your name and timestamp. Keep it to prove you created this map.
+        </div>
+      </div>
+      
+      <div style="background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:16px; text-align:center;">
+        <canvas id="publishProofCanvas" style="max-width:100%; border-radius:4px; image-rendering:pixelated;"></canvas>
+      </div>
+      
+      <button class="btn btn-primary" id="publishDownloadProof" style="width:100%; margin-bottom:12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Proof Image
+      </button>
+      
+      <div style="font-size:0.75rem; color:var(--muted); text-align:center; line-height:1.5;">
+        This doesn't guarantee authorship but adds confidence that you created this map
+      </div>
+    </div>
+    
+    <div id="publishStep3" style="display:none; padding:20px 24px;">
+      <div style="font-size:0.88rem; font-weight:600; color:var(--text); margin-bottom:12px;">Copyright & Resources</div>
+      <div style="font-size:0.82rem; color:var(--muted); margin-bottom:16px; line-height:1.5;">
+        Did you use any copyrighted resources (images, textures, etc.) to create this map?
+      </div>
+      
+      <div style="display:flex; gap:12px; margin-bottom:16px;">
+        <button class="btn btn-ghost" id="publishCopyrightNo" style="flex:1;">No, it's original</button>
+        <button class="btn btn-ghost" id="publishCopyrightYes" style="flex:1;">Yes, I used resources</button>
+      </div>
+      
+      <div id="publishCopyrightDetails" style="display:none;">
+        <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:6px; padding:12px; margin-bottom:12px;">
+          <div style="font-size:0.82rem; color:#856404; line-height:1.5;">
+            <strong>Important:</strong> Make sure all resources allow commercial use. Your map will be used on openfront.io.
+          </div>
+        </div>
+        
+        <label style="font-size:0.82rem; font-weight:500; color:var(--text); display:block; margin-bottom:6px;">List resources and their licenses</label>
+        <textarea id="publishCopyrightText" placeholder="Example:&#10;- Background image from Unsplash (free for commercial use)&#10;- Texture pack by ArtistName (CC BY 4.0)" rows="6" style="width:100%; padding:10px 12px; font-size:0.82rem; border:1px solid var(--border); border-radius:6px; background:var(--surface2); color:var(--text); resize:vertical; font-family:monospace; line-height:1.5;"></textarea>
+      </div>
+    </div>
+    
+    <div id="publishStep4" style="display:none; padding:20px 24px;">
+      <div style="text-align:center;">
+        <div id="publishSpinner" style="width:60px; height:60px; margin:0 auto 16px; border:4px solid var(--surface2); border-top:4px solid var(--accent); border-radius:50%; animation:spin 1s linear infinite;"></div>
+        <div style="font-size:0.95rem; font-weight:600; color:var(--text); margin-bottom:8px;">Uploading your map...</div>
+        <div style="font-size:0.82rem; color:var(--muted);">This may take a moment</div>
+      </div>
+    </div>
+    
+    <div id="publishStep5" style="display:none; padding:20px 24px;">
+      <div style="text-align:center;">
+        <div style="width:80px; height:80px; margin:0 auto 16px; background:rgba(80,180,100,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#50b464" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+        <div style="font-size:1.05rem; font-weight:600; color:var(--text); margin-bottom:8px;">Map Submitted!</div>
+        <div style="font-size:0.85rem; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+          Your map has been submitted for review. You'll receive a notification when it's approved and added to the gallery.
+        </div>
+        <a id="publishPRLink" href="#" target="_blank" rel="noopener" class="btn btn-ghost" style="display:inline-flex; align-items:center; gap:6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+          </svg>
+          View Pull Request on GitHub
+        </a>
+      </div>
+    </div>
+    
+    <div id="publishStep6" style="display:none; padding:20px 24px;">
+      <div style="text-align:center;">
+        <div style="width:80px; height:80px; margin:0 auto 16px; background:rgba(231,76,60,0.15); border-radius:50%; display:flex; align-items:center; justify-content:center;">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#e74c3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="15" y1="9" x2="9" y2="15"/>
+            <line x1="9" y1="9" x2="15" y2="15"/>
+          </svg>
+        </div>
+        <div style="font-size:1.05rem; font-weight:600; color:var(--text); margin-bottom:8px;">Upload Failed</div>
+        <div id="publishErrorMsg" style="font-size:0.85rem; color:var(--muted); line-height:1.5; margin-bottom:16px;">
+          Something went wrong. Please try again.
+        </div>
+      </div>
+    </div>
+    
+    <div class="modal-footer" id="publishFooter1">
+      <button class="btn btn-primary" id="publishNextBtn" disabled>Next</button>
+      <button class="btn btn-ghost" id="publishCancelBtn">Cancel</button>
+    </div>
+    
+    <div class="modal-footer" id="publishFooter2" style="display:none;">
+      <button class="btn btn-ghost" id="publishBackBtn">← Back</button>
+      <button class="btn btn-primary" id="publishContinueBtn">Continue</button>
+    </div>
+    
+    <div class="modal-footer" id="publishFooter3" style="display:none;">
+      <button class="btn btn-ghost" id="publishBackBtn2">← Back</button>
+      <button class="btn btn-primary" id="publishSubmitBtn" disabled>Submit to Gallery</button>
+    </div>
+    
+    <div class="modal-footer" id="publishFooter5" style="display:none;">
+      <button class="btn btn-primary" id="publishDoneBtn">Done</button>
+    </div>
+    
+    <div class="modal-footer" id="publishFooter6" style="display:none;">
+      <button class="btn btn-primary" id="publishRetryBtn">Try Again</button>
+      <button class="btn btn-ghost" id="publishCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+</style>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script type="module" src="app.js?v=5"></script>
+<script type="module" src="publish.js"></script>
 </body>
 </html>
