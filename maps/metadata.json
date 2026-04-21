@@ -1,6 +1,24 @@
 {
   "maps": [
     {
+      "id": "github5-by-ivan-1776773184983",
+      "name": "GitHub5",
+      "author": "ivan",
+      "description": "this is test #12",
+      "timestamp": 1776773184983,
+      "date": "2026-04-21T12:06:25.325Z",
+      "dimensions": {
+        "width": 720,
+        "height": 720
+      },
+      "nations": 1,
+      "thumbnail": "maps/thumbnails/github5-by-ivan-1776773184983.png",
+      "full": "maps/full/github5-by-ivan-1776773184983.png",
+      "source": "maps/source/github5-by-ivan-1776773184983.png",
+      "proof": "maps/proof/github5-by-ivan-1776773184983.png",
+      "hasCopyright": false
+    },
+    {
       "id": "github4-by-ivan-1776772748990",
       "name": "GitHub4",
       "author": "ivan",
