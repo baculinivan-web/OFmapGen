@@ -1,0 +1,20 @@
+{
+  "maps": [
+    {
+      "id": "github-by-ivan-1776766607162",
+      "name": "GitHub",
+      "author": "ivan",
+      "timestamp": 1776766607162,
+      "date": "2026-04-21T10:16:47.628Z",
+      "dimensions": {
+        "width": 720,
+        "height": 720
+      },
+      "nations": 1,
+      "thumbnail": "maps/thumbnails/github-by-ivan-1776766607162.png",
+      "full": "maps/full/github-by-ivan-1776766607162.png",
+      "proof": "maps/proof/github-by-ivan-1776766607162.png",
+      "hasCopyright": false
+    }
+  ]
+}
