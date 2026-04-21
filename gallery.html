@@ -208,9 +208,13 @@ async function buildGalleryArchive(map, os) {
   const zip = new JSZip();
 
   // Fetch full map image from GitHub
-  const imgResp = await fetch(GITHUB_RAW + map.full);
+  const imgResp = await fetch(map.fullUrl);
+  if (!imgResp.ok) {
+    alert('Failed to download map image');
+    return;
+  }
   const imgBlob = await imgResp.blob();
-  zip.file('image.png', imgBlob);
+  zip.file('image.png', imgBlob, { binary: true });
 
   // Build info.json from map metadata
   const manifest = {
