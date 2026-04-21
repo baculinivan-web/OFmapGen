@@ -10,36 +10,60 @@
   <style>
     .gallery-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 20px;
-      padding: 20px;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 24px;
+      padding: 24px;
       max-width: 1400px;
       margin: 0 auto;
     }
     .gallery-card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 16px;
       overflow: hidden;
-      transition: transform 0.2s, box-shadow 0.2s;
+      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
       cursor: pointer;
     }
     .gallery-card:hover {
       transform: translateY(-4px);
-      box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+      border-color: var(--accent);
+    }
+    .gallery-card-image-wrap {
+      position: relative;
+      width: 100%;
+      height: 200px;
+      background: var(--surface2);
+      overflow: hidden;
     }
     .gallery-card-image {
       width: 100%;
-      height: 180px;
+      height: 100%;
       object-fit: cover;
-      background: var(--surface2);
       image-rendering: pixelated;
     }
+    .gallery-card-nations {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      max-width: 60%;
+    }
+    .gallery-card-nation-flag {
+      width: 24px;
+      height: 16px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.3);
+      object-fit: cover;
+      background: var(--surface2);
+    }
     .gallery-card-body {
-      padding: 14px;
+      padding: 16px;
     }
     .gallery-card-title {
-      font-size: 0.95rem;
+      font-size: 1rem;
       font-weight: 600;
       color: var(--text);
       margin-bottom: 6px;
@@ -56,9 +80,9 @@
       margin-bottom: 8px;
     }
     .gallery-card-desc {
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       color: var(--muted);
-      line-height: 1.4;
+      line-height: 1.5;
       display: -webkit-box;
       -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
@@ -68,7 +92,7 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 16px 20px;
+      padding: 16px 24px;
       background: var(--surface);
       border-bottom: 1px solid var(--border);
       max-width: 1400px;
@@ -78,6 +102,34 @@
       text-align: center;
       padding: 60px 20px;
       color: var(--muted);
+    }
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .toggle-switch.active {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      background: var(--text);
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .toggle-switch.active::after {
+      transform: translateX(20px);
     }
   </style>
 </head>
@@ -94,9 +146,9 @@
   </div>
 
   <div class="gallery-filter">
-    <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:var(--text);cursor:pointer;">
-      <input type="checkbox" id="showNationsFilter" checked style="cursor:pointer;" />
-      <span>Show nations</span>
+    <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem;color:var(--text);cursor:pointer;">
+      <div class="toggle-switch active" id="showNationsToggle"></div>
+      <span>Show nations on maps</span>
     </label>
     <div style="flex:1"></div>
     <span id="galleryCount" style="font-size:0.8rem;color:var(--muted);"></span>
@@ -118,17 +170,53 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:16px;min-height:0;">
-      <img id="detailImage" style="max-width:100%;border-radius:8px;image-rendering:pixelated;align-self:center;" />
-      <div id="detailMeta" style="font-size:0.82rem;color:var(--muted);"></div>
-      <div id="detailDesc" style="font-size:0.88rem;color:var(--text);line-height:1.6;"></div>
+    <div style="flex:1;overflow-y:auto;display:flex;gap:24px;padding:24px;min-height:0;">
+      <!-- Map image with nations -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;position:relative;min-width:0;">
+        <div id="detailMapWrap" style="position:relative;display:inline-block;">
+          <img id="detailImage" style="max-width:100%;max-height:calc(100vh - 200px);border-radius:8px;image-rendering:pixelated;" />
+        </div>
+      </div>
+      <!-- Map info panel -->
+      <div style="width:320px;flex-shrink:0;display:flex;flex-direction:column;gap:16px;">
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px;">Map Info</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;">
+              <span style="color:var(--muted);">Author</span>
+              <span style="color:var(--text);font-weight:500;" id="detailAuthor">-</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;">
+              <span style="color:var(--muted);">Size</span>
+              <span style="color:var(--text);" id="detailSize">-</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;">
+              <span style="color:var(--muted);">Nations</span>
+              <span style="color:var(--text);" id="detailNationsCount">-</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:0.85rem;">
+              <span style="color:var(--muted);">Created</span>
+              <span style="color:var(--text);" id="detailDate">-</span>
+            </div>
+          </div>
+        </div>
+        <div id="detailDescWrap" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:8px;">Description</div>
+          <div id="detailDesc" style="font-size:0.85rem;color:var(--text);line-height:1.6;"></div>
+        </div>
+        <div id="detailNationsListWrap" style="background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:16px;display:none;">
+          <div style="font-size:0.7rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);margin-bottom:12px;">Nations</div>
+          <div id="detailNationsList" style="display:flex;flex-direction:column;gap:8px;max-height:200px;overflow-y:auto;"></div>
+        </div>
+        <div style="flex:1"></div>
+        <button class="btn btn-primary" id="detailDownloadBtn" style="font-size:0.85rem;padding:12px 20px;width:100%;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Map Package
+        </button>
+      </div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-primary" id="detailDownloadBtn" style="font-size:0.82rem;padding:8px 16px;width:auto;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download Map Package
-      </button>
-      <button class="btn btn-ghost" id="detailClose2" style="font-size:0.82rem;padding:8px 16px;width:auto;">Close</button>
+    <div class="modal-footer" style="padding:16px 24px;border-top:1px solid var(--border);">
+      <button class="btn btn-ghost" id="detailClose2" style="font-size:0.85rem;padding:8px 16px;">Close</button>
     </div>
   </div>
 </div>
@@ -139,8 +227,10 @@ const API_URL = window.location.hostname === 'localhost'
   ? 'http://localhost:3002/api'
   : `${window.location.protocol}//${window.location.hostname}/api`;
 
+const FLAG_BASE = 'https://raw.githubusercontent.com/openfrontio/OpenFrontIO/main/resources/flags/';
+
 const galleryGrid = document.getElementById('galleryGrid');
-const showNationsFilter = document.getElementById('showNationsFilter');
+const showNationsToggle = document.getElementById('showNationsToggle');
 const galleryCount = document.getElementById('galleryCount');
 const mapDetailModal = document.getElementById('mapDetailModal');
 const detailClose = document.getElementById('detailClose');
@@ -148,6 +238,9 @@ const detailClose2 = document.getElementById('detailClose2');
 const detailDownloadBtn = document.getElementById('detailDownloadBtn');
 
 let currentDetailMap = null;
+let showNationsOnMaps = true;
+
+function flagUrl(code) { return code ? `${FLAG_BASE}${encodeURIComponent(code)}.svg` : ''; }
 
 function showOsPickerAndDownload(map) {
   const overlay = document.createElement('div');
@@ -220,7 +313,11 @@ async function buildGalleryArchive(map, os) {
   const manifest = {
     name: map.name,
     map: { width: map.dimensions.width, height: map.dimensions.height, num_land_tiles: 0 },
-    nations: [],
+    nations: (map.nationsData || []).map(n => ({
+      name: n.name,
+      spawn: { x: n.x, y: n.y },
+      flag: n.flag || null
+    })),
   };
   zip.file('info.json', JSON.stringify(manifest, null, 2));
 
@@ -276,12 +373,9 @@ async function loadGallery() {
 }
 
 function renderGallery() {
-  const showNations = showNationsFilter.checked;
-  const filtered = allMaps.filter(map => !showNations || map.hasNations);
-  
-  galleryCount.textContent = `${filtered.length} map${filtered.length !== 1 ? 's' : ''}`;
+  galleryCount.textContent = `${allMaps.length} map${allMaps.length !== 1 ? 's' : ''}`;
 
-  if (filtered.length === 0) {
+  if (allMaps.length === 0) {
     galleryGrid.innerHTML = `
       <div class="gallery-empty" style="grid-column:1/-1;">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" style="opacity:0.3;margin-bottom:16px;">
@@ -292,14 +386,25 @@ function renderGallery() {
     return;
   }
 
-  galleryGrid.innerHTML = filtered.map(map => `
+  galleryGrid.innerHTML = allMaps.map(map => `
     <div class="gallery-card" data-folder="${map.folder}">
-      <img src="${map.thumbnailUrl}" class="gallery-card-image" alt="${map.name}" />
+      <div class="gallery-card-image-wrap">
+        <img src="${map.thumbnailUrl}" class="gallery-card-image" alt="${escapeHtml(map.name)}" />
+        ${showNationsOnMaps && map.nationsData && map.nationsData.length > 0 ? `
+          <div class="gallery-card-nations">
+            ${map.nationsData.slice(0, 5).map(n => n.flag ? 
+              `<img src="${flagUrl(n.flag)}" class="gallery-card-nation-flag" title="${escapeHtml(n.name)}" onerror="this.style.display='none'" />` : 
+              `<div class="gallery-card-nation-flag" style="display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:var(--accent);font-weight:600;" title="${escapeHtml(n.name)}">${n.name.charAt(0).toUpperCase()}</div>`
+            ).join('')}
+            ${map.nationsData.length > 5 ? `<div style="font-size:0.7rem;color:var(--muted);align-self:center;">+${map.nationsData.length - 5}</div>` : ''}
+          </div>
+        ` : ''}
+      </div>
       <div class="gallery-card-body">
         <div class="gallery-card-title">${escapeHtml(map.name)}</div>
         <div class="gallery-card-meta">
           <span>by ${escapeHtml(map.author)}</span>
-          ${map.nations > 0 ? `<span>• ${map.nations} nations</span>` : ''}
+          ${map.nations > 0 ? `<span>• ${map.nations} nation${map.nations !== 1 ? 's' : ''}</span>` : ''}
         </div>
         ${map.description ? `<div class="gallery-card-desc">${escapeHtml(map.description)}</div>` : ''}
       </div>
@@ -320,23 +425,123 @@ function showMapDetail(map) {
   currentDetailMap = map;
   document.getElementById('detailTitle').textContent = map.name;
   document.getElementById('detailImage').src = map.fullUrl;
-  document.getElementById('detailMeta').innerHTML = `
-    <strong>Author:</strong> ${escapeHtml(map.author)} • 
-    <strong>Size:</strong> ${map.dimensions.width}×${map.dimensions.height} • 
-    <strong>Nations:</strong> ${map.nations} • 
-    <strong>Created:</strong> ${new Date(map.date).toLocaleDateString()}
-  `;
-  document.getElementById('detailDesc').textContent = map.description || '';
+  document.getElementById('detailAuthor').textContent = map.author;
+  document.getElementById('detailSize').textContent = `${map.dimensions.width} × ${map.dimensions.height}`;
+  document.getElementById('detailNationsCount').textContent = map.nations;
+  document.getElementById('detailDate').textContent = new Date(map.date).toLocaleDateString();
+  
+  // Description
+  const descWrap = document.getElementById('detailDescWrap');
+  if (map.description) {
+    document.getElementById('detailDesc').textContent = map.description;
+    descWrap.style.display = 'block';
+  } else {
+    descWrap.style.display = 'none';
+  }
+  
+  // Nations list
+  const nationsListWrap = document.getElementById('detailNationsListWrap');
+  const nationsList = document.getElementById('detailNationsList');
+  if (map.nationsData && map.nationsData.length > 0) {
+    nationsList.innerHTML = map.nationsData.map(n => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px;background:var(--surface);border-radius:6px;">
+        ${n.flag ? 
+          `<img src="${flagUrl(n.flag)}" style="width:28px;height:18px;border-radius:2px;object-fit:cover;" onerror="this.style.display='none'" />` : 
+          `<div style="width:28px;height:18px;border-radius:2px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:0.65rem;color:var(--accent);font-weight:600;">${n.name.charAt(0).toUpperCase()}</div>`
+        }
+        <span style="font-size:0.85rem;color:var(--text);">${escapeHtml(n.name)}</span>
+      </div>
+    `).join('');
+    nationsListWrap.style.display = 'block';
+  } else {
+    nationsListWrap.style.display = 'none';
+  }
+  
+  // Render nation markers on map
+  renderDetailMarkers(map);
+  
   mapDetailModal.classList.add('open');
 }
+
+function renderDetailMarkers(map) {
+  const mapWrap = document.getElementById('detailMapWrap');
+  const img = document.getElementById('detailImage');
+  
+  // Remove existing markers
+  mapWrap.querySelectorAll('.gallery-nation-marker').forEach(el => el.remove());
+  
+  if (!showNationsOnMaps || !map.nationsData || map.nationsData.length === 0) return;
+  
+  // Wait for image to load
+  const render = () => {
+    const imgRect = img.getBoundingClientRect();
+    const scaleX = imgRect.width / map.dimensions.width;
+    const scaleY = imgRect.height / map.dimensions.height;
+    
+    map.nationsData.forEach((n, i) => {
+      const el = document.createElement('div');
+      el.className = 'gallery-nation-marker';
+      el.style.cssText = `
+        position: absolute;
+        left: ${n.x * scaleX}px;
+        top: ${n.y * scaleY}px;
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 10;
+      `;
+      
+      const flagImg = n.flag
+        ? `<img src="${flagUrl(n.flag)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='<span style=\\'font-size:0.6rem;font-weight:700;color:var(--accent);\\'>${i + 1}</span>'" />`
+        : `<span style="font-size:0.6rem;font-weight:700;color:var(--accent);">${i + 1}</span>`;
+      
+      el.innerHTML = `
+        <div style="
+          width: 28px; height: 20px;
+          border-radius: 3px;
+          border: 2px solid rgba(255,255,255,0.9);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.7);
+          overflow: hidden;
+          background: var(--surface2);
+          display: flex; align-items: center; justify-content: center;
+        ">${flagImg}</div>
+        <div style="
+          position: absolute;
+          bottom: -6px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 0; height: 0;
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 6px solid rgba(255,255,255,0.9);
+        "></div>
+      `;
+      
+      mapWrap.appendChild(el);
+    });
+  };
+  
+  if (img.complete) {
+    render();
+  } else {
+    img.onload = render;
+  }
+}
+
+// Toggle nations visibility
+showNationsToggle.addEventListener('click', () => {
+  showNationsOnMaps = !showNationsOnMaps;
+  showNationsToggle.classList.toggle('active', showNationsOnMaps);
+  renderGallery();
+  if (mapDetailModal.classList.contains('open') && currentDetailMap) {
+    renderDetailMarkers(currentDetailMap);
+  }
+});
 
 detailClose.addEventListener('click', () => mapDetailModal.classList.remove('open'));
 detailClose2.addEventListener('click', () => mapDetailModal.classList.remove('open'));
 detailDownloadBtn.addEventListener('click', () => {
   if (currentDetailMap) showOsPickerAndDownload(currentDetailMap);
 });
-
-showNationsFilter.addEventListener('change', renderGallery);
 
 function escapeHtml(text) {
   const div = document.createElement('div');
@@ -353,6 +558,7 @@ loadGallery();
       <a href="https://github.com/baculinivan-web/OFmapGen" target="_blank" rel="noopener" aria-label="GitHub">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 2C6.477 2 2 6.477 2 12c0 4.418 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.009-.868-.013-1.703-2.782.604-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.463-1.11-1.463-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836a9.59 9.59 0 0 1 2.504.337c1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.578.688.48C19.138 20.163 22 16.418 22 12c0-5.523-4.477-10-10-10z"/>
+{}
         </svg>
       </a>
       <span style="font-size:0.8rem; color:var(--muted)">made by ivan ❤️</span>

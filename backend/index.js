@@ -172,6 +172,7 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
       date: new Date().toISOString(),
       dimensions: { width: imageMetadata.width, height: imageMetadata.height },
       nations: nationsData.length,
+      nationsData: nationsData,
       thumbnail: `maps/thumbnails/${baseFilename}.png`,
       full: `maps/full/${baseFilename}.png`,
       source: `maps/source/${baseFilename}.png`,
