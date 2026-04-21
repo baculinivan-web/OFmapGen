@@ -257,7 +257,8 @@ app.get('/api/maps', async (req, res) => {
     const { data: fileData } = await octokit.repos.getContent({
       owner: GITHUB_OWNER,
       repo: GITHUB_REPO,
-      path: 'maps/metadata.json'
+      path: 'maps/metadata.json',
+      ref: 'dev'
     });
     
     const metadata = JSON.parse(Buffer.from(fileData.content, 'base64').toString());
