@@ -1,6 +1,32 @@
 {
   "maps": [
     {
+      "id": "github6-by-ivan-1776774426522",
+      "name": "GitHub6",
+      "author": "ivan",
+      "description": "this is test #13",
+      "timestamp": 1776774426522,
+      "date": "2026-04-21T12:27:07.019Z",
+      "dimensions": {
+        "width": 720,
+        "height": 720
+      },
+      "nations": 1,
+      "nationsData": [
+        {
+          "x": 442,
+          "y": 486,
+          "name": "The land of issues",
+          "flag": ""
+        }
+      ],
+      "thumbnail": "maps/thumbnails/github6-by-ivan-1776774426522.png",
+      "full": "maps/full/github6-by-ivan-1776774426522.png",
+      "source": "maps/source/github6-by-ivan-1776774426522.png",
+      "proof": "maps/proof/github6-by-ivan-1776774426522.png",
+      "hasCopyright": true
+    },
+    {
       "id": "github5-by-ivan-1776773184983",
       "name": "GitHub5",
       "author": "ivan",
