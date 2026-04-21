@@ -134,17 +134,17 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
 
     // Create branch
     const branchName = `gallery-submission-${timestamp}`;
-    const { data: mainBranch } = await octokit.repos.getBranch({
+    const { data: devBranch } = await octokit.repos.getBranch({
       owner: GITHUB_OWNER,
       repo: GITHUB_REPO,
-      branch: 'main'
+      branch: 'dev'
     });
 
     await octokit.git.createRef({
       owner: GITHUB_OWNER,
       repo: GITHUB_REPO,
       ref: `refs/heads/${branchName}`,
-      sha: mainBranch.commit.sha
+      sha: devBranch.commit.sha
     });
 
     // Upload files
@@ -206,7 +206,7 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
       repo: GITHUB_REPO,
       title: `Gallery submission: ${mapName} by ${authorNick}`,
       head: branchName,
-      base: 'main',
+      base: 'dev',
       body: `
 ## New Map Submission
 
