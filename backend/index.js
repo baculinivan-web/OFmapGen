@@ -108,7 +108,8 @@ app.post('/api/submit-map', upload.single('map'), async (req, res) => {
       const { data: fileData } = await octokit.repos.getContent({
         owner: GITHUB_OWNER,
         repo: GITHUB_REPO,
-        path: 'maps/metadata.json'
+        path: 'maps/metadata.json',
+        ref: 'dev'
       });
       metadata_json = JSON.parse(Buffer.from(fileData.content, 'base64').toString());
     } catch (error) {
