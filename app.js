@@ -2,11 +2,15 @@ import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/o
 import { initGis } from './gis.js';
 import { initPaint } from './paint.js';
 import { injectSpeedInsights } from 'https://esm.sh/@vercel/speed-insights@2.0.0';
+import { inject } from 'https://esm.sh/@vercel/analytics@1.4.1';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
 
 // Initialize Vercel Speed Insights
 injectSpeedInsights();
+
+// Initialize Vercel Web Analytics
+inject();
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const dropZone    = document.getElementById('dropZone');
