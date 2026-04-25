@@ -1,8 +1,12 @@
 import * as ort from 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.all.min.mjs';
 import { initGis } from './gis.js';
 import { initPaint } from './paint.js';
+import { injectSpeedInsights } from 'https://esm.sh/@vercel/speed-insights@2.0.0';
 
 ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/';
+
+// Initialize Vercel Speed Insights
+injectSpeedInsights();
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const dropZone    = document.getElementById('dropZone');
@@ -837,7 +841,7 @@ nameCancelBtn.addEventListener('click', hideEditPopup);
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') confirmEdit(); if (e.key === 'Escape') hideEditPopup(); });
 flagSearch.addEventListener('keydown', (e) => { if (e.key === 'Escape') flagResults.style.display = 'none'; });
 
-// ── Nation list ───────────────────────────────────────────────────────────────
+// ── Nation list ─────────────────────────────────────────────────────────────────
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function renderNationList() {
@@ -1104,7 +1108,7 @@ function countLandTiles() {
 }
 
 
-// ── Paint tool ────────────────────────────────────────────────────────────────
+// ── Paint tool ──────────────────────────────────────────────────────────────────
 let painter;
 try {
   painter = initPaint({

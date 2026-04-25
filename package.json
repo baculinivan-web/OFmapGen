@@ -1,0 +1,25 @@
+{
+  "name": "ofmap-gen",
+  "version": "1.0.0",
+  "description": "Convert any image — or real-world elevation data — into a playable map for openfront.io",
+  "main": "app.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "serve": "npx serve ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/baculinivan-web/OFmapGen.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/baculinivan-web/OFmapGen/issues"
+  },
+  "homepage": "https://github.com/baculinivan-web/OFmapGen#readme",
+  "dependencies": {
+    "@vercel/speed-insights": "^2.0.0"
+  }
+}
