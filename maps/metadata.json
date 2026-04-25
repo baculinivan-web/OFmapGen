@@ -1,6 +1,80 @@
 {
   "maps": [
     {
+      "id": "lebanon-by-zeitoon-1777145549665",
+      "name": "Lebanon",
+      "author": "Zeitoon",
+      "description": "",
+      "timestamp": 1777145549665,
+      "date": "2026-04-25T19:32:30.545Z",
+      "dimensions": {
+        "width": 1226,
+        "height": 1536
+      },
+      "nations": 9,
+      "nationsData": [
+        {
+          "x": 432,
+          "y": 811,
+          "name": "Beirut",
+          "flag": ""
+        },
+        {
+          "x": 344,
+          "y": 1256,
+          "name": "South Governate",
+          "flag": ""
+        },
+        {
+          "x": 495,
+          "y": 1244,
+          "name": "Nabatieh",
+          "flag": ""
+        },
+        {
+          "x": 555,
+          "y": 805,
+          "name": "Mount Lebanon",
+          "flag": ""
+        },
+        {
+          "x": 679,
+          "y": 935,
+          "name": "Beqaa",
+          "flag": ""
+        },
+        {
+          "x": 731,
+          "y": 243,
+          "name": "Akkar",
+          "flag": ""
+        },
+        {
+          "x": 628,
+          "y": 449,
+          "name": "North Governate",
+          "flag": ""
+        },
+        {
+          "x": 802,
+          "y": 578,
+          "name": "Baalbek-Hermel",
+          "flag": ""
+        },
+        {
+          "x": 550,
+          "y": 580,
+          "name": "Keserwan-Jbeil",
+          "flag": ""
+        }
+      ],
+      "thumbnail": "maps/thumbnails/lebanon-by-zeitoon-1777145549665.png",
+      "full": "maps/full/lebanon-by-zeitoon-1777145549665.png",
+      "source": "maps/source/lebanon-by-zeitoon-1777145549665.png",
+      "proof": "maps/proof/lebanon-by-zeitoon-1777145549665.png",
+      "hasCopyright": false
+    },
+    {
       "id": "baltic-sea-by-anonymous-1776806545906",
       "name": "Baltic sea",
       "author": "Anonymous",
