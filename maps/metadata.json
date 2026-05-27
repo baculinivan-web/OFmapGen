@@ -1,6 +1,38 @@
 {
   "maps": [
     {
+      "id": "long-exasperated-sigh-by-elmoseesyou-1779920604436",
+      "name": "Long exasperated sigh",
+      "author": "Elmoseesyou",
+      "description": "",
+      "timestamp": 1779920604436,
+      "date": "2026-05-27T22:23:25.640Z",
+      "dimensions": {
+        "width": 2560,
+        "height": 1443
+      },
+      "nations": 2,
+      "nationsData": [
+        {
+          "x": 1442,
+          "y": 663,
+          "name": "Elmo",
+          "flag": ""
+        },
+        {
+          "x": 949,
+          "y": 1275,
+          "name": "Rocco",
+          "flag": ""
+        }
+      ],
+      "thumbnail": "maps/thumbnails/long-exasperated-sigh-by-elmoseesyou-1779920604436.png",
+      "full": "maps/full/long-exasperated-sigh-by-elmoseesyou-1779920604436.png",
+      "source": "maps/source/long-exasperated-sigh-by-elmoseesyou-1779920604436.png",
+      "proof": "maps/proof/long-exasperated-sigh-by-elmoseesyou-1779920604436.png",
+      "hasCopyright": true
+    },
+    {
       "id": "lebanon-by-zeitoon-1777145549665",
       "name": "Lebanon",
       "author": "Zeitoon",
